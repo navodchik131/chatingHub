@@ -124,7 +124,7 @@ export const DONATION_CURRENCIES = ['RUB', 'USD', 'EUR']
 
 export const DONATION_MIN_MAJOR = {
   RUB: 100,
-  USD: 5,
+  USD: 1,
   EUR: 1,
 }
 

@@ -103,7 +103,7 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 
 def _apply_companion_connection_patch(
-    row: TelegramConnection | FanvueConnection,
+    row: TelegramConnection | FanvueConnection | InstagramConnection | TelegramUserSession,
     body: PlatformConnectionPatchIn,
 ) -> None:
     if "companion_mode" in body.model_fields_set and body.companion_mode is not None:
@@ -217,6 +217,10 @@ def _instagram_connection_out(ig: InstagramConnection) -> PlatformConnectionOut:
         oauth_connected=bool(ig.oauth_connected_at),
         webhook_url=instagram_platform_webhook_url(),
         is_active=True,
+        companion_mode=ig.companion_mode or "off",
+        companion_delay_min_sec=int(ig.companion_delay_min_sec or 5),
+        companion_delay_max_sec=int(ig.companion_delay_max_sec or 45),
+        companion_max_replies_per_hour=int(ig.companion_max_replies_per_hour or 60),
     )
 
 
@@ -1322,6 +1326,7 @@ async def patch_instagram_connection(
             connection_id=row.id,
             studio_model_id=body.studio_model_id,
         )
+    _apply_companion_connection_patch(row, body)
     await session.commit()
     return await _integration_status(session, user)
 

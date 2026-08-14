@@ -36,9 +36,9 @@ EDITABLE_STATUSES = frozenset({"draft", "pending", "rejected"})
 
 # Лимиты Tribute для донатов (minor units).
 _CURRENCY_LIMITS: dict[str, tuple[int, int]] = {
-    "EUR": (100, 200_000),
-    "USD": (500, 200_000),
-    "RUB": (10_000, 150_000_00),
+    "EUR": (100, 300_000),
+    "USD": (100, 300_000),
+    "RUB": (10_000, 30_000_000),
 }
 
 

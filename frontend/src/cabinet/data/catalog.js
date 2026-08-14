@@ -257,6 +257,10 @@ export const connFieldSets = (lang) => {
       prim: lang === 'ru' ? 'Подключить Instagram' : 'Connect Instagram',
       fields: [
         F.select(lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER', notAssigned, [notAssigned], true),
+        F.select(`AI-${lang === 'ru' ? 'КОМПАНЬОН' : 'COMPANION'}`, aiCompOpts[0], aiCompOpts, true),
+        F.text(lang === 'ru' ? 'ЗАДЕРЖКА МИН (с)' : 'DELAY MIN (s)', '5', '', true),
+        F.text(lang === 'ru' ? 'ЗАДЕРЖКА МАКС (с)' : 'DELAY MAX (s)', '45', '', true),
+        F.text(lang === 'ru' ? 'АВТО / ЧАС' : 'AUTO / HOUR', '60', '', true),
         F.note(lang === 'ru'
           ? 'Нужен Instagram Professional (Business или Creator). После OAuth Direct-сообщения появятся в Диалогах. Окно ответа — 24 часа.'
           : 'Requires Instagram Professional (Business or Creator). After OAuth, Direct messages appear in Dialogs. Reply window is 24h.'),

@@ -23,6 +23,12 @@ def test_validate_min_amount_minor_eur() -> None:
         validate_min_amount_minor("EUR", 50)
 
 
+def test_validate_min_amount_minor_usd() -> None:
+    validate_min_amount_minor("USD", 100)
+    with pytest.raises(Exception):
+        validate_min_amount_minor("USD", 50)
+
+
 def test_donation_request_id_from_payload() -> None:
     payload = {"donation_request_id": 42, "telegram_user_id": 1}
     assert _donation_request_id(payload) == 42

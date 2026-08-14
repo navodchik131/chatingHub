@@ -767,6 +767,40 @@ export function CabinetDataProvider({ children }) {
     [refreshAll],
   )
 
+  const patchConnectionSettings = useCallback(
+    async (platformKey, connectionId, fields) => {
+      if (!connectionId) return false
+      setBusy(true)
+      setError(null)
+      try {
+        const body = {}
+        if (fields.modelId !== undefined) {
+          body.studio_model_id = fields.modelId ? Number(fields.modelId) : null
+        }
+        if (fields.companionMode !== undefined) body.companion_mode = fields.companionMode
+        if (fields.delayMin !== undefined) {
+          body.companion_delay_min_sec = Number(fields.delayMin)
+        }
+        if (fields.delayMax !== undefined) {
+          body.companion_delay_max_sec = Number(fields.delayMax)
+        }
+        if (fields.maxPerHour !== undefined) {
+          body.companion_max_replies_per_hour = Number(fields.maxPerHour)
+        }
+        const status = await actions.patchPlatformConnection(platformKey, connectionId, body)
+        if (status) setIntegrations(status)
+        await refreshAll()
+        return true
+      } catch (e) {
+        setError(e?.message || String(e))
+        return false
+      } finally {
+        setBusy(false)
+      }
+    },
+    [refreshAll],
+  )
+
   const saveDonation = useCallback(
     async (form, submit) => {
       const title = (form.title || '').trim()
@@ -1723,6 +1757,7 @@ export function CabinetDataProvider({ children }) {
       removeConversationFromFolder,
       payBilling,
       saveIntegration,
+      patchConnectionSettings,
       createMember,
       updateMember,
       deleteMember,
@@ -1840,6 +1875,7 @@ export function CabinetDataProvider({ children }) {
       removeConversationFromFolder,
       payBilling,
       saveIntegration,
+      patchConnectionSettings,
       createMember,
       updateMember,
       deleteMember,

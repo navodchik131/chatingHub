@@ -517,6 +517,14 @@ class InstagramConnection(Base):
     oauth_connected_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    companion_mode: Mapped[str] = mapped_column(
+        String(16), default=CompanionBotMode.off.value, server_default="off"
+    )
+    companion_delay_min_sec: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    companion_delay_max_sec: Mapped[int] = mapped_column(Integer, default=45, server_default="45")
+    companion_max_replies_per_hour: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -877,6 +885,8 @@ class Conversation(Base):
     outbound_lang: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # file_id варианта фото профиля (Telegram), только для platform=telegram
     telegram_photo_file_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    """HTTPS URL аватарки собеседника (Instagram profile_pic и др.)."""
+    peer_avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     """Модель студии для доступа операторов; NULL — диалог виден только владельцу."""
     studio_model_id: Mapped[int | None] = mapped_column(
         ForeignKey("user_studio_models.id", ondelete="SET NULL"),
@@ -927,7 +937,10 @@ class Conversation(Base):
 
     @property
     def has_avatar(self) -> bool:
-        return bool(self.telegram_photo_file_id)
+        if bool(self.telegram_photo_file_id):
+            return True
+        url = (self.peer_avatar_url or "").strip()
+        return url.startswith("https://")
 
 
 class ConversationFolder(Base):

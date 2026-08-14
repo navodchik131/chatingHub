@@ -14,11 +14,13 @@ from app.db.models import Conversation, Message, MessageDirection, Platform
 from app.db.repo import add_message, mark_conversation_read
 from app.services.chat_messages import message_to_out
 from app.services.chat_message_meta import platform_message_id_from_meta
-from app.services.chat_outbound import send_fanvue_outbound, send_telegram_outbound
+from app.services.chat_outbound import send_fanvue_outbound, send_instagram_outbound, send_telegram_outbound
 from app.connectors.telegram_user.outbound import send_telegram_user_outbound
 from app.services.crypto_secret import decrypt_secret
+from app.services.instagram_connection import ensure_instagram_access_token
 from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
+    resolve_instagram_connection_for_conversation,
     resolve_telegram_connection_for_conversation,
     resolve_telegram_user_session_for_conversation,
 )
@@ -138,6 +140,28 @@ async def send_companion_outbound(
 
                 await mark_conversation_peer_unavailable(session, conv)
             raise
+    elif conv.platform == Platform.instagram:
+        row_ig = await resolve_instagram_connection_for_conversation(
+            session, conv, owner_id, repair=True
+        )
+        if not row_ig:
+            raise RuntimeError("instagram connection missing")
+        access = await ensure_instagram_access_token(session, row_ig)
+        ig_reply_mid: str | None = None
+        if reply_target:
+            ig_reply_mid = reply_target.platform_message_id or platform_message_id_from_meta(
+                reply_target.meta
+            )
+        platform_message_id = await send_instagram_outbound(
+            access_token=access,
+            ig_user_id=row_ig.instagram_user_id,
+            recipient_id=conv.external_chat_id,
+            owner_id=owner_id,
+            text=outgoing,
+            image_bytes=None,
+            image_mime=None,
+        )
+        _ = ig_reply_mid
     else:
         raise RuntimeError(f"companion bot unsupported platform: {conv.platform.value}")
 

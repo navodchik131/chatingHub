@@ -498,11 +498,52 @@ async def api_conversation_avatar(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> Response:
-    """Фото профиля собеседника (Telegram), прокси через бэкенд — токен бота не светится во фронте."""
+    """Фото профиля собеседника — прокси через бэкенд (Telegram / Instagram)."""
     assert_permission(user, PERM_CHAT)
     await _require_chat_plan(session, user)
     oid = workspace_owner_id(user)
     conv = await require_conversation_chat_access(session, user, conv_id, oid)
+    if conv.platform == Platform.instagram:
+        import httpx
+
+        from app.connectors.instagram.client import fetch_instagram_user_profile
+        from app.services.instagram_connection import ensure_instagram_access_token
+        from app.services.instagram_peer_profile import instagram_profile_avatar_url
+        from app.services.platform_connections import resolve_instagram_connection_for_conversation
+
+        row_ig = await resolve_instagram_connection_for_conversation(session, conv, oid)
+        if not row_ig:
+            raise HTTPException(status_code=404, detail="no avatar")
+        pic_url = (conv.peer_avatar_url or "").strip()
+        if not pic_url.startswith("https://"):
+            try:
+                token = await ensure_instagram_access_token(session, row_ig)
+                profile = await fetch_instagram_user_profile(token, conv.external_chat_id)
+                pic_url = instagram_profile_avatar_url(profile) or ""
+                if pic_url:
+                    conv.peer_avatar_url = pic_url
+                    await session.commit()
+            except Exception:
+                pic_url = ""
+        if not pic_url.startswith("https://"):
+            raise HTTPException(status_code=404, detail="no avatar")
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                resp = await client.get(pic_url)
+                resp.raise_for_status()
+        except Exception:
+            raise HTTPException(status_code=404, detail="no avatar") from None
+        mime = (
+            resp.headers.get("content-type", "").split(";")[0].strip()
+            or mimetypes.guess_type(pic_url)[0]
+            or "image/jpeg"
+        )
+        return Response(
+            content=resp.content,
+            media_type=mime,
+            headers={"Cache-Control": "private, max-age=3600"},
+        )
+
     if conv.platform != Platform.telegram and conv.platform != Platform.telegram_user:
         raise HTTPException(status_code=404, detail="no avatar")
     if conv.platform == Platform.telegram:

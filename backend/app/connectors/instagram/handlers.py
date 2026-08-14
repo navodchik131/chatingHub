@@ -21,6 +21,7 @@ from app.services.chat_ingest import (
     broadcast_inbound_after_commit,
     persist_inbound_chat_message,
 )
+from app.services.companion_bot.schedule import schedule_companion_reply
 from app.services.instagram_peer_profile import resolve_instagram_peer_display
 from app.services.platform_connections import connection_studio_model_id
 from app.services.translation import translate_to_russian
@@ -245,17 +246,18 @@ async def ingest_instagram_messaging_event(
     if not user:
         raise ValueError("user not found")
 
-    display = await resolve_instagram_peer_display(session, conn, igsid)
-
     conv = await get_or_create_conversation(
         session,
         conn.user_id,
         Platform.instagram,
         igsid,
         ig_account_id,
-        display,
+        f"Instagram · {igsid[:12]}" if igsid else "Instagram",
         instagram_connection_id=conn.id,
         studio_model_id=connection_studio_model_id(conn),
+    )
+    display = await resolve_instagram_peer_display(
+        session, conn, igsid, conv=conv
     )
 
     if text_s and not conv.auto_translate_disabled:
@@ -281,6 +283,7 @@ async def ingest_instagram_messaging_event(
     )
     if payload is None:
         return {"ok": True, "skipped": "blocked"}
+    trigger_message_id = int(payload["id"])
     await session.commit()
     log.info(
         "instagram webhook: saved user_id=%s conversation_id=%s peer=%s text=%r studio_model_id=%s",
@@ -289,6 +292,11 @@ async def ingest_instagram_messaging_event(
         igsid,
         (text_s or "")[:120],
         conv.studio_model_id,
+    )
+    schedule_companion_reply(
+        owner_user_id=conn.user_id,
+        conv_id=conv_id,
+        trigger_message_id=trigger_message_id,
     )
     await broadcast_inbound_after_commit(
         owner_user_id=conn.user_id,

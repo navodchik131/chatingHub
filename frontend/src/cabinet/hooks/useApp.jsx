@@ -28,6 +28,7 @@ const initial = {
   chatFilter: 'all',
   activeFolderId: 'all',
   chatPlatform: 'all',
+  chatModelId: 'all',
   folderFormOpen: false,
   folderFormName: '',
   folderFormSelected: [],

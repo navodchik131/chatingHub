@@ -168,6 +168,7 @@ export function mapIntegrationConnections(platformId, integrations, models, lang
       meta: [
         c.webhook_registered ? (lang === 'ru' ? 'webhook активен' : 'webhook active') : (lang === 'ru' ? 'webhook ?' : 'webhook ?'),
         modelLabel(c.studio_model_id),
+        c.companion_mode && c.companion_mode !== 'off' ? `AI: ${c.companion_mode}` : (lang === 'ru' ? 'AI: выкл' : 'AI: off'),
       ].join(' · '),
     }))
   }
@@ -181,7 +182,11 @@ export function mapIntegrationConnections(platformId, integrations, models, lang
     return (ig.telegram_user_connections || []).map((c) => ({
       id: c.id,
       name: c.telegram_username ? `@${c.telegram_username}` : (c.phone_masked || c.label || `#${c.id}`),
-      meta: [tgUserStatus(c.session_status), modelLabel(c.studio_model_id)].join(' · '),
+      meta: [
+        tgUserStatus(c.session_status),
+        modelLabel(c.studio_model_id),
+        c.companion_mode && c.companion_mode !== 'off' ? `AI: ${c.companion_mode}` : (lang === 'ru' ? 'AI: выкл' : 'AI: off'),
+      ].join(' · '),
       statusTone: c.session_status === 'active' ? 'active' : 'pending',
     }))
   }
@@ -192,6 +197,7 @@ export function mapIntegrationConnections(platformId, integrations, models, lang
       meta: [
         c.oauth_connected ? 'OAuth' : (lang === 'ru' ? 'OAuth ?' : 'OAuth ?'),
         modelLabel(c.studio_model_id),
+        c.companion_mode && c.companion_mode !== 'off' ? `AI: ${c.companion_mode}` : (lang === 'ru' ? 'AI: выкл' : 'AI: off'),
       ].join(' · '),
     }))
   }
@@ -209,6 +215,7 @@ export function mapIntegrationConnections(platformId, integrations, models, lang
       meta: [
         c.oauth_connected ? 'OAuth' : (lang === 'ru' ? 'OAuth ?' : 'OAuth ?'),
         modelLabel(c.studio_model_id),
+        c.companion_mode && c.companion_mode !== 'off' ? `AI: ${c.companion_mode}` : (lang === 'ru' ? 'AI: выкл' : 'AI: off'),
       ].join(' · '),
     }))
   }

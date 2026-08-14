@@ -394,6 +394,52 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_telegram_user_sessions)
         await conn.run_sync(_migrate_partner_program)
         await conn.run_sync(_migrate_credits_usd_cent_v2)
+        await conn.run_sync(_migrate_instagram_companion_columns)
+        await conn.run_sync(_migrate_conversation_peer_avatar_url)
+
+
+def _migrate_instagram_companion_columns(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    table = "instagram_connections"
+    if not insp.has_table(table):
+        return
+    cols = {c["name"] for c in insp.get_columns(table)}
+    dialect = sync_conn.dialect.name
+    int_def = "INTEGER"
+    if "companion_mode" not in cols:
+        sync_conn.execute(
+            text(f"ALTER TABLE {table} ADD COLUMN companion_mode VARCHAR(16) DEFAULT 'off'")
+        )
+    if "companion_delay_min_sec" not in cols:
+        sync_conn.execute(
+            text(f"ALTER TABLE {table} ADD COLUMN companion_delay_min_sec {int_def} DEFAULT 5")
+        )
+    if "companion_delay_max_sec" not in cols:
+        sync_conn.execute(
+            text(f"ALTER TABLE {table} ADD COLUMN companion_delay_max_sec {int_def} DEFAULT 45")
+        )
+    if "companion_max_replies_per_hour" not in cols:
+        sync_conn.execute(
+            text(
+                f"ALTER TABLE {table} ADD COLUMN companion_max_replies_per_hour "
+                f"{int_def} DEFAULT 60"
+            )
+        )
+
+
+def _migrate_conversation_peer_avatar_url(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("conversations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("conversations")}
+    if "peer_avatar_url" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE conversations ADD COLUMN peer_avatar_url VARCHAR(1024)")
+        )
 
 
 def _migrate_credits_usd_cent_v2(sync_conn) -> None:

@@ -88,10 +88,33 @@ const folderPill = (on) => ({
       }),
 });
 
+function enrichDialogRow(c, i, models) {
+  const row = mapDialogRow(c, i);
+  return {
+    ...row,
+    hasAvatar: Boolean(c.has_avatar),
+    avatarUrl: c.has_avatar ? `/api/conversations/${c.id}/avatar` : null,
+    modelId: c.studio_model_id ?? null,
+    modelName: modelNameById(models, c.studio_model_id),
+  };
+}
+
+function DialogAvatar({ row, size = 28 }) {
+  return (
+    <Avatar
+      size={size}
+      grad={avG[row.av % 5]}
+      imageUrl={row.avatarUrl}
+    >
+      {row.name[0]}
+    </Avatar>
+  );
+}
+
 /* ── list pane ───────────────────────────────────────────── */
 function ChatList() {
   const { t, lang, s, setS, isMobile, cabinet } = useApp();
-  const dialogsRaw = cabinet.conversations.map((c, i) => mapDialogRow(c, i));
+  const dialogsRaw = cabinet.conversations.map((c, i) => enrichDialogRow(c, i, cabinet.models));
 
   const count = (fn) => dialogsRaw.filter((c) => fn(c)).length;
 
@@ -105,6 +128,13 @@ function ChatList() {
     { id: 'FANVUE', label: `Fanvue ${count((c) => c.platform === 'FANVUE')}`, ...platformMeta('FANVUE') },
     { id: 'INSTAGRAM', label: `Instagram ${count((c) => c.platform === 'INSTAGRAM')}`, ...platformMeta('INSTAGRAM') },
   ].map(({ id, label, col, bg, bd }) => ({ id, label, col, bg, bd }));
+
+  const chatModelId = s.chatModelId || 'all';
+  const modelTabs = [
+    { id: 'all', label: lang === 'ru' ? 'Все модели' : 'All models' },
+    ...(cabinet.models || []).map((m) => ({ id: String(m.id), label: m.name })),
+    { id: 'none', label: lang === 'ru' ? 'Без модели' : 'No model' },
+  ];
 
   const folderTabs = [
     { id: 'all', label: lang === 'ru' ? 'Все' : 'All', count: dialogsRaw.length },
@@ -126,6 +156,11 @@ function ChatList() {
     .map((c, i) => ({ c, i }))
     .filter(({ c }) => !folderConvSet || folderConvSet.has(Number(c.id)))
     .filter(({ c }) => s.chatPlatform === 'all' || c.platform === s.chatPlatform)
+    .filter(({ c }) => {
+      if (chatModelId === 'all') return true;
+      if (chatModelId === 'none') return c.modelId == null;
+      return Number(c.modelId) === Number(chatModelId);
+    })
     .filter(({ c }) => !searchQ || c.name.toLowerCase().includes(searchQ) || c.last.toLowerCase().includes(searchQ));
 
   const toggleFolderMember = (convId) => {
@@ -268,6 +303,28 @@ function ChatList() {
             );
           })}
         </div>
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+          {modelTabs.map((m) => {
+            const on = chatModelId === m.id;
+            return (
+              <Hoverable
+                as="span"
+                key={m.id}
+                style={{
+                  fontFamily: font.mono, fontSize: 9.5, letterSpacing: '.4px',
+                  padding: '3px 10px', borderRadius: 20, cursor: 'pointer',
+                  border: `1px solid ${on ? 'rgba(215,244,82,.45)' : 'rgba(255,255,255,.1)'}`,
+                  color: on ? color.lime : color.textMuted,
+                  background: on ? 'rgba(215,244,82,.08)' : 'transparent',
+                }}
+                hover={{ borderColor: borderHoverOff }}
+                onClick={() => setS({ chatModelId: m.id })}
+              >
+                {m.label}
+              </Hoverable>
+            );
+          })}
+        </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px' }}>
@@ -295,12 +352,8 @@ function ChatList() {
                 void cabinet.loadMessages(c.id);
               }}
             >
-              <Avatar
-                size={36}
-                grad={avG[c.av % 5]}
-                style={st ? { filter: 'grayscale(1)', opacity: 0.6 } : undefined}
-              >
-                {c.name[0]}
+              <div style={{ position: 'relative', flex: 'none' }}>
+                <DialogAvatar row={c} size={36} />
                 {c.vip && (
                   <span
                     style={{
@@ -312,7 +365,7 @@ function ChatList() {
                     VIP
                   </span>
                 )}
-              </Avatar>
+              </div>
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
@@ -452,7 +505,7 @@ function ChatList() {
                     }}
                     onClick={() => toggleFolderMember(c.id)}
                   >
-                    <Avatar size={28} grad={avG[c.av % 5]}>{c.name[0]}</Avatar>
+                    <DialogAvatar row={c} size={28} />
                     <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }}>{c.name}</span>
                     <span style={{ fontSize: 14, color: checked ? color.lime : color.textGhost }}>{checked ? '✓' : ''}</span>
                   </Hoverable>
@@ -524,7 +577,7 @@ function ChatList() {
                     }}
                     onClick={() => toggleFolderEditMember(c.id)}
                   >
-                    <Avatar size={28} grad={avG[c.av % 5]}>{c.name[0]}</Avatar>
+                    <DialogAvatar row={c} size={28} />
                     <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600 }}>{c.name}</span>
                     <span style={{ fontSize: 14, color: checked ? color.lime : color.textGhost }}>{checked ? '✓' : ''}</span>
                   </Hoverable>
@@ -617,7 +670,7 @@ function Thread() {
   const [attachPreview, setAttachPreview] = useState(null);
   const [videoNoteOpen, setVideoNoteOpen] = useState(false);
   const [videoNoteSending, setVideoNoteSending] = useState(false);
-  const dialogsRaw = cabinet.conversations.map((c, i) => mapDialogRow(c, i));
+  const dialogsRaw = cabinet.conversations.map((c, i) => enrichDialogRow(c, i, cabinet.models));
   const cur = cabinet.activeConvId != null
     ? dialogsRaw.find((d) => Number(d.id) === Number(cabinet.activeConvId))
     : null;
@@ -837,7 +890,7 @@ function Thread() {
             ←
           </Hoverable>
         )}
-        <Avatar size={36} grad={avG[cur.av % 5]}>{cur.name[0]}</Avatar>
+        <DialogAvatar row={cur} size={36} />
         <div style={{ flex: 1, minWidth: 120 }}>
           <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
             <span style={{ fontWeight: 800, fontSize: 14 }}>{cur.name}</span>

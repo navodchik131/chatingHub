@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,15 +11,24 @@ from app.db.models import (
     CompanionBotMode,
     Conversation,
     FanvueConnection,
+    InstagramConnection,
     Platform,
     TelegramConnection,
     TelegramUserSession,
 )
 from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
+    resolve_instagram_connection_for_conversation,
     resolve_telegram_connection_for_conversation,
     resolve_telegram_user_session_for_conversation,
 )
+
+CompanionConnectionRow = Union[
+    TelegramConnection,
+    FanvueConnection,
+    TelegramUserSession,
+    InstagramConnection,
+]
 
 
 @dataclass(frozen=True)
@@ -43,7 +53,7 @@ def _parse_mode(raw: str | None) -> CompanionBotMode:
 
 def _resolve_effective_mode(
     conv: Conversation,
-    conn: TelegramConnection | FanvueConnection | TelegramUserSession,
+    conn: CompanionConnectionRow,
 ) -> CompanionBotMode:
     override = (conv.companion_mode_override or "").strip().lower()
     if override:
@@ -52,7 +62,7 @@ def _resolve_effective_mode(
 
 
 def _config_from_connection(
-    conn: TelegramConnection | FanvueConnection | TelegramUserSession,
+    conn: CompanionConnectionRow,
     *,
     platform: Platform,
     mode: CompanionBotMode,
@@ -79,7 +89,7 @@ async def get_companion_config_for_conversation(
     owner_id: int | None = None,
 ) -> CompanionConnectionConfig | None:
     oid = owner_id if owner_id is not None else conv.user_id
-    conn: TelegramConnection | FanvueConnection | TelegramUserSession | None = None
+    conn: CompanionConnectionRow | None = None
     platform: Platform | None = None
 
     if conv.platform == Platform.telegram:
@@ -95,6 +105,9 @@ async def get_companion_config_for_conversation(
     elif conv.platform == Platform.fanvue:
         conn = await resolve_fanvue_connection_for_conversation(session, conv, oid)
         platform = Platform.fanvue
+    elif conv.platform == Platform.instagram:
+        conn = await resolve_instagram_connection_for_conversation(session, conv, oid)
+        platform = Platform.instagram
 
     if not conn or platform is None:
         return None

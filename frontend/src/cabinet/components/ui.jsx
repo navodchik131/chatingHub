@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Hoverable from './Hoverable';
 import { color, line, font } from '../styles/tokens';
 import { stActive, stWarn, stDim, chipOn, chipOff, panel, fieldLbl, inputSt, selectSt, areaSt, pillStyle, borderHoverOff, borderHoverLime } from '../styles/mixins';
@@ -108,18 +109,30 @@ export const IconBox = ({ size = 40, iconSize = 19, tint, children, style }) => 
 );
 
 /** Circular initial avatar. */
-export const Avatar = ({ size = 32, grad, children, style }) => (
-  <div
-    style={{
-      width: size, height: size, flex: 'none', borderRadius: '50%',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: 800, fontSize: size <= 32 ? 13 : 14,
-      background: grad.bg, color: grad.ink, position: 'relative', ...style,
-    }}
-  >
-    {children}
-  </div>
-);
+export const Avatar = ({ size = 32, grad, children, imageUrl, style }) => {
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = Boolean(imageUrl) && !imgFailed;
+  return (
+    <div
+      style={{
+        width: size, height: size, flex: 'none', borderRadius: '50%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 800, fontSize: size <= 32 ? 13 : 14,
+        background: showImg ? color.bgPanel : grad.bg,
+        color: grad.ink, position: 'relative', overflow: 'hidden', ...style,
+      }}
+    >
+      {showImg ? (
+        <img
+          src={imageUrl}
+          alt=""
+          onError={() => setImgFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : children}
+    </div>
+  );
+};
 
 /** Labelled text field. */
 export const Field = ({ label, value, placeholder, type = 'text', area, rows = 2, onChange, style, readOnly }) => (

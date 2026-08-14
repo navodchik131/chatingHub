@@ -176,6 +176,24 @@ export async function deleteInstagramConnection(connectionId) {
   return apiJson(`/api/integrations/instagram${q}`, { method: 'DELETE' })
 }
 
+const PLATFORM_PATCH_PATH = {
+  tg: 'telegram',
+  'tg-user': 'telegram-user',
+  fanvue: 'fanvue',
+  ig: 'instagram',
+}
+
+export async function patchPlatformConnection(platformKey, connectionId, body) {
+  const segment = PLATFORM_PATCH_PATH[platformKey]
+  if (!segment || !connectionId) {
+    throw new Error('Unsupported platform connection patch')
+  }
+  return apiJson(`/api/integrations/${segment}/${connectionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
 export async function deleteTributeConnection(connectionId) {
   const q = connectionId ? `?connection_id=${connectionId}` : ''
   return apiJson(`/api/integrations/tribute${q}`, { method: 'DELETE' })

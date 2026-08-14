@@ -16,6 +16,112 @@ import { goToAdmin } from '../../marketing/workspaceEntry';
 
 const connIcons = { tg: IcoTg, wave: IcoWave, heart: IcoHeart, gift: IcoGift, cam: IcoCam, bell: IcoBell };
 
+const COMPANION_PLATFORMS = new Set(['tg', 'tg-user', 'fanvue', 'ig']);
+
+function getRawConnection(platformId, integrations, connectionId) {
+  if (!integrations || !connectionId) return null;
+  if (platformId === 'tg') {
+    return (integrations.telegram_connections || []).find((c) => Number(c.id) === Number(connectionId));
+  }
+  if (platformId === 'tg-user') {
+    return (integrations.telegram_user_connections || []).find((c) => Number(c.id) === Number(connectionId));
+  }
+  if (platformId === 'fanvue') {
+    return (integrations.fanvue_connections || []).find((c) => Number(c.id) === Number(connectionId));
+  }
+  if (platformId === 'ig') {
+    return (integrations.instagram_connections || []).find((c) => Number(c.id) === Number(connectionId));
+  }
+  return null;
+}
+
+function companionModeOptions(lang) {
+  return [
+    { id: 'off', label: lang === 'ru' ? 'Выключен' : 'Off' },
+    { id: 'draft', label: lang === 'ru' ? 'Черновики' : 'Drafts' },
+    { id: 'semi_auto', label: lang === 'ru' ? 'Полуавто' : 'Semi-auto' },
+    { id: 'auto', label: lang === 'ru' ? 'Авто' : 'Auto' },
+  ];
+}
+
+function CompanionConnectionEditor({
+  platformId, connectionId, integrations, modelOptions, lang, cabinet, onClose,
+}) {
+  const raw = getRawConnection(platformId, integrations, connectionId);
+  const [modelId, setModelId] = useState(raw?.studio_model_id ? String(raw.studio_model_id) : '');
+  const [companionMode, setCompanionMode] = useState(raw?.companion_mode || 'off');
+  const [delayMin, setDelayMin] = useState(String(raw?.companion_delay_min_sec ?? 5));
+  const [delayMax, setDelayMax] = useState(String(raw?.companion_delay_max_sec ?? 45));
+  const [maxPerHour, setMaxPerHour] = useState(String(raw?.companion_max_replies_per_hour ?? 60));
+
+  if (!raw) return null;
+
+  const save = async () => {
+    const ok = await cabinet.patchConnectionSettings(platformId, connectionId, {
+      modelId: modelId || null,
+      companionMode,
+      delayMin,
+      delayMax,
+      maxPerHour,
+    });
+    if (ok) onClose();
+  };
+
+  return (
+    <Panel style={{ marginTop: 10, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontWeight: 800, fontSize: 13 }}>
+        {lang === 'ru' ? 'AI-компаньон на подключении' : 'Connection AI companion'}
+      </div>
+      <ModelSelect
+        label={lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER'}
+        value={modelId}
+        options={modelOptions}
+        lang={lang}
+        onChange={(e) => setModelId(e.target.value)}
+      />
+      <div>
+        <div style={fieldLbl}>{lang === 'ru' ? 'РЕЖИМ' : 'MODE'}</div>
+        <select value={companionMode} onChange={(e) => setCompanionMode(e.target.value)} style={selectSt}>
+          {companionModeOptions(lang).map((o) => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+        <Field label={lang === 'ru' ? 'ЗАДЕРЖКА МИН' : 'DELAY MIN'} value={delayMin} onChange={(e) => setDelayMin(e.target.value)} />
+        <Field label={lang === 'ru' ? 'ЗАДЕРЖКА МАКС' : 'DELAY MAX'} value={delayMax} onChange={(e) => setDelayMax(e.target.value)} />
+        <Field label={lang === 'ru' ? 'АВТО/ЧАС' : 'AUTO/HR'} value={maxPerHour} onChange={(e) => setMaxPerHour(e.target.value)} />
+      </div>
+      <NoteBlock>
+        {lang === 'ru'
+          ? 'Базовый режим для всех диалогов этого подключения. В отдельном чате можно переопределить в шапке диалога.'
+          : 'Default mode for all dialogs on this connection. Override per chat in dialog settings.'}
+      </NoteBlock>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <Hoverable
+          as="button"
+          type="button"
+          style={{ ...selectSt, width: 'auto', padding: '8px 14px', cursor: 'pointer' }}
+          onClick={onClose}
+        >
+          {lang === 'ru' ? 'Отмена' : 'Cancel'}
+        </Hoverable>
+        <Hoverable
+          as="button"
+          type="button"
+          style={{
+            ...selectSt, width: 'auto', padding: '8px 14px', cursor: 'pointer',
+            background: color.lime, color: color.limeInk, fontWeight: 800, border: 'none',
+          }}
+          onClick={() => { void save(); }}
+        >
+          {lang === 'ru' ? 'Сохранить' : 'Save'}
+        </Hoverable>
+      </div>
+    </Panel>
+  );
+}
+
 function oauthFlashErrorMessage(platformId, reason, t) {
   const r = (reason || '').trim().toLowerCase();
   if (platformId === 'fanvue') {
@@ -128,7 +234,7 @@ function ConnectionDetail() {
   const form = s.connForms?.[data.id] || {
     token: '', apiKey: '', label: '', modelId: modelOptions[0]?.id || '',
     phone: '', code: '', password: '', tgUserStep: 'phone', tgUserConnectionId: null,
-    reconnectConnectionId: null,
+    reconnectConnectionId: null, editConnectionId: null,
   };
   const [oauthBusy, setOauthBusy] = useState(false);
   const saving = cabinet.busy || oauthBusy;
@@ -425,6 +531,16 @@ function ConnectionDetail() {
                     <div style={{ fontWeight: 700, fontSize: 12 }}>{cl.name}</div>
                     <div style={{ fontSize: 10, color: color.textMuted }}>{cl.meta}</div>
                   </div>
+                  {COMPANION_PLATFORMS.has(data.id) && cl.statusTone !== 'pending' && (
+                    <Hoverable
+                      as="span"
+                      style={{ fontSize: 11, fontWeight: 700, color: color.textDim, cursor: 'pointer' }}
+                      hover={{ color: color.lime }}
+                      onClick={() => setForm({ editConnectionId: cl.id })}
+                    >
+                      {lang === 'ru' ? 'AI' : 'AI'}
+                    </Hoverable>
+                  )}
                   {['ig', 'fanvue', 'tg', 'tg-user'].includes(data.id) && cl.statusTone !== 'pending' && (
                     <Hoverable
                       as="span"
@@ -446,6 +562,18 @@ function ConnectionDetail() {
                 </div>
               ))}
             </div>
+          )}
+
+          {COMPANION_PLATFORMS.has(data.id) && form.editConnectionId && (
+            <CompanionConnectionEditor
+              platformId={data.id}
+              connectionId={form.editConnectionId}
+              integrations={ig}
+              modelOptions={modelOptions}
+              lang={lang}
+              cabinet={cabinet}
+              onClose={() => setForm({ editConnectionId: null })}
+            />
           )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
