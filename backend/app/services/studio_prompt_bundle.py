@@ -281,6 +281,175 @@ def inject_wavespeed_model_identity(
     return _prepend_priority_rule(body)
 
 
+def _profile_prefers_lean_build(text: str) -> bool:
+    """True when profile explicitly locks lean / small-bust silhouette."""
+    low = (text or "").lower()
+    return any(
+        token in low
+        for token in (
+            "lean athletic",
+            "small bust",
+            "small high bust",
+            "a/b",
+            "a-cup",
+            "a cup",
+            "b-cup",
+            "low volume",
+            "flat defined abdomen",
+            "flat abdomen",
+            "ectomorph",
+            "slim-fit",
+            "not curvy",
+            "not plus",
+        )
+    )
+
+
+def _profile_prefers_curvy_build(text: str) -> bool:
+    low = (text or "").lower()
+    if _profile_prefers_lean_build(text):
+        return False
+    return any(
+        token in low
+        for token in (
+            "large bust",
+            "full bust",
+            "d-cup",
+            "c-cup",
+            "curvy",
+            "plus-size",
+            "plus size",
+            "voluptuous",
+            "pronounced hourglass",
+            "wide hips",
+            "wide hip",
+        )
+    )
+
+
+def _extract_build_clause_from_anchor(anchor: str) -> str:
+    text = (anchor or "").strip()
+    if not text:
+        return ""
+    low = text.lower()
+    if any(
+        marker in low
+        for marker in (
+            "model body proportions from body_reference",
+            "do not copy donor silhouette",
+            "visible regions [",
+        )
+    ) and "build:" not in low:
+        return ""
+    if "Build:" in text:
+        build = text.split("Build:", 1)[1].strip()
+        return build.split("Same person", 1)[0].strip().rstrip(".,;")
+    if text.lower().startswith("visible regions"):
+        parts = text.split(":", 2)
+        if len(parts) > 2:
+            return parts[-1].split("Same person", 1)[0].strip().rstrip(".,;")
+    if len(text) > 220:
+        return ""
+    return text
+
+
+def _figure_enforcement_tail_message(build: str) -> str:
+    """Profile-aware closing lock — lean vs curvy vs neutral."""
+    if _profile_prefers_lean_build(build):
+        return (
+            f"Mandatory figure lock — lean athletic build with small bust; "
+            f"NOT curvy/plus-size, NOT bodybuilder, NOT fashion-catalog slim-with-large-bust; "
+            f"match body reference photos exactly: {build}."
+        )
+    if _profile_prefers_curvy_build(build):
+        return (
+            f"Mandatory figure lock — NOT a slim/fashion-model body: match turnaround + body reference photos; "
+            f"bust/waist/hip volumes exactly: {build}."
+        )
+    return (
+        f"Mandatory figure lock — match body reference photos; "
+        f"bust/waist/hip volumes exactly: {build}."
+    )
+
+
+def enrich_wavespeed_json_with_identity(
+    positive_json: str,
+    *,
+    model_profile_text: str | None,
+    visibility: "IdentityVisibility | None" = None,
+) -> str:
+    """JSON brief modes: inject figure lock into constraints (img tags skip prose injection)."""
+    raw = (positive_json or "").strip()
+    if not raw.startswith("{"):
+        return positive_json
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return positive_json
+    if not isinstance(data, dict):
+        return positive_json
+
+    anchor = grok_figure_anchor_from_profile(model_profile_text, visibility=visibility).strip()
+    build = _extract_build_clause_from_anchor(anchor)
+    if not build:
+        return positive_json
+
+    constraints = data.get("constraints")
+    if not isinstance(constraints, dict):
+        constraints = {}
+        data["constraints"] = constraints
+    must_keep = constraints.get("must_keep")
+    if not isinstance(must_keep, list):
+        must_keep = list(must_keep) if must_keep else []
+
+    figure_line = f"Body proportions locked — {build}"
+    if figure_line not in must_keep:
+        must_keep.insert(0, figure_line)
+
+    tail_line = _figure_enforcement_tail_message(build)
+    if tail_line not in must_keep and len(tail_line) <= 420:
+        must_keep.insert(1, tail_line)
+
+    from app.services.studio_character_profile import (
+        build_generation_packs,
+        parse_profile_document,
+    )
+
+    doc = parse_profile_document(model_profile_text)
+    if doc:
+        neg = build_generation_packs(doc).get("negative_lock") or []
+        body_neg = [
+            str(x).strip()
+            for x in neg
+            if str(x).strip()
+            and any(
+                w in str(x).lower()
+                for w in (
+                    "bust",
+                    "curvy",
+                    "shoulder",
+                    "stomach",
+                    "muscular",
+                    "hair",
+                    "skin",
+                    "waist",
+                    "hip",
+                    "body",
+                )
+            )
+        ][:6]
+        if body_neg:
+            never_line = f"Never change identity: {', '.join(body_neg)}"
+            if never_line not in must_keep:
+                must_keep.append(never_line)
+
+    constraints["must_keep"] = must_keep[:8]
+    if build and not data.get("identity_lock"):
+        data["identity_lock"] = build
+
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+
+
 def append_figure_lock_enforcement_tail(
     prose: str,
     *,
@@ -299,19 +468,10 @@ def append_figure_lock_enforcement_tail(
     ).strip()
     if not anchor:
         return text
-    build = anchor
-    if "Build:" in anchor:
-        build = anchor.split("Build:", 1)[1].strip()
-        build = build.split("Same person", 1)[0].strip().rstrip(".,;")
-    elif anchor.lower().startswith("visible regions"):
-        parts = anchor.split(":", 2)
-        build = parts[-1].split("Same person", 1)[0].strip().rstrip(".,;") if len(parts) > 2 else anchor
+    build = _extract_build_clause_from_anchor(anchor)
     if not build or len(build) < 12:
         return text
-    tail = (
-        f"Mandatory figure lock — NOT a slim/fashion-model body: match turnaround + body reference photos; "
-        f"bust/waist/hip volumes exactly: {build}."
-    )
+    tail = _figure_enforcement_tail_message(build)
     if "Photoreal phone look —" in text:
         head, _sep, rest = text.partition("\n\nPhotoreal phone look —")
         return f"{head.rstrip()}\n\n{tail}\n\nPhotoreal phone look —{rest}".strip()
@@ -727,11 +887,13 @@ _IDENTITY_CLAUSE_RES = (
 
 def harmonize_figure_lock_clause(body: str) -> str:
     """
-    Убрать slim/lean/athletic из Build, когда в профиле явный hourglass (waist+hips / WHR).
-    Иначе WAN тянет к худой athletic, игнорируя wide hips на развёртке.
+    Убрать slim/lean/athletic из Build, когда в профиле явный hourglass (waist+hips / WHR)
+    и нет явного lean/small-bust якоря.
     """
     text = (body or "").strip()
     if not text:
+        return text
+    if _profile_prefers_lean_build(text):
         return text
     low = text.lower()
     curvy_signal = (

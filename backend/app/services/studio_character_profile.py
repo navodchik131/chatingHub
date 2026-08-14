@@ -153,10 +153,34 @@ def _build_figure_lock_v1(doc: dict[str, Any]) -> str:
         waist = meas.get("waist")
         hips = meas.get("hips")
         bust = meas.get("bust")
-        if waist and hips:
-            bits.append(f"waist {waist} hips {hips}")
-        elif bust and waist:
-            bits.append(f"bust {bust} waist {waist}")
+        meas_bits: list[str] = []
+        if bust:
+            meas_bits.append(f"bust {bust}")
+        if waist:
+            meas_bits.append(f"waist {waist}")
+        if hips:
+            meas_bits.append(f"hips {hips}")
+        if meas_bits:
+            bits.append(" ".join(meas_bits))
+
+    segments = body.get("segments")
+    if isinstance(segments, dict):
+        chest = segments.get("chest")
+        if isinstance(chest, dict):
+            chest_size = _as_text(chest.get("size"))
+            chest_shape = _as_text(chest.get("shape"))
+            chest_notes = _as_text(chest.get("notes"))
+            chest_line = _join_non_empty(
+                [f"chest {chest_size}" if chest_size else "", chest_shape, chest_notes[:80]],
+                ", ",
+            )
+            if chest_line and chest_line.lower() not in " ".join(bits).lower():
+                bits.append(chest_line)
+        hips_seg = segments.get("hips_and_glutes")
+        if isinstance(hips_seg, dict):
+            hip_note = _as_text(hips_seg.get("notes"))
+            if hip_note and hip_note[:100].lower() not in " ".join(bits).lower():
+                bits.append(hip_note[:100])
 
     props = body.get("anatomical_proportions")
     if isinstance(props, dict):
@@ -170,7 +194,7 @@ def _build_figure_lock_v1(doc: dict[str, Any]) -> str:
         if one and len(bits) < 2:
             bits.append(one)
 
-    return _join_non_empty(bits[:5], ", ")
+    return _join_non_empty(bits[:6], ", ")
 
 
 def _build_face_lock_v1(doc: dict[str, Any]) -> str:

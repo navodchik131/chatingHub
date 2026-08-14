@@ -297,6 +297,51 @@ def test_figure_lock_enforcement_tail() -> None:
     assert out.index("Mandatory figure lock") < out.index("Photoreal phone look")
 
 
+def test_figure_lock_enforcement_tail_lean_profile() -> None:
+    from app.services.studio_prompt_bundle import append_figure_lock_enforcement_tail
+
+    profile = json.dumps(
+        {
+            "consistency": {"negative_traits": ["large bust"]},
+            "generation_packs": {
+                "figure_lock": (
+                    "172 cm, lean athletic, small high bust, waist 60, wide hips 91, WHR 0.66"
+                ),
+            },
+        }
+    )
+    out = append_figure_lock_enforcement_tail("Scene prose.", model_profile_text=profile)
+    assert "Mandatory figure lock" in out
+    assert "lean athletic" in out.lower()
+    assert "small" in out.lower()
+    assert "NOT curvy" in out or "NOT bodybuilder" in out
+
+
+def test_enrich_wavespeed_json_with_identity() -> None:
+    from app.services.studio_prompt_bundle import enrich_wavespeed_json_with_identity
+
+    profile = json.dumps(
+        {
+            "consistency": {"negative_traits": ["large bust", "curvy", "broad shoulders"]},
+            "generation_packs": {
+                "figure_lock": "172 cm, lean athletic, small high bust, waist 60 hips 91",
+            },
+        }
+    )
+    raw = json.dumps(
+        {
+            "scene_brief": "A woman in a dressing room.",
+            "constraints": {"must_keep": ["Phone snapshot realism"]},
+        }
+    )
+    out = enrich_wavespeed_json_with_identity(raw, model_profile_text=profile)
+    data = json.loads(out)
+    must = data["constraints"]["must_keep"]
+    assert any("Body proportions locked" in x for x in must)
+    assert data.get("identity_lock")
+    assert any("large bust" in x.lower() for x in must)
+
+
 def test_model_scene_wan_prefix_uses_main_prose() -> None:
     from app.services.studio_openai import finalize_wavespeed_studio_prompt
 

@@ -228,11 +228,14 @@ _GROK_COMPOSED_NANO_PREFIX = _NANO_EDIT_ROLE_PREFIX
 _GROK_COMPOSED_POSE_LAST_SUFFIX = ""
 
 _GROK_TEXT_SCENE_WAN_PREFIX = (
-    "Attached images = one model identity. Scene pose, room, camera, and light come only from the JSON brief below.\n\n"
+    "Attached images = one model identity (face, skin, hair, bust/waist/hip volumes). "
+    "JSON brief below defines scene pose, room, camera, and light — body proportions must match "
+    "identity images and profile; if scene text conflicts, identity wins.\n\n"
 )
 
 _GROK_TEXT_SCENE_NANO_PREFIX = (
-    "Earlier images = model identity. JSON brief below defines pose, room, camera, and light.\n\n"
+    "Earlier images = model identity (face, skin, body shape, bust/waist/hip volumes). "
+    "JSON brief below defines pose, room, camera, and light — if body wording conflicts, identity wins.\n\n"
 )
 
 _GROK_MAIN_PROSE_WAN_PREFIX = (
@@ -1726,6 +1729,7 @@ def assemble_wavespeed_image_edit_prompt(
         append_figure_lock_enforcement_tail,
         append_negative_to_wavespeed_prompt,
         append_phone_candid_photo_coda,
+        enrich_wavespeed_json_with_identity,
         inject_wavespeed_model_identity,
         prepare_positive_prompt_json,
     )
@@ -1747,6 +1751,12 @@ def assemble_wavespeed_image_edit_prompt(
     mode = (studio_mode or "model").strip().lower()
     identity_profile = (model_profile_text_for_identity or model_profile_text or "").strip() or None
     prose_positive = not (positive or "").lstrip().startswith("{")
+    if (positive or "").lstrip().startswith("{"):
+        positive = enrich_wavespeed_json_with_identity(
+            positive,
+            model_profile_text=identity_profile,
+            visibility=visibility,
+        )
     if visibility is not None and brief in (
         "grok_main_prose",
         "deterministic_compose",

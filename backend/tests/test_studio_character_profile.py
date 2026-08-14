@@ -73,7 +73,8 @@ def test_is_v1_character_profile():
 def test_build_generation_packs_from_v1():
     doc = _mask_character_v1()
     packs = build_generation_packs(doc)
-    assert "waist 60 hips 91" in packs["figure_lock"]
+    assert "waist 60" in packs["figure_lock"]
+    assert "hips 91" in packs["figure_lock"]
     assert "platinum" in packs["hair_lock"].lower()
     assert "respirator" in packs["accessory_lock"].lower()
     assert packs["short_prompt_summary"]
@@ -195,17 +196,39 @@ def test_grok_figure_anchor_delegates_to_character_profile():
     assert "athletic" in a.lower() or "build:" in a.lower()
 
 
-def test_harmonize_figure_lock_strips_lean_when_hourglass_measurements():
+def test_build_generation_packs_includes_bust_and_chest_segment():
+    doc = _mask_character_v1()
+    doc["body"]["measurements_cm"]["bust"] = 82
+    doc["body"]["segments"] = {
+        "chest": {"size": "small (approx. A/B)", "shape": "high, rounded"},
+    }
+    packs = build_generation_packs(doc)
+    assert "bust 82" in packs["figure_lock"]
+    assert "small" in packs["figure_lock"].lower() or "a/b" in packs["figure_lock"].lower()
+
+
+def test_harmonize_preserves_lean_athletic_when_explicit():
+    from app.services.studio_prompt_bundle import harmonize_figure_lock_clause
+
+    raw = (
+        "172 cm, lean athletic, small high bust, long straight lean legs, "
+        "waist 60 cm, wide hips 91 cm, WHR 0.66"
+    )
+    out = harmonize_figure_lock_clause(raw)
+    assert "lean athletic" in out.lower()
+    assert "small high bust" in out.lower()
+
+
+def test_harmonize_figure_lock_strips_lean_when_hourglass_without_lean_anchor():
     from app.services.studio_prompt_bundle import harmonize_figure_lock_clause
 
     raw = (
         "172 cm, lean athletic, long straight lean legs, "
         "waist 60 cm, wide hips 91 cm, WHR 0.66"
     )
-    out = harmonize_figure_lock_clause(raw)
+    # No small bust / lean athletic anchor in profile sense — hourglass boost applies
+    raw_no_anchor = "172 cm, waist 60 cm, wide hips 91 cm, WHR 0.66"
+    out = harmonize_figure_lock_clause(raw_no_anchor)
     low = out.lower()
-    assert "lean athletic" not in low
-    assert "lean legs" not in low
     assert "waist 60" in low
     assert "hips 91" in low or "wide hip" in low
-    assert "hourglass" in low
