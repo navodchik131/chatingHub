@@ -219,17 +219,56 @@ def _needs_evolink_file_mirror(url: str) -> bool:
     return True
 
 
-def _upload_filename_for_bytes(url: str, data: bytes, *, default_stem: str) -> tuple[str, str]:
-    path = urlparse((url or "").strip()).path
-    name = path.rsplit("/", 1)[-1] if path else ""
+def _sniff_media_ext(data: bytes) -> str | None:
+    """Определяет расширение по magic bytes (важно для JWT URL без .mp4 в path)."""
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        return ".mp4"
+    if len(data) >= 4 and data[:4] == b"\x1aE\xdf\xa3":
+        return ".webm"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if len(data) >= 3 and data[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    return None
+
+
+def _upload_filename_for_bytes(
+    url: str,
+    data: bytes,
+    *,
+    default_stem: str,
+    media_kind: str | None = None,
+) -> tuple[str, str]:
+    parsed = urlparse((url or "").strip())
+    path = (parsed.path or "").lower()
+    name = parsed.path.rsplit("/", 1)[-1] if parsed.path else ""
+    sniffed = _sniff_media_ext(data)
+    kind = (media_kind or "").strip().lower()
+
     if name and "." in name:
         ext = "." + name.rsplit(".", 1)[-1].lower()
         stem = name.rsplit(".", 1)[0][:48] or default_stem
+    elif path.endswith("/studio/public-motion-video") or kind == "video":
+        ext = sniffed or ".mp4"
+        stem = default_stem
+    elif sniffed:
+        ext = sniffed
+        stem = default_stem
     else:
         ext = ".jpg"
         stem = default_stem
+
     if ext.lower() in (".bin", ".dat", ""):
-        ext = ".jpg"
+        ext = sniffed or (".mp4" if kind == "video" else ".jpg")
+    if kind == "video" and ext in (".jpg", ".jpeg", ".png", ".webp") and sniffed in (
+        ".mp4",
+        ".webm",
+        ".mov",
+    ):
+        ext = sniffed
+
     mime = mimetypes.guess_type(f"{stem}{ext}")[0] or "application/octet-stream"
     if ext in (".mp4", ".webm", ".mov") and not mime.startswith("video/"):
         mime = "video/mp4" if ext == ".mp4" else mime
@@ -325,7 +364,13 @@ async def evolink_mirror_media_urls(
             continue
         data = await _load_media_bytes_for_evolink_mirror(url, session=session)
         default_stem = f"{label.lower()}_{i}"
-        filename, mime = _upload_filename_for_bytes(url, data, default_stem=default_stem)
+        media_kind = "video" if label.lower().startswith("video") else "image"
+        filename, mime = _upload_filename_for_bytes(
+            url,
+            data,
+            default_stem=default_stem,
+            media_kind=media_kind,
+        )
         mirrored = await evolink_upload_file_bytes(
             data=data,
             filename=filename,

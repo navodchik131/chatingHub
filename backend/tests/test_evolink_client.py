@@ -1,5 +1,6 @@
 from app.services.evolink_client import (
     _needs_evolink_file_mirror,
+    _upload_filename_for_bytes,
     format_evolink_video_edit_prompt,
     normalize_evolink_aspect_ratio,
     normalize_evolink_duration,
@@ -97,3 +98,17 @@ def test_needs_evolink_file_mirror():
     )
     assert not _needs_evolink_file_mirror("https://files.evolink.ai/photos/frame.jpg")
     assert not _needs_evolink_file_mirror("https://cdn.example.com/out.png")
+
+
+def test_upload_filename_motion_video_jwt_url_uses_mp4_not_jpg():
+    """public-motion-video URL has no .mp4 in path — must not upload as .jpg to EvoLink."""
+    mp4_head = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 48
+    url = "https://model-mate.online/api/studio/public-motion-video?t=token"
+    name, mime = _upload_filename_for_bytes(
+        url,
+        mp4_head,
+        default_stem="video_1",
+        media_kind="video",
+    )
+    assert name.endswith(".mp4"), name
+    assert mime.startswith("video/")
