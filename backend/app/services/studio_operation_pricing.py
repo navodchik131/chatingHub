@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from app.config import settings
 from app.services.credit_units import usd_to_credits
 from app.services.studio_provider_pricing import operation_usd
 
 
 def studio_prompt_refine_credit_cost() -> int:
-    return usd_to_credits(operation_usd("prompt_refine"))
+    """Фиксированная надбавка за LLM-промпт, включается в цену генерации."""
+    return max(1, int(settings.credit_cost_studio_prompt_refine))
 
 
 def studio_model_profile_generate_credit_cost() -> int:

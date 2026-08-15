@@ -2,8 +2,16 @@ import Hoverable from '../components/Hoverable';
 import { IcoPlay } from '../components/Icons';
 import { Fade, PageTitle, BackLink, Overlay, CloseButton } from '../components/ui';
 import { useApp } from '../hooks/useApp';
-import { color, line, font, gGrad } from '../styles/tokens';
+import { color, line, font } from '../styles/tokens';
 import { guideDefs } from '../data/catalog';
+
+function youtubeThumb(id) {
+  return `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
+}
+
+function youtubeEmbed(id) {
+  return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
+}
 
 /** Full-screen media preview for a guide step. */
 export function MediaModal() {
@@ -36,29 +44,18 @@ export function MediaModal() {
         <div
           style={{
             aspectRatio: '16/9', borderRadius: 14, overflow: 'hidden', position: 'relative',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: gGrad[mediaStep % 5],
+            background: color.bgPanel,
           }}
         >
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.35)' }} />
-          <Hoverable
-            style={{
-              width: 64, height: 64, borderRadius: '50%', background: 'rgba(0,0,0,.55)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              position: 'relative', cursor: 'pointer',
-            }}
-            hover={{ background: 'rgba(0,0,0,.75)' }}
-          >
-            <span style={{ display: 'flex', width: 26, height: 26, color: '#fff', marginLeft: 3 }}><IcoPlay /></span>
-          </Hoverable>
-          <span
-            style={{
-              position: 'absolute', bottom: 12, left: 14, fontFamily: font.mono,
-              fontSize: 9, letterSpacing: '1px', color: 'rgba(255,255,255,.7)',
-            }}
-          >
-            GIF / VIDEO · {t.guidePlaceholder}
-          </span>
+          {step.youtubeId ? (
+            <iframe
+              title={step.title}
+              src={youtubeEmbed(step.youtubeId)}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+            />
+          ) : null}
         </div>
 
         <div style={{ fontSize: 12.5, color: color.textDim, lineHeight: 1.6 }}>{step.desc}</div>
@@ -91,25 +88,34 @@ export default function Guide() {
             <Hoverable
               style={{
                 width: 200, flex: 'none', aspectRatio: '16/10', borderRadius: 12,
-                border: `1px dashed ${line.dashed}`, background: color.bgPanel,
+                border: `1px solid ${line.hair}`, background: color.bgPanel,
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 gap: 6, overflow: 'hidden', position: 'relative', cursor: 'pointer',
               }}
               hover={{ borderColor: 'rgba(215,244,82,.5)' }}
               onClick={() => setS({ mediaStep: i })}
-              aria-label={`${g.title} — ${t.guidePlaceholder}`}
+              aria-label={`${g.title} — video`}
             >
-              <div style={{ position: 'absolute', inset: 0, opacity: 0.35, background: gGrad[i % 5] }} />
+              {g.youtubeId ? (
+                <>
+                  <img
+                    src={youtubeThumb(g.youtubeId)}
+                    alt=""
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.35)' }} />
+                </>
+              ) : null}
               <div
                 style={{
-                  width: 38, height: 38, borderRadius: '50%', background: 'rgba(0,0,0,.5)',
+                  width: 38, height: 38, borderRadius: '50%', background: 'rgba(0,0,0,.55)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
                 }}
               >
                 <span style={{ display: 'flex', width: 16, height: 16, color: '#fff', marginLeft: 2 }}><IcoPlay /></span>
               </div>
-              <span style={{ fontFamily: font.mono, fontSize: 8.5, letterSpacing: '1px', color: color.textFaint, position: 'relative' }}>
-                GIF / VIDEO
+              <span style={{ fontFamily: font.mono, fontSize: 8.5, letterSpacing: '1px', color: '#fff', position: 'relative' }}>
+                VIDEO
               </span>
             </Hoverable>
 

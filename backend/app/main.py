@@ -195,8 +195,17 @@ async def lifespan(app: FastAPI):
         "Companion style index loop: every %s h",
         settings.companion_style_index_interval_hours,
     )
-    from app.services.companion_bot.job_queue import companion_job_worker_loop
+    from app.services.companion_bot.job_queue import (
+        companion_job_worker_loop,
+        recover_stale_companion_jobs_on_startup,
+    )
 
+    try:
+        recovered = await recover_stale_companion_jobs_on_startup()
+        if recovered:
+            log.info("Companion jobs recovered on startup: %s", recovered)
+    except Exception:
+        log.exception("Companion job recovery on startup failed")
     companion_job_worker_task = asyncio.create_task(companion_job_worker_loop())
     log.info("Companion job worker started")
     if settings.exif_bot_token.strip():

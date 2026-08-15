@@ -15,6 +15,7 @@ from app.db.models import (
     StudioGeneration,
     Subscription,
     SubscriptionStatus,
+    UsageEvent,
     User,
     UserStudioModel,
 )
@@ -22,6 +23,8 @@ from app.db.session import get_session
 from app.schemas import (
     AdminCreditsIn,
     AdminCreditsOut,
+    AdminCreditHistoryItemOut,
+    AdminCreditHistoryPageOut,
     AdminDemoGenerationsIn,
     AdminDemoGenerationsOut,
     AdminPasswordResetIn,
@@ -387,6 +390,37 @@ async def admin_user_credits(
         raise HTTPException(status_code=400, detail=str(e)) from e
     await session.commit()
     return AdminCreditsOut(new_balance=new_bal, billing_user_id=billing_id)
+
+
+@router.get("/admin/users/{user_id}/credit-history", response_model=AdminCreditHistoryPageOut)
+async def admin_user_credit_history(
+    user_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_platform_admin),
+    limit: int = Query(50, ge=1, le=200),
+    skip: int = Query(0, ge=0),
+) -> AdminCreditHistoryPageOut:
+    target = await session.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    billing_id = workspace_owner_id(target)
+    off = max(0, skip)
+    lim = min(200, max(1, limit))
+    stmt = (
+        select(UsageEvent)
+        .where(UsageEvent.user_id == billing_id)
+        .order_by(UsageEvent.id.desc())
+        .offset(off)
+        .limit(lim + 1)
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    has_more = len(rows) > lim
+    rows = rows[:lim]
+    return AdminCreditHistoryPageOut(
+        billing_user_id=billing_id,
+        items=[AdminCreditHistoryItemOut.model_validate(r) for r in rows],
+        has_more=has_more,
+    )
 
 
 @router.post("/admin/users/{user_id}/demo-generations", response_model=AdminDemoGenerationsOut)

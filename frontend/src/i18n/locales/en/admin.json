@@ -229,7 +229,15 @@
     "newPassword": "New password",
     "newPasswordPlaceholder": "At least 8 characters",
     "savePassword": "Save password",
-    "passwordTooShort": "Password must be at least 8 characters."
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "creditHistory": "Credits: spends & top-ups",
+    "creditHistoryHint": "Full billing-owner ledger (includes rows hidden from the workspace). Positive amounts are top-ups and bonuses.",
+    "creditHistoryWhen": "When",
+    "creditHistoryKind": "Operation",
+    "creditHistoryDelta": "Amount",
+    "creditHistoryMeta": "Details",
+    "creditHistoryEmpty": "No transactions yet",
+    "creditHistoryLoadMore": "Load more"
   },
   "drill": {
     "showList": "Show list",

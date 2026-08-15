@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { formatHttpApiError } from '../apiErrors'
+import { mapCreditHistory } from '../cabinet/api/mappers'
 import {
   BILLING_PLAN_OPTIONS,
   PLAN_TIER_OPTIONS,
@@ -16,6 +17,29 @@ import {
   formatDateTimeRu,
   isoToDatetimeLocalValue,
 } from './utils'
+
+type AdminCreditHistoryRow = {
+  id: number
+  created_at: string
+  kind: string
+  credits_delta: number
+  meta?: string | null
+}
+
+function metaHint(meta: string | null | undefined): string {
+  if (!meta) return ''
+  try {
+    const o = JSON.parse(meta) as Record<string, unknown>
+    const parts: string[] = []
+    if (o.generation_id != null) parts.push(`gen ${String(o.generation_id)}`)
+    if (o.studio_model_id != null) parts.push(`model ${String(o.studio_model_id)}`)
+    if (o.demo) parts.push('demo')
+    if (o.actor_user_id != null) parts.push(`actor ${String(o.actor_user_id)}`)
+    return parts.join(' · ')
+  } catch {
+    return ''
+  }
+}
 
 export function AdminUserPanel({
   user,
@@ -32,17 +56,52 @@ export function AdminUserPanel({
   onClose: () => void
   onError: (msg: string | null) => void
 }) {
-  const { t } = useTranslation('admin')
+  const { t, i18n } = useTranslation('admin')
   const [creditDelta, setCreditDelta] = useState('')
   const [demoDelta, setDemoDelta] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [partnerSlugDraft, setPartnerSlugDraft] = useState(user.partner_slug ?? '')
+  const [creditHistory, setCreditHistory] = useState<AdminCreditHistoryRow[]>([])
+  const [creditHistoryLoading, setCreditHistoryLoading] = useState(false)
+  const [creditHistoryHasMore, setCreditHistoryHasMore] = useState(false)
+  const [creditHistorySkip, setCreditHistorySkip] = useState(0)
+  const lang = i18n.language?.startsWith('en') ? 'en' : 'ru'
   const isOwner = user.parent_user_id == null
   const periodKey = `admin-panel-period-${user.id}-${user.subscription_period_end ?? 'none'}`
 
   useEffect(() => {
     setPartnerSlugDraft(user.partner_slug ?? '')
   }, [user.id, user.partner_slug])
+
+  const loadCreditHistory = async (skip: number, append: boolean) => {
+    setCreditHistoryLoading(true)
+    onError(null)
+    try {
+      const r = await apiFetch(`/api/admin/users/${user.id}/credit-history?limit=40&skip=${skip}`)
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        onError(formatHttpApiError(r, j))
+        return
+      }
+      const j = (await r.json()) as { items?: AdminCreditHistoryRow[]; has_more?: boolean }
+      const items = j.items ?? []
+      setCreditHistory((prev) => (append ? [...prev, ...items] : items))
+      setCreditHistoryHasMore(Boolean(j.has_more))
+      setCreditHistorySkip(skip + items.length)
+    } finally {
+      setCreditHistoryLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    setCreditHistory([])
+    setCreditHistorySkip(0)
+    setCreditHistoryHasMore(false)
+    void loadCreditHistory(0, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when user card changes
+  }, [user.id])
+
+  const creditHistoryRows = mapCreditHistory(creditHistory, lang)
 
   const patchSubscription = async (patch: {
     status?: string
@@ -437,6 +496,66 @@ export function AdminUserPanel({
             {t('userPanel.apply')}
           </button>
         </div>
+      </section>
+
+      <section className="admin-panel__section">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>{t('userPanel.creditHistory')}</h3>
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={creditHistoryLoading}
+            onClick={() => void loadCreditHistory(0, false)}
+          >
+            {t('common.refresh')}
+          </button>
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0, marginBottom: 10 }}>
+          {t('userPanel.creditHistoryHint')}
+        </p>
+        <div className="admin-user-table-wrap">
+          <table className="admin-user-table">
+            <thead>
+              <tr>
+                <th>{t('userPanel.creditHistoryWhen')}</th>
+                <th>{t('userPanel.creditHistoryKind')}</th>
+                <th>{t('userPanel.creditHistoryDelta')}</th>
+                <th>{t('userPanel.creditHistoryMeta')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {creditHistoryRows.length === 0 && !creditHistoryLoading ? (
+                <tr>
+                  <td colSpan={4} className="muted admin-user-table__empty">
+                    {t('userPanel.creditHistoryEmpty')}
+                  </td>
+                </tr>
+              ) : (
+                creditHistoryRows.map((row, i) => (
+                  <tr key={creditHistory[i]?.id ?? i}>
+                    <td>{row.date || formatDateTimeRu(creditHistory[i]?.created_at ?? '')}</td>
+                    <td>{row.what}</td>
+                    <td style={{ fontFamily: 'var(--font-mono, monospace)' }}>{row.delta}</td>
+                    <td className="muted" style={{ fontSize: 11 }}>
+                      {metaHint(creditHistory[i]?.meta)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {creditHistoryHasMore ? (
+          <button
+            type="button"
+            className="ghost-btn"
+            style={{ marginTop: 10 }}
+            disabled={creditHistoryLoading}
+            onClick={() => void loadCreditHistory(creditHistorySkip, true)}
+          >
+            {creditHistoryLoading ? t('common.loading') : t('userPanel.creditHistoryLoadMore')}
+          </button>
+        ) : null}
       </section>
     </aside>
   )

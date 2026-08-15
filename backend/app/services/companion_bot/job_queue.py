@@ -238,6 +238,32 @@ async def process_due_companion_jobs() -> int:
     return len(jobs)
 
 
+async def recover_stale_companion_jobs_on_startup(*, stale_minutes: int = 10) -> int:
+    """После краша API jobs могут зависнуть в running — возвращаем в очередь."""
+    cutoff = _utcnow() - timedelta(minutes=max(1, stale_minutes))
+    async with SessionLocal() as session:
+        result = await session.execute(
+            update(CompanionJob)
+            .where(
+                CompanionJob.status == CompanionJobStatus.running,
+                CompanionJob.started_at.isnot(None),
+                CompanionJob.started_at < cutoff,
+            )
+            .values(
+                status=CompanionJobStatus.pending,
+                started_at=None,
+                run_after=_utcnow(),
+            )
+        )
+        n = int(result.rowcount or 0)
+        if n:
+            await session.commit()
+            log.warning("Recovered %s stale companion jobs (running > %s min)", n, stale_minutes)
+        else:
+            await session.commit()
+        return n
+
+
 async def companion_job_worker_loop() -> None:
     log.info("Companion job worker started (poll=%ss)", _POLL_SEC)
     while True:

@@ -229,7 +229,15 @@
     "newPassword": "Новый пароль",
     "newPasswordPlaceholder": "Минимум 8 символов",
     "savePassword": "Сохранить пароль",
-    "passwordTooShort": "Пароль должен быть не короче 8 символов."
+    "passwordTooShort": "Пароль должен быть не короче 8 символов.",
+    "creditHistory": "Кредиты: траты и пополнения",
+    "creditHistoryHint": "Полная история по биллинг-аккаунту владельца (включая скрытые из кабинета строки). Положительные суммы — пополнения и бонусы.",
+    "creditHistoryWhen": "Когда",
+    "creditHistoryKind": "Операция",
+    "creditHistoryDelta": "Сумма",
+    "creditHistoryMeta": "Детали",
+    "creditHistoryEmpty": "Пока нет операций",
+    "creditHistoryLoadMore": "Показать ещё"
   },
   "drill": {
     "showList": "Показать список",

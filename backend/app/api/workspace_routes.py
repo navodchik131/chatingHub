@@ -162,9 +162,14 @@ async def credit_history(
     _require_workspace_owner(user)
     lim = min(100, max(1, limit))
     off = max(0, skip)
+    from app.services.demo_generations import USER_HIDDEN_CREDIT_HISTORY_KINDS
+
     stmt = (
         select(UsageEvent)
-        .where(UsageEvent.user_id == user.id)
+        .where(
+            UsageEvent.user_id == user.id,
+            UsageEvent.kind.not_in(USER_HIDDEN_CREDIT_HISTORY_KINDS),
+        )
         .order_by(UsageEvent.id.desc())
         .offset(off)
         .limit(lim + 1)

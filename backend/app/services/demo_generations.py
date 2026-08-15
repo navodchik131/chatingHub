@@ -23,8 +23,15 @@ from app.services.studio_keys import apply_studio_credit_cost
 
 DEMO_USAGE_KIND = "demo_studio_image"
 
+# Основная генерация картинок (промпт + WaveSpeed/Grok в одной строке истории).
+STUDIO_IMAGE_USAGE_KIND = "studio_image"
+
+# Старые списания под этим kind больше не показываем пользователю в истории.
+USER_HIDDEN_CREDIT_HISTORY_KINDS = frozenset({"studio_prompt_refine"})
+
 DEMO_ELIGIBLE_USAGE_KINDS = frozenset(
     {
+        STUDIO_IMAGE_USAGE_KIND,
         "studio_prompt_refine",
         "studio_inpaint",
         # Bootstrap kinds: demo only for non-Credits plans; Credits uses free onboarding or paid credits.

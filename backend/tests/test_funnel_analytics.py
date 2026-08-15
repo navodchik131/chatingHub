@@ -25,4 +25,5 @@ def test_pct_helper():
 def test_first_generation_signal_sets_not_empty():
     assert "first_generation" in _FIRST_GENERATION_FUNNEL_EVENTS
     assert "onboarding_generation_success" in _FIRST_GENERATION_FUNNEL_EVENTS
+    assert "studio_image" in _STUDIO_GENERATION_USAGE_KINDS
     assert "studio_prompt_refine" in _STUDIO_GENERATION_USAGE_KINDS

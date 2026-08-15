@@ -27,6 +27,7 @@ _FIRST_GENERATION_FUNNEL_EVENTS = frozenset(
 
 _STUDIO_GENERATION_USAGE_KINDS = frozenset(
     {
+        "studio_image",
         "studio_prompt_refine",
         "studio_motion_first_frame",
         "studio_motion_control",

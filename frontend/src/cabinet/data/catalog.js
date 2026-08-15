@@ -100,27 +100,23 @@ export const guideDefs = (lang) => [
   {
     title: lang === 'ru' ? 'Создать персонажа' : 'Create a character',
     desc: lang === 'ru' ? 'Загрузите фото-референсы, опишите внешность и персону. Это ваша виртуальная модель — на её основе идут генерации и автоответы.' : 'Upload references, describe the look and persona — your virtual model.',
-    cta: lang === 'ru' ? 'К персонажам' : 'To characters', page: 'characters',
-  },
-  {
-    title: lang === 'ru' ? 'Выбрать тариф' : 'Choose a plan',
-    desc: lang === 'ru' ? 'Подберите подписку и пополните кредиты — они тратятся на генерации картинок и видео.' : 'Pick a subscription and top up credits used for generations.',
-    cta: lang === 'ru' ? 'К тарифам' : 'To plans', page: 'billing',
+    cta: lang === 'ru' ? 'К персонажам' : 'To characters',
+    page: 'characters',
+    youtubeId: 'JuPyiW58gQY',
   },
   {
     title: lang === 'ru' ? 'Подключить каналы' : 'Connect channels',
     desc: lang === 'ru' ? 'Привяжите Telegram/Fanvue и AI-движок. Здесь же — AI-компаньон для автоответов от лица персонажа.' : 'Link Telegram/Fanvue and the AI engine; set up the AI companion.',
-    cta: lang === 'ru' ? 'К подключениям' : 'To connections', page: 'connections',
+    cta: lang === 'ru' ? 'К подключениям' : 'To connections',
+    page: 'connections',
+    youtubeId: 'YrhPkGj_CsA',
   },
   {
     title: lang === 'ru' ? 'Сгенерировать картинку' : 'Generate an image',
     desc: lang === 'ru' ? 'Выберите режим (референс, Face Swap, одежда, локация, промпт, карусель), модель и формат — и создайте кадр.' : 'Pick a mode, model and format — create a frame.',
-    cta: lang === 'ru' ? 'В студию' : 'To studio', page: 'images',
-  },
-  {
-    title: lang === 'ru' ? 'Оживить и запустить донаты' : 'Animate & launch donations',
-    desc: lang === 'ru' ? 'Сделайте видео из кадра, ведите диалоги с фанами и подключите донаты — деньги выводятся в разделе «Донаты».' : 'Make a video, chat with fans and enable donations.',
-    cta: lang === 'ru' ? 'К донатам' : 'To donations', page: 'donations',
+    cta: lang === 'ru' ? 'В студию' : 'To studio',
+    page: 'images',
+    youtubeId: 'BY_NTUambwY',
   },
 ];
 

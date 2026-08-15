@@ -380,6 +380,16 @@ class CreditHistoryPageOut(BaseModel):
     has_more: bool
 
 
+class AdminCreditHistoryItemOut(CreditHistoryItemOut):
+    meta: str | None = None
+
+
+class AdminCreditHistoryPageOut(BaseModel):
+    billing_user_id: int
+    items: list[AdminCreditHistoryItemOut]
+    has_more: bool
+
+
 class StudioRefinePromptOut(BaseModel):
     """Результат refine: текст, URL картинки; generation_id — запись в архиве на диске, если успели сохранить."""
 

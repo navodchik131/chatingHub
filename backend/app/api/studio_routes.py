@@ -67,6 +67,7 @@ from app.schemas import (
 from app.services.billing_plan import is_credits_plan, normalize_billing_plan
 from app.services.credits import ensure_can_consume_credits, record_usage
 from app.services.demo_generations import (
+    STUDIO_IMAGE_USAGE_KIND,
     effective_demo_remaining_for_access,
     assert_demo_only_user_model_allowed,
     assert_studio_image_billing_available,
@@ -801,6 +802,33 @@ def _demo_slot_already_reserved(params: dict[str, Any]) -> bool:
     )
 
 
+def _refine_prompt_billing_quote(
+    plan: str,
+    *,
+    mask_bytes: bool,
+    billing_wave_model: str,
+    wan_tier_n: str,
+    grok_pipeline: str,
+) -> tuple[str, int, int]:
+    """usage_kind, quoted_cost (с промптом), base_studio_credit для demo/reserve."""
+    usage_kind = "studio_inpaint" if mask_bytes else STUDIO_IMAGE_USAGE_KIND
+    base_studio_credit = (
+        studio_inpaint_credit_cost()
+        if mask_bytes
+        else studio_prompt_refine_credit_cost()
+    )
+    quoted_cost = resolve_image_credit_cost(
+        plan,
+        wave_model_id=billing_wave_model,
+        wan_edit_tier=wan_tier_n,
+        grok_pipeline=grok_pipeline,
+        legacy_base=base_studio_credit,
+    )
+    if not mask_bytes:
+        quoted_cost += studio_prompt_refine_credit_cost()
+    return usage_kind, quoted_cost, base_studio_credit
+
+
 async def _reserve_refine_prompt_billing_at_accept(
     session: AsyncSession,
     user: User,
@@ -825,24 +853,18 @@ async def _reserve_refine_prompt_billing_at_accept(
     workflow_wave_model = (str(params.get("workflow_wave_model") or "").strip().lower()) or None
     workflow_source = params.get("workflow_source")
 
-    usage_kind = "studio_inpaint" if mask_bytes else "studio_prompt_refine"
     grok_pipeline = grok_pipeline_for_studio_mode(mode_n, workflow=workflow_source)
     billing_wave_model = (
         workflow_wave_model
         if workflow_wave_model
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
-    base_studio_credit = (
-        studio_inpaint_credit_cost()
-        if mask_bytes
-        else studio_prompt_refine_credit_cost()
-    )
-    quoted_cost = resolve_image_credit_cost(
+    usage_kind, quoted_cost, base_studio_credit = _refine_prompt_billing_quote(
         plan,
-        wave_model_id=billing_wave_model,
-        wan_edit_tier=wan_tier_n,
+        mask_bytes=mask_bytes,
+        billing_wave_model=billing_wave_model,
+        wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
-        legacy_base=base_studio_credit,
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
@@ -3828,24 +3850,18 @@ async def _studio_job_execute_refine_prompt(
         workflow_dual_ref_face_swap=workflow_dual_ref_face_swap,
     )
 
-    usage_kind = "studio_inpaint" if mask_bytes else "studio_prompt_refine"
     grok_pipeline = grok_pipeline_for_studio_mode(mode_n, workflow=workflow_source)
     billing_wave_model = (
         workflow_wave_model
         if workflow_wave_model
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
-    base_studio_credit = (
-        studio_inpaint_credit_cost()
-        if mask_bytes
-        else studio_prompt_refine_credit_cost()
-    )
-    quoted_cost = resolve_image_credit_cost(
+    usage_kind, quoted_cost, base_studio_credit = _refine_prompt_billing_quote(
         plan,
-        wave_model_id=billing_wave_model,
-        wan_edit_tier=wan_tier_n,
+        mask_bytes=bool(mask_bytes),
+        billing_wave_model=billing_wave_model,
+        wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
-        legacy_base=base_studio_credit,
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
