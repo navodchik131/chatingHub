@@ -12,6 +12,7 @@ from aiogram.utils.token import TokenValidationError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
@@ -100,6 +101,46 @@ from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspa
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
+
+
+def _missing_companion_goal_column(exc: BaseException) -> bool:
+    """True when DB is missing companion_goal_* columns from a partial/skipped migration."""
+    parts = [str(exc).lower()]
+    orig = getattr(exc, "orig", None)
+    if orig is not None:
+        parts.append(str(orig).lower())
+    cause = getattr(exc, "__cause__", None)
+    if cause is not None:
+        parts.append(str(cause).lower())
+    msg = " ".join(parts)
+    if "companion_goal" not in msg:
+        return False
+    return any(
+        token in msg
+        for token in (
+            "does not exist",
+            "unknown column",
+            "no such column",
+            "undefined column",
+        )
+    )
+
+
+async def _integration_status_or_migrate(
+    session: AsyncSession,
+    user: User,
+) -> IntegrationStatusOut:
+    try:
+        return await _integration_status(session, user)
+    except DBAPIError as exc:
+        if not _missing_companion_goal_column(exc):
+            raise
+        log.warning("companion_goal columns missing — running migration retry: %s", exc)
+        await session.rollback()
+        from app.db.session import ensure_companion_goal_columns
+
+        await ensure_companion_goal_columns()
+        return await _integration_status(session, user)
 
 
 def _apply_companion_connection_patch(
@@ -425,7 +466,7 @@ async def integration_status(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
-    return await _integration_status(session, user)
+    return await _integration_status_or_migrate(session, user)
 
 
 @router.get("/health", response_model=IntegrationHealthOut)
@@ -473,7 +514,7 @@ async def integration_health(
         or 0
     )
 
-    status = await _integration_status(session, user)
+    status = await _integration_status_or_migrate(session, user)
     issues: list[str] = []
     if pending_jobs > 50:
         issues.append(f"Большая очередь companion: {pending_jobs} задач")
