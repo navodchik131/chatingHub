@@ -4,27 +4,46 @@ from __future__ import annotations
 
 from sqlalchemy.exc import DBAPIError
 
-from app.api.integrations_routes import _missing_companion_goal_column
+from app.api.integrations_routes import (
+    _integration_status_fallback,
+    _missing_connection_companion_column,
+)
 
 
-def test_missing_companion_goal_column_postgres_message() -> None:
+def test_missing_connection_companion_column_postgres_goal() -> None:
     exc = DBAPIError(
         "SELECT ...",
         {},
         Exception('column "companion_goal_preset" does not exist'),
     )
-    assert _missing_companion_goal_column(exc) is True
+    assert _missing_connection_companion_column(exc) is True
 
 
-def test_missing_companion_goal_column_sqlite_message() -> None:
+def test_missing_connection_companion_column_postgres_mode() -> None:
+    exc = DBAPIError(
+        "SELECT ...",
+        {},
+        Exception('column "companion_mode" of relation "telegram_user_sessions" does not exist'),
+    )
+    assert _missing_connection_companion_column(exc) is True
+
+
+def test_missing_connection_companion_column_sqlite_message() -> None:
     exc = DBAPIError(
         "SELECT ...",
         {},
         Exception("no such column: companion_goal_preset"),
     )
-    assert _missing_companion_goal_column(exc) is True
+    assert _missing_connection_companion_column(exc) is True
 
 
-def test_missing_companion_goal_column_unrelated() -> None:
+def test_missing_connection_companion_column_unrelated() -> None:
     exc = DBAPIError("SELECT ...", {}, Exception("column foo does not exist"))
-    assert _missing_companion_goal_column(exc) is False
+    assert _missing_connection_companion_column(exc) is False
+
+
+def test_integration_status_fallback_shape() -> None:
+    out = _integration_status_fallback()
+    assert out.telegram_configured is False
+    assert out.llm_configured in (True, False)
+    assert out.max_connections_per_platform == 1

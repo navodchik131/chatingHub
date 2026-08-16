@@ -396,21 +396,34 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_credits_usd_cent_v2)
         await conn.run_sync(_migrate_instagram_companion_columns)
         await conn.run_sync(_migrate_conversation_peer_avatar_url)
-        await conn.run_sync(_migrate_companion_goal_columns)
+        await conn.run_sync(_migrate_connection_companion_columns)
     await refresh_companion_goal_columns_ready()
 
 
-def _migrate_companion_goal_columns(sync_conn) -> None:
+_CONNECTION_TABLES = (
+    "telegram_connections",
+    "fanvue_connections",
+    "instagram_connections",
+    "telegram_user_sessions",
+)
+
+_CONNECTION_COMPANION_COLUMNS = (
+    "companion_mode",
+    "companion_delay_min_sec",
+    "companion_delay_max_sec",
+    "companion_max_replies_per_hour",
+    "companion_goal_preset",
+)
+
+
+def _migrate_connection_companion_columns(sync_conn) -> None:
+    """Companion bot + goal columns on every platform connection table."""
     from sqlalchemy import inspect, text
 
     insp = inspect(sync_conn)
     dialect = sync_conn.dialect.name
-    for table in (
-        "telegram_connections",
-        "fanvue_connections",
-        "instagram_connections",
-        "telegram_user_sessions",
-    ):
+    int_def = "INTEGER"
+    for table in _CONNECTION_TABLES:
         if not insp.has_table(table):
             continue
         cols = {c["name"] for c in insp.get_columns(table)}
@@ -421,6 +434,31 @@ def _migrate_companion_goal_columns(sync_conn) -> None:
             else:
                 sync_conn.execute(text(sql_plain))
 
+        if "companion_mode" not in cols:
+            add_col(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                f"companion_mode VARCHAR(16) DEFAULT 'off'",
+                f"ALTER TABLE {table} ADD COLUMN companion_mode VARCHAR(16) DEFAULT 'off'",
+            )
+        if "companion_delay_min_sec" not in cols:
+            add_col(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                f"companion_delay_min_sec {int_def} DEFAULT 5",
+                f"ALTER TABLE {table} ADD COLUMN companion_delay_min_sec {int_def} DEFAULT 5",
+            )
+        if "companion_delay_max_sec" not in cols:
+            add_col(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                f"companion_delay_max_sec {int_def} DEFAULT 45",
+                f"ALTER TABLE {table} ADD COLUMN companion_delay_max_sec {int_def} DEFAULT 45",
+            )
+        if "companion_max_replies_per_hour" not in cols:
+            add_col(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
+                f"companion_max_replies_per_hour {int_def} DEFAULT 60",
+                f"ALTER TABLE {table} ADD COLUMN companion_max_replies_per_hour "
+                f"{int_def} DEFAULT 60",
+            )
         if "companion_goal_preset" not in cols:
             add_col(
                 f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS "
@@ -448,12 +486,24 @@ def _migrate_companion_goal_columns(sync_conn) -> None:
                     f"WHERE companion_goal_preset IS NULL"
                 )
             )
+        if "companion_mode" in fresh_cols:
+            sync_conn.execute(
+                text(
+                    f"UPDATE {table} SET companion_mode = 'off' "
+                    f"WHERE companion_mode IS NULL"
+                )
+            )
+
+
+def _migrate_companion_goal_columns(sync_conn) -> None:
+    """Backward-compatible alias — full connection companion schema."""
+    _migrate_connection_companion_columns(sync_conn)
 
 
 async def ensure_companion_goal_columns() -> None:
     """Применить миграцию companion_goal_* (повтор при пропуске на старте)."""
     async with engine.begin() as conn:
-        await conn.run_sync(_migrate_companion_goal_columns)
+        await conn.run_sync(_migrate_connection_companion_columns)
     await refresh_companion_goal_columns_ready()
 
 
@@ -464,17 +514,13 @@ def _companion_goal_columns_ready_sync(sync_conn) -> bool:
     from sqlalchemy import inspect
 
     insp = inspect(sync_conn)
-    for table in (
-        "telegram_connections",
-        "fanvue_connections",
-        "instagram_connections",
-        "telegram_user_sessions",
-    ):
+    for table in _CONNECTION_TABLES:
         if not insp.has_table(table):
             continue
         cols = {c["name"] for c in insp.get_columns(table)}
-        if "companion_goal_preset" not in cols:
-            return False
+        for col in _CONNECTION_COMPANION_COLUMNS:
+            if col not in cols:
+                return False
     return True
 
 

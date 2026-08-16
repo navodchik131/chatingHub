@@ -104,8 +104,8 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 
-def _missing_companion_goal_column(exc: BaseException) -> bool:
-    """True when DB is missing companion_goal_* columns from a partial/skipped migration."""
+def _missing_connection_companion_column(exc: BaseException) -> bool:
+    """True when DB is missing companion_* columns on connection tables."""
     parts = [str(exc).lower()]
     orig = getattr(exc, "orig", None)
     if orig is not None:
@@ -114,7 +114,15 @@ def _missing_companion_goal_column(exc: BaseException) -> bool:
     if cause is not None:
         parts.append(str(cause).lower())
     msg = " ".join(parts)
-    if "companion_goal" not in msg:
+    if not any(
+        token in msg
+        for token in (
+            "companion_mode",
+            "companion_delay",
+            "companion_max_replies",
+            "companion_goal",
+        )
+    ):
         return False
     return any(
         token in msg
@@ -124,6 +132,22 @@ def _missing_companion_goal_column(exc: BaseException) -> bool:
             "no such column",
             "undefined column",
         )
+    )
+
+
+def _integration_status_fallback() -> IntegrationStatusOut:
+    """Безопасный ответ, чтобы кабинет/студия не падали при сбое схемы."""
+    return IntegrationStatusOut(
+        telegram_configured=False,
+        fanvue_configured=False,
+        instagram_configured=False,
+        tribute_configured=False,
+        telegram_webhook_registered=False,
+        wavespeed_configured=bool((settings.wavespeed_platform_api_key or "").strip()),
+        wavespeed_managed_by_platform=bool((settings.wavespeed_platform_api_key or "").strip()),
+        llm_configured=bool((settings.openai_api_key or "").strip()),
+        telegram_user_available=settings.telegram_mtproto_configured,
+        max_connections_per_platform=1,
     )
 
 
@@ -244,7 +268,7 @@ async def _integration_status_or_migrate(
             include_companion_goals=include_goals,
         )
     except SQLAlchemyError as exc:
-        if not _missing_companion_goal_column(exc):
+        if not _missing_connection_companion_column(exc):
             log.exception("integration_status failed: %s", exc)
             raise
         log.warning(
@@ -256,19 +280,23 @@ async def _integration_status_or_migrate(
         try:
             await ensure_companion_goal_columns()
         except Exception as migrate_exc:
-            log.exception("companion_goal migration retry failed: %s", migrate_exc)
+            log.exception("connection companion migration retry failed: %s", migrate_exc)
         await refresh_companion_goal_columns_ready()
-        if companion_goal_columns_ready():
+        try:
+            if companion_goal_columns_ready():
+                return await _integration_status(
+                    session,
+                    user,
+                    include_companion_goals=True,
+                )
             return await _integration_status(
                 session,
                 user,
-                include_companion_goals=True,
+                include_companion_goals=False,
             )
-        return await _integration_status(
-            session,
-            user,
-            include_companion_goals=False,
-        )
+        except Exception as retry_exc:
+            log.exception("integration_status retry failed: %s", retry_exc)
+            return _integration_status_fallback()
 
 
 def _apply_companion_connection_patch(
@@ -621,7 +649,11 @@ async def integration_status(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
-    return await _integration_status_or_migrate(session, user)
+    try:
+        return await _integration_status_or_migrate(session, user)
+    except Exception as exc:
+        log.exception("GET /integrations failed: %s", exc)
+        return _integration_status_fallback()
 
 
 @router.get("/health", response_model=IntegrationHealthOut)
