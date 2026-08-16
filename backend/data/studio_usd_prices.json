@@ -33,10 +33,18 @@
       "seedance_25_no_ref_720p": 0.36
     },
     "evolink": {
-      "standard_with_ref_720p": 0.08,
-      "standard_no_ref_720p": 0.056,
-      "seedance_25_with_ref_720p": 0.12,
-      "seedance_25_no_ref_720p": 0.09
+      "standard_output_720p": 0.149,
+      "standard_output_480p": 0.069,
+      "standard_video_ref_720p": 0.091,
+      "standard_video_ref_480p": 0.042,
+      "seedance_25_output_720p": 0.293,
+      "seedance_25_output_480p": 0.136,
+      "seedance_25_video_ref_720p": 0.179,
+      "seedance_25_video_ref_480p": 0.083,
+      "standard_with_ref_720p": 0.091,
+      "standard_no_ref_720p": 0.149,
+      "seedance_25_with_ref_720p": 0.179,
+      "seedance_25_no_ref_720p": 0.293
     },
     "grok_imagine_i2v": {
       "usd_per_sec_480p": 0.08,

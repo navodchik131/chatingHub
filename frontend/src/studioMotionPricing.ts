@@ -345,22 +345,23 @@ export type StudioEvolinkVideoPricing = StudioMotionVideoPricing & {
   resolutions_by_variant?: Partial<Record<SeedanceT2vVariant, SeedanceT2vResolution[]>>
 }
 
+/** EvoLink Fast tier for Seedance 2.0 Sale (−25% vs Standard; API: fast-reference-to-video). */
 export const DEFAULT_EVOLINK_VIDEO_PRICING: StudioEvolinkVideoPricing = {
   ...DEFAULT_MOTION_VIDEO_PRICING,
-  usd_per_sec_with_reference_video: 0.121,
-  usd_per_sec_without_reference_video: 0.199,
+  usd_per_sec_with_reference_video: 0.091,
+  usd_per_sec_without_reference_video: 0.149,
   duration_max_20: 15,
   duration_max_25: 30,
   always_charges_credits: true,
   nsfw_supported: false,
   variants: {
     standard: {
-      usd_per_sec_720p_output: 0.199,
-      usd_per_sec_720p_video_reference: 0.121,
-      usd_per_sec_480p_output: 0.092,
-      usd_per_sec_480p_video_reference: 0.056,
-      usd_per_sec_720p_with_reference_video: 0.121,
-      usd_per_sec_720p_without_reference_video: 0.199,
+      usd_per_sec_720p_output: 0.149,
+      usd_per_sec_720p_video_reference: 0.091,
+      usd_per_sec_480p_output: 0.069,
+      usd_per_sec_480p_video_reference: 0.042,
+      usd_per_sec_720p_with_reference_video: 0.091,
+      usd_per_sec_720p_without_reference_video: 0.149,
     },
     seedance_25: {
       usd_per_sec_720p_output: 0.293,

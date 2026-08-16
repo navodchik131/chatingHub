@@ -28,13 +28,13 @@ def test_evolink_prompt_only_4s_720p_output_pricing():
         resolution="720p",
         has_motion_reference_video=False,
     )
-    assert abs(usd - 0.796) < 0.001
+    assert abs(usd - 0.596) < 0.001
     assert evolink_video_credit_cost(
         4,
         variant="standard",
         resolution="720p",
         has_motion_reference_video=False,
-    ) == 80
+    ) == 60
 
 
 def test_evolink_motion_video_ref_bills_input_plus_output():
@@ -45,11 +45,11 @@ def test_evolink_motion_video_ref_bills_input_plus_output():
         has_motion_reference_video=True,
         reference_video_duration=4,
     )
-    assert abs(usd - 0.968) < 0.001
+    assert abs(usd - 0.728) < 0.001
 
 
 def test_evolink_short_ref_video_14s_output_matches_evolink_ui():
-    """Instagram ref ~3s + 14s output @ $0.121/s ≈ $2.07 on EvoLink."""
+    """Instagram ref ~3s + 14s output @ Fast $0.091/s."""
     usd = evolink_video_usd_total(
         14,
         variant="standard",
@@ -57,11 +57,28 @@ def test_evolink_short_ref_video_14s_output_matches_evolink_ui():
         has_motion_reference_video=True,
         reference_video_duration=3,
     )
-    assert abs(usd - 2.057) < 0.01
+    assert abs(usd - 1.547) < 0.01
     assert evolink_video_credit_cost(
         14,
         variant="standard",
         resolution="720p",
         has_motion_reference_video=True,
         reference_video_duration=3,
-    ) == 206
+    ) == 155
+
+
+def test_evolink_fast_reference_15s_720p_output():
+    """Fast Reference image-only: 15s output @ $0.149/s ≈ $2.24."""
+    usd = evolink_video_usd_total(
+        15,
+        variant="standard",
+        resolution="720p",
+        has_motion_reference_video=False,
+    )
+    assert abs(usd - 2.235) < 0.001
+    assert evolink_video_credit_cost(
+        15,
+        variant="standard",
+        resolution="720p",
+        has_motion_reference_video=False,
+    ) == 224

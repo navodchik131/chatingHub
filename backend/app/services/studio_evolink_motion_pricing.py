@@ -1,4 +1,8 @@
-﻿"""Стоимость Seedance через EvoLink (Seedance Sale) в кредитах."""
+﻿"""Стоимость Seedance через EvoLink (Seedance Sale) в кредитах.
+
+Seedance 2.0 Sale вызывает ``seedance-2.0-fast-reference-to-video`` — биллинг EvoLink Fast tier
+(≈ −25% к Standard; тарифы в ``studio_evolink_20_*``). Seedance 2.5 — Standard tier.
+"""
 
 from __future__ import annotations
 
@@ -295,6 +299,7 @@ def evolink_video_pricing_public() -> dict:
         ),
         "always_charges_credits": True,
         "nsfw_supported": False,
+        "pricing_tier_20": "fast",
         "billing_notes": {
             "output_seconds": "T2V / I2V / reference images тАФ billed by output duration",
             "video_reference_seconds": "Motion video ref тАФ billed input + output at lower $/s",
