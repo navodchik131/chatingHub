@@ -396,6 +396,37 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_credits_usd_cent_v2)
         await conn.run_sync(_migrate_instagram_companion_columns)
         await conn.run_sync(_migrate_conversation_peer_avatar_url)
+        await conn.run_sync(_migrate_companion_goal_columns)
+
+
+def _migrate_companion_goal_columns(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    for table in (
+        "telegram_connections",
+        "fanvue_connections",
+        "instagram_connections",
+        "telegram_user_sessions",
+    ):
+        if not insp.has_table(table):
+            continue
+        cols = {c["name"] for c in insp.get_columns(table)}
+        if "companion_goal_preset" not in cols:
+            sync_conn.execute(
+                text(
+                    f"ALTER TABLE {table} ADD COLUMN companion_goal_preset "
+                    f"VARCHAR(16) DEFAULT 'chat'"
+                )
+            )
+        if "companion_goal_text" not in cols:
+            sync_conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN companion_goal_text TEXT")
+            )
+        if "companion_goal_link" not in cols:
+            sync_conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN companion_goal_link VARCHAR(512)")
+            )
 
 
 def _migrate_instagram_companion_columns(sync_conn) -> None:

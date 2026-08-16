@@ -16,6 +16,7 @@ from app.db.models import (
     TelegramConnection,
     TelegramUserSession,
 )
+from app.services.companion_bot.goals import normalize_companion_goal_preset
 from app.services.platform_connections import (
     resolve_fanvue_connection_for_conversation,
     resolve_instagram_connection_for_conversation,
@@ -37,6 +38,9 @@ class CompanionConnectionConfig:
     delay_min_sec: int
     delay_max_sec: int
     max_replies_per_hour: int
+    goal_preset: str
+    goal_text: str | None
+    goal_link: str | None
     studio_model_id: int | None
     connection_id: int
     platform: Platform
@@ -75,6 +79,9 @@ def _config_from_connection(
         delay_min_sec=delay_min,
         delay_max_sec=delay_max,
         max_replies_per_hour=max(1, int(conn.companion_max_replies_per_hour or 60)),
+        goal_preset=normalize_companion_goal_preset(getattr(conn, "companion_goal_preset", None)),
+        goal_text=(getattr(conn, "companion_goal_text", None) or "").strip() or None,
+        goal_link=(getattr(conn, "companion_goal_link", None) or "").strip() or None,
         studio_model_id=conn.studio_model_id,
         connection_id=conn.id,
         platform=platform,

@@ -387,6 +387,11 @@ class TelegramConnection(Base):
     companion_max_replies_per_hour: Mapped[int] = mapped_column(
         Integer, default=60, server_default="60"
     )
+    companion_goal_preset: Mapped[str] = mapped_column(
+        String(16), default="chat", server_default="chat"
+    )
+    companion_goal_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    companion_goal_link: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -439,6 +444,11 @@ class TelegramUserSession(Base):
     companion_max_replies_per_hour: Mapped[int] = mapped_column(
         Integer, default=60, server_default="60"
     )
+    companion_goal_preset: Mapped[str] = mapped_column(
+        String(16), default="chat", server_default="chat"
+    )
+    companion_goal_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    companion_goal_link: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -484,6 +494,11 @@ class FanvueConnection(Base):
     companion_max_replies_per_hour: Mapped[int] = mapped_column(
         Integer, default=60, server_default="60"
     )
+    companion_goal_preset: Mapped[str] = mapped_column(
+        String(16), default="chat", server_default="chat"
+    )
+    companion_goal_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    companion_goal_link: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -525,6 +540,11 @@ class InstagramConnection(Base):
     companion_max_replies_per_hour: Mapped[int] = mapped_column(
         Integer, default=60, server_default="60"
     )
+    companion_goal_preset: Mapped[str] = mapped_column(
+        String(16), default="chat", server_default="chat"
+    )
+    companion_goal_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    companion_goal_link: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

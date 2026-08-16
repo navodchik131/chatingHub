@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from app.db.models import Conversation, ConversationNote, ConversationNoteKind, Message, MessageDirection
+from app.services.companion_bot.goals import format_companion_goal_block
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
 from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v6-chatter-goals-rag-1"
+PROMPT_VERSION = "v7-connection-goals-1"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -637,6 +638,10 @@ def build_companion_system_prompt(
     followup: bool = False,
     manual_category: str | None = None,
     daily_state_json: str | None = None,
+    connection_platform: str | None = None,
+    goal_preset: str | None = None,
+    goal_text: str | None = None,
+    goal_link: str | None = None,
 ) -> str:
     signals = analyze_thread_signals(messages)
 
@@ -667,6 +672,12 @@ def build_companion_system_prompt(
 
     return (
         _chatter_role_block(persona_name=persona_name)
+        + format_companion_goal_block(
+            platform=connection_platform,
+            preset=goal_preset,
+            goal_text=goal_text,
+            goal_link=goal_link,
+        )
         + canon
         + _fan_tier_block(manual_category)
         + _daily_lore_block(daily_state_json)

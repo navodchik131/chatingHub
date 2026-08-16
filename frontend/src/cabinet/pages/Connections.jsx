@@ -44,6 +44,42 @@ function companionModeOptions(lang) {
   ];
 }
 
+function defaultGoalPresetForPlatform(platformId) {
+  if (platformId === 'ig') return 'funnel';
+  if (platformId === 'fanvue') return 'sales';
+  return 'chat';
+}
+
+function companionGoalOptions(lang) {
+  return [
+    { id: 'chat', label: lang === 'ru' ? 'Общение / прогрев' : 'Chat / warm-up' },
+    { id: 'funnel', label: lang === 'ru' ? 'Перелив трафика' : 'Traffic funnel' },
+    { id: 'sales', label: lang === 'ru' ? 'Продажа контента' : 'Content sales' },
+    { id: 'custom', label: lang === 'ru' ? 'Своя цель' : 'Custom goal' },
+  ];
+}
+
+function platformGoalHint(platformId, lang) {
+  if (platformId === 'ig') {
+    return lang === 'ru'
+      ? 'Instagram: часто цель — мягко вести в Telegram-канал или группу. Не спамь ссылкой каждый раз.'
+      : 'Instagram: often funnel fans to a Telegram channel — hint naturally, not every message.';
+  }
+  if (platformId === 'fanvue') {
+    return lang === 'ru'
+      ? 'Fanvue: уместны лёгкие намёки на эксклюзив и платный контент, когда диалог тёплый.'
+      : 'Fanvue: light tease for exclusive / paid content when the thread is warm.';
+  }
+  if (platformId === 'tg' || platformId === 'tg-user') {
+    return lang === 'ru'
+      ? 'Telegram: можно вести в приват / канал или сразу к продаже — задайте цель ниже.'
+      : 'Telegram: funnel to private/channel or sell — set the goal below.';
+  }
+  return lang === 'ru'
+    ? 'Цель действует только для этого подключения — персонаж и стиль остаются из модели.'
+    : 'Goal applies to this connection only — persona stays from the character.';
+}
+
 function CompanionConnectionEditor({
   platformId, connectionId, integrations, modelOptions, lang, cabinet, onClose,
 }) {
@@ -53,6 +89,11 @@ function CompanionConnectionEditor({
   const [delayMin, setDelayMin] = useState(String(raw?.companion_delay_min_sec ?? 5));
   const [delayMax, setDelayMax] = useState(String(raw?.companion_delay_max_sec ?? 45));
   const [maxPerHour, setMaxPerHour] = useState(String(raw?.companion_max_replies_per_hour ?? 60));
+  const [goalPreset, setGoalPreset] = useState(
+    raw?.companion_goal_preset || defaultGoalPresetForPlatform(platformId),
+  );
+  const [goalText, setGoalText] = useState(raw?.companion_goal_text || '');
+  const [goalLink, setGoalLink] = useState(raw?.companion_goal_link || '');
 
   if (!raw) return null;
 
@@ -63,6 +104,9 @@ function CompanionConnectionEditor({
       delayMin,
       delayMax,
       maxPerHour,
+      goalPreset,
+      goalText: goalText.trim(),
+      goalLink: goalLink.trim(),
     });
     if (ok) onClose();
   };
@@ -92,6 +136,49 @@ function CompanionConnectionEditor({
         <Field label={lang === 'ru' ? 'ЗАДЕРЖКА МАКС' : 'DELAY MAX'} value={delayMax} onChange={(e) => setDelayMax(e.target.value)} />
         <Field label={lang === 'ru' ? 'АВТО/ЧАС' : 'AUTO/HR'} value={maxPerHour} onChange={(e) => setMaxPerHour(e.target.value)} />
       </div>
+
+      <div>
+        <div style={fieldLbl}>{lang === 'ru' ? 'ЦЕЛЬ БОТА' : 'BOT GOAL'}</div>
+        <select value={goalPreset} onChange={(e) => setGoalPreset(e.target.value)} style={selectSt}>
+          {companionGoalOptions(lang).map((o) => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      <Field
+        label={lang === 'ru' ? 'ССЫЛКА / @КАНАЛ' : 'LINK / @HANDLE'}
+        value={goalLink}
+        onChange={(e) => setGoalLink(e.target.value)}
+        placeholder={lang === 'ru' ? '@mychannel или t.me/...' : '@mychannel or t.me/...'}
+      />
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={fieldLbl}>
+          {goalPreset === 'custom'
+            ? (lang === 'ru' ? 'ИНСТРУКЦИЯ' : 'INSTRUCTIONS')
+            : (lang === 'ru' ? 'УТОЧНЕНИЕ (необяз.)' : 'NOTES (optional)')}
+        </span>
+        <textarea
+          value={goalText}
+          onChange={(e) => setGoalText(e.target.value)}
+          rows={3}
+          maxLength={2000}
+          placeholder={
+            goalPreset === 'custom'
+              ? (lang === 'ru'
+                ? 'Например: переводи в TG @mychannel, там полный контент. Не чаще 1 раза на 5–7 сообщений.'
+                : 'E.g. funnel to TG @mychannel for full content. Max once per 5–7 messages.')
+              : (lang === 'ru' ? 'Доп. пожелания к стратегии…' : 'Extra strategy notes…')
+          }
+          style={{
+            ...selectSt,
+            minHeight: 72,
+            resize: 'vertical',
+            fontFamily: font.body,
+            lineHeight: 1.45,
+          }}
+        />
+      </label>
+      <NoteBlock>{platformGoalHint(platformId, lang)}</NoteBlock>
       <NoteBlock>
         {lang === 'ru'
           ? 'Базовый режим для всех диалогов этого подключения. В отдельном чате можно переопределить в шапке диалога.'

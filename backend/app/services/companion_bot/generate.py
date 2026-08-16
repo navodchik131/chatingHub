@@ -16,7 +16,7 @@ from app.db.models import (
     Message,
     UserStudioModel,
 )
-from app.services.companion_bot.memory import maybe_refresh_companion_memory
+from app.services.companion_bot.config import get_companion_config_for_conversation
 from app.services.companion_bot.vision import maybe_describe_fan_image_for_companion
 from app.services.companion_bot.persona import parse_companion_persona
 from app.services.companion_bot.prompt import (
@@ -113,6 +113,7 @@ async def generate_companion_reply(
 
     target_lang = resolve_target_lang(conv, last_fan_text=last_fan_message_text(messages))
     persona = parse_companion_persona(model_row.companion_persona_json)
+    cfg = await get_companion_config_for_conversation(session, conv, owner_id=owner_id)
     system = build_companion_system_prompt(
         persona_name=model_row.name,
         persona_profile=model_row.profile_text,
@@ -125,6 +126,10 @@ async def generate_companion_reply(
         followup=followup,
         manual_category=conv.manual_category,
         daily_state_json=state.daily_state_json,
+        connection_platform=cfg.platform.value if cfg else None,
+        goal_preset=cfg.goal_preset if cfg else None,
+        goal_text=cfg.goal_text if cfg else None,
+        goal_link=cfg.goal_link if cfg else None,
     )
     style_block = await format_style_examples_block(
         session,

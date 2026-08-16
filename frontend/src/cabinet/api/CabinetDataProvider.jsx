@@ -787,6 +787,13 @@ export function CabinetDataProvider({ children }) {
         if (fields.maxPerHour !== undefined) {
           body.companion_max_replies_per_hour = Number(fields.maxPerHour)
         }
+        if (fields.goalPreset !== undefined) body.companion_goal_preset = fields.goalPreset
+        if (fields.goalText !== undefined) {
+          body.companion_goal_text = fields.goalText || null
+        }
+        if (fields.goalLink !== undefined) {
+          body.companion_goal_link = fields.goalLink || null
+        }
         const status = await actions.patchPlatformConnection(platformKey, connectionId, body)
         if (status) setIntegrations(status)
         await refreshAll()

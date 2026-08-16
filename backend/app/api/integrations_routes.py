@@ -94,7 +94,7 @@ from app.services.platform_connections import (
     validate_connection_studio_model,
 )
 from app.services.tribute_connection import tribute_webhook_url_for_connection
-from app.services.studio_keys import wavespeed_cabinet_flags
+from app.services.companion_bot.goals import normalize_companion_goal_preset
 from app.services.workspace import PERM_INTEGRATIONS, assert_permission, workspace_owner_id
 
 log = logging.getLogger(__name__)
@@ -117,6 +117,14 @@ def _apply_companion_connection_patch(
         and body.companion_max_replies_per_hour is not None
     ):
         row.companion_max_replies_per_hour = int(body.companion_max_replies_per_hour)
+    if "companion_goal_preset" in body.model_fields_set and body.companion_goal_preset is not None:
+        row.companion_goal_preset = normalize_companion_goal_preset(body.companion_goal_preset)
+    if "companion_goal_text" in body.model_fields_set:
+        raw_text = body.companion_goal_text
+        row.companion_goal_text = (raw_text or "").strip()[:2000] or None
+    if "companion_goal_link" in body.model_fields_set:
+        raw_link = body.companion_goal_link
+        row.companion_goal_link = (raw_link or "").strip()[:512] or None
     delay_min = int(row.companion_delay_min_sec or 0)
     delay_max = int(row.companion_delay_max_sec or delay_min)
     if delay_max < delay_min:
@@ -170,6 +178,16 @@ def _fanvue_webhook_url_for_conn(fv: FanvueConnection | None) -> str | None:
     return None
 
 
+def _companion_goal_fields(row) -> dict[str, str | None]:
+    return {
+        "companion_goal_preset": normalize_companion_goal_preset(
+            getattr(row, "companion_goal_preset", None)
+        ),
+        "companion_goal_text": getattr(row, "companion_goal_text", None),
+        "companion_goal_link": getattr(row, "companion_goal_link", None),
+    }
+
+
 def _telegram_connection_out(
     tg: TelegramConnection, *, base: str
 ) -> PlatformConnectionOut:
@@ -186,6 +204,7 @@ def _telegram_connection_out(
         companion_delay_min_sec=int(tg.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(tg.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(tg.companion_max_replies_per_hour or 60),
+        **_companion_goal_fields(tg),
     )
 
 
@@ -203,6 +222,7 @@ def _fanvue_connection_out(fv: FanvueConnection) -> PlatformConnectionOut:
         companion_delay_min_sec=int(fv.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(fv.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(fv.companion_max_replies_per_hour or 60),
+        **_companion_goal_fields(fv),
     )
 
 
@@ -221,6 +241,7 @@ def _instagram_connection_out(ig: InstagramConnection) -> PlatformConnectionOut:
         companion_delay_min_sec=int(ig.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(ig.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(ig.companion_max_replies_per_hour or 60),
+        **_companion_goal_fields(ig),
     )
 
 
@@ -257,6 +278,7 @@ def _telegram_user_connection_out(row: TelegramUserSession) -> PlatformConnectio
         companion_delay_min_sec=int(row.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(row.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(row.companion_max_replies_per_hour or 60),
+        **_companion_goal_fields(row),
     )
 
 

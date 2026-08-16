@@ -770,6 +770,9 @@ class PlatformConnectionPatchIn(BaseModel):
     companion_delay_min_sec: int | None = Field(default=None, ge=0, le=300)
     companion_delay_max_sec: int | None = Field(default=None, ge=0, le=600)
     companion_max_replies_per_hour: int | None = Field(default=None, ge=1, le=500)
+    companion_goal_preset: Literal["chat", "funnel", "sales", "custom"] | None = None
+    companion_goal_text: str | None = Field(default=None, max_length=2000)
+    companion_goal_link: str | None = Field(default=None, max_length=512)
 
 
 class PlatformConnectionOut(BaseModel):
@@ -793,6 +796,9 @@ class PlatformConnectionOut(BaseModel):
     companion_delay_min_sec: int = 5
     companion_delay_max_sec: int = 45
     companion_max_replies_per_hour: int = 60
+    companion_goal_preset: str = "chat"
+    companion_goal_text: str | None = None
+    companion_goal_link: str | None = None
 
 
 class TributeIntegrationIn(BaseModel):

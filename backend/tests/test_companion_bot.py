@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v6-chatter-goals-rag-1"
+    assert PROMPT_VERSION == "v7-connection-goals-1"
 
     out_msg = Message(
         id=2,
@@ -546,3 +546,51 @@ def test_state_update_mood():
 
     assert _infer_mood("miss you ❤") == "warm"
     assert _infer_mood("just chilling") is None
+
+
+def test_companion_goal_presets():
+    from app.services.companion_bot.goals import (
+        COMPANION_GOAL_PRESETS,
+        format_companion_goal_block,
+        normalize_companion_goal_preset,
+    )
+
+    assert "chat" in COMPANION_GOAL_PRESETS
+    assert normalize_companion_goal_preset("sales") == "sales"
+    assert normalize_companion_goal_preset("unknown") == "chat"
+    assert normalize_companion_goal_preset(None) == "chat"
+
+    block = format_companion_goal_block(
+        preset="funnel",
+        goal_text="Пиши дружелюбно",
+        goal_link="https://t.me/my_channel",
+        platform="instagram",
+    )
+    assert "CONNECTION GOAL" in block
+    assert "funnel" in block
+    assert "https://t.me/my_channel" in block
+    assert "Instagram" in block
+
+    assert format_companion_goal_block(preset="chat", goal_text="", goal_link="", platform="telegram") == ""
+
+
+def test_build_companion_system_prompt_includes_connection_goal():
+    from app.services.companion_bot.persona import CompanionPersona
+    from app.services.companion_bot.prompt import build_companion_system_prompt
+
+    prompt = build_companion_system_prompt(
+        persona_name="Luna",
+        persona_profile="You are Luna.",
+        persona=CompanionPersona(city="Madrid"),
+        target_lang="en",
+        relationship_score=40,
+        mood="playful",
+        notes=[],
+        messages=[],
+        connection_platform="instagram",
+        goal_preset="funnel",
+        goal_text="Веди в Telegram",
+        goal_link="https://t.me/luna",
+    )
+    assert "CONNECTION GOAL" in prompt
+    assert "https://t.me/luna" in prompt
