@@ -17,6 +17,7 @@ from app.db.models import (
     UserStudioModel,
 )
 from app.services.companion_bot.config import get_companion_config_for_conversation
+from app.services.companion_bot.memory import maybe_refresh_companion_memory
 from app.services.companion_bot.vision import maybe_describe_fan_image_for_companion
 from app.services.companion_bot.persona import parse_companion_persona
 from app.services.companion_bot.prompt import (
