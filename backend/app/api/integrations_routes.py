@@ -12,8 +12,9 @@ from aiogram.utils.token import TokenValidationError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, func, select
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.auth.deps import get_current_user
 from app.config import settings
@@ -126,21 +127,148 @@ def _missing_companion_goal_column(exc: BaseException) -> bool:
     )
 
 
+def _telegram_connection_load(include_goals: bool):
+    cols = [
+        TelegramConnection.id,
+        TelegramConnection.label,
+        TelegramConnection.studio_model_id,
+        TelegramConnection.bot_username,
+        TelegramConnection.webhook_secret,
+        TelegramConnection.webhook_registered,
+        TelegramConnection.is_active,
+        TelegramConnection.companion_mode,
+        TelegramConnection.companion_delay_min_sec,
+        TelegramConnection.companion_delay_max_sec,
+        TelegramConnection.companion_max_replies_per_hour,
+    ]
+    if include_goals:
+        cols.extend(
+            [
+                TelegramConnection.companion_goal_preset,
+                TelegramConnection.companion_goal_text,
+                TelegramConnection.companion_goal_link,
+            ]
+        )
+    return load_only(*cols)
+
+
+def _fanvue_connection_load(include_goals: bool):
+    cols = [
+        FanvueConnection.id,
+        FanvueConnection.label,
+        FanvueConnection.studio_model_id,
+        FanvueConnection.creator_uuid,
+        FanvueConnection.oauth_connected_at,
+        FanvueConnection.webhook_secret,
+        FanvueConnection.companion_mode,
+        FanvueConnection.companion_delay_min_sec,
+        FanvueConnection.companion_delay_max_sec,
+        FanvueConnection.companion_max_replies_per_hour,
+    ]
+    if include_goals:
+        cols.extend(
+            [
+                FanvueConnection.companion_goal_preset,
+                FanvueConnection.companion_goal_text,
+                FanvueConnection.companion_goal_link,
+            ]
+        )
+    return load_only(*cols)
+
+
+def _instagram_connection_load(include_goals: bool):
+    cols = [
+        InstagramConnection.id,
+        InstagramConnection.label,
+        InstagramConnection.studio_model_id,
+        InstagramConnection.instagram_user_id,
+        InstagramConnection.instagram_username,
+        InstagramConnection.oauth_connected_at,
+        InstagramConnection.companion_mode,
+        InstagramConnection.companion_delay_min_sec,
+        InstagramConnection.companion_delay_max_sec,
+        InstagramConnection.companion_max_replies_per_hour,
+    ]
+    if include_goals:
+        cols.extend(
+            [
+                InstagramConnection.companion_goal_preset,
+                InstagramConnection.companion_goal_text,
+                InstagramConnection.companion_goal_link,
+            ]
+        )
+    return load_only(*cols)
+
+
+def _telegram_user_session_load(include_goals: bool):
+    cols = [
+        TelegramUserSession.id,
+        TelegramUserSession.label,
+        TelegramUserSession.studio_model_id,
+        TelegramUserSession.phone,
+        TelegramUserSession.telegram_username,
+        TelegramUserSession.status,
+        TelegramUserSession.last_seen_at,
+        TelegramUserSession.is_active,
+        TelegramUserSession.companion_mode,
+        TelegramUserSession.companion_delay_min_sec,
+        TelegramUserSession.companion_delay_max_sec,
+        TelegramUserSession.companion_max_replies_per_hour,
+    ]
+    if include_goals:
+        cols.extend(
+            [
+                TelegramUserSession.companion_goal_preset,
+                TelegramUserSession.companion_goal_text,
+                TelegramUserSession.companion_goal_link,
+            ]
+        )
+    return load_only(*cols)
+
+
 async def _integration_status_or_migrate(
     session: AsyncSession,
     user: User,
 ) -> IntegrationStatusOut:
-    try:
-        return await _integration_status(session, user)
-    except DBAPIError as exc:
-        if not _missing_companion_goal_column(exc):
-            raise
-        log.warning("companion_goal columns missing — running migration retry: %s", exc)
-        await session.rollback()
-        from app.db.session import ensure_companion_goal_columns
+    from app.db.session import (
+        companion_goal_columns_ready,
+        ensure_companion_goal_columns,
+        refresh_companion_goal_columns_ready,
+    )
 
-        await ensure_companion_goal_columns()
-        return await _integration_status(session, user)
+    include_goals = companion_goal_columns_ready()
+    try:
+        return await _integration_status(
+            session,
+            user,
+            include_companion_goals=include_goals,
+        )
+    except SQLAlchemyError as exc:
+        if not _missing_companion_goal_column(exc):
+            log.exception("integration_status failed: %s", exc)
+            raise
+        log.warning(
+            "integration_status schema mismatch (include_goals=%s), healing: %s",
+            include_goals,
+            exc,
+        )
+        await session.rollback()
+        try:
+            await ensure_companion_goal_columns()
+        except Exception as migrate_exc:
+            log.exception("companion_goal migration retry failed: %s", migrate_exc)
+        await refresh_companion_goal_columns_ready()
+        if companion_goal_columns_ready():
+            return await _integration_status(
+                session,
+                user,
+                include_companion_goals=True,
+            )
+        return await _integration_status(
+            session,
+            user,
+            include_companion_goals=False,
+        )
 
 
 def _apply_companion_connection_patch(
@@ -219,7 +347,13 @@ def _fanvue_webhook_url_for_conn(fv: FanvueConnection | None) -> str | None:
     return None
 
 
-def _companion_goal_fields(row) -> dict[str, str | None]:
+def _companion_goal_fields(row, *, include: bool = True) -> dict[str, str | None]:
+    if not include:
+        return {
+            "companion_goal_preset": "chat",
+            "companion_goal_text": None,
+            "companion_goal_link": None,
+        }
     return {
         "companion_goal_preset": normalize_companion_goal_preset(
             getattr(row, "companion_goal_preset", None)
@@ -230,7 +364,7 @@ def _companion_goal_fields(row) -> dict[str, str | None]:
 
 
 def _telegram_connection_out(
-    tg: TelegramConnection, *, base: str
+    tg: TelegramConnection, *, base: str, include_goals: bool = True
 ) -> PlatformConnectionOut:
     return PlatformConnectionOut(
         id=tg.id,
@@ -245,11 +379,13 @@ def _telegram_connection_out(
         companion_delay_min_sec=int(tg.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(tg.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(tg.companion_max_replies_per_hour or 60),
-        **_companion_goal_fields(tg),
+        **_companion_goal_fields(tg, include=include_goals),
     )
 
 
-def _fanvue_connection_out(fv: FanvueConnection) -> PlatformConnectionOut:
+def _fanvue_connection_out(
+    fv: FanvueConnection, *, include_goals: bool = True
+) -> PlatformConnectionOut:
     return PlatformConnectionOut(
         id=fv.id,
         platform="fanvue",
@@ -263,11 +399,13 @@ def _fanvue_connection_out(fv: FanvueConnection) -> PlatformConnectionOut:
         companion_delay_min_sec=int(fv.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(fv.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(fv.companion_max_replies_per_hour or 60),
-        **_companion_goal_fields(fv),
+        **_companion_goal_fields(fv, include=include_goals),
     )
 
 
-def _instagram_connection_out(ig: InstagramConnection) -> PlatformConnectionOut:
+def _instagram_connection_out(
+    ig: InstagramConnection, *, include_goals: bool = True
+) -> PlatformConnectionOut:
     return PlatformConnectionOut(
         id=ig.id,
         platform="instagram",
@@ -282,7 +420,7 @@ def _instagram_connection_out(ig: InstagramConnection) -> PlatformConnectionOut:
         companion_delay_min_sec=int(ig.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(ig.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(ig.companion_max_replies_per_hour or 60),
-        **_companion_goal_fields(ig),
+        **_companion_goal_fields(ig, include=include_goals),
     )
 
 
@@ -297,7 +435,9 @@ def _tribute_connection_out(tr: TributeConnection) -> PlatformConnectionOut:
     )
 
 
-def _telegram_user_connection_out(row: TelegramUserSession) -> PlatformConnectionOut:
+def _telegram_user_connection_out(
+    row: TelegramUserSession, *, include_goals: bool = True
+) -> PlatformConnectionOut:
     import re
 
     username = (row.telegram_username or "").strip()
@@ -319,16 +459,22 @@ def _telegram_user_connection_out(row: TelegramUserSession) -> PlatformConnectio
         companion_delay_min_sec=int(row.companion_delay_min_sec or 5),
         companion_delay_max_sec=int(row.companion_delay_max_sec or 45),
         companion_max_replies_per_hour=int(row.companion_max_replies_per_hour or 60),
-        **_companion_goal_fields(row),
+        **_companion_goal_fields(row, include=include_goals),
     )
 
 
-async def _integration_status(session: AsyncSession, user: User) -> IntegrationStatusOut:
+async def _integration_status(
+    session: AsyncSession,
+    user: User,
+    *,
+    include_companion_goals: bool = True,
+) -> IntegrationStatusOut:
     oid = workspace_owner_id(user)
     tg_rows = list(
         (
             await session.scalars(
                 select(TelegramConnection)
+                .options(_telegram_connection_load(include_companion_goals))
                 .where(TelegramConnection.user_id == oid)
                 .order_by(TelegramConnection.id.asc())
             )
@@ -338,6 +484,7 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         (
             await session.scalars(
                 select(TelegramUserSession)
+                .options(_telegram_user_session_load(include_companion_goals))
                 .where(
                     TelegramUserSession.user_id == oid,
                     TelegramUserSession.is_active.is_(True),
@@ -350,6 +497,7 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         (
             await session.scalars(
                 select(FanvueConnection)
+                .options(_fanvue_connection_load(include_companion_goals))
                 .where(FanvueConnection.user_id == oid)
                 .order_by(FanvueConnection.id.asc())
             )
@@ -359,6 +507,7 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         (
             await session.scalars(
                 select(InstagramConnection)
+                .options(_instagram_connection_load(include_companion_goals))
                 .where(InstagramConnection.user_id == oid)
                 .order_by(InstagramConnection.id.asc())
             )
@@ -440,10 +589,12 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
         wavespeed_managed_by_platform=wavespeed_managed_by_platform,
         llm_configured=llm_configured,
         telegram_connections=[
-            _telegram_connection_out(r, base=base) for r in tg_rows if r.is_active
+            _telegram_connection_out(r, base=base, include_goals=include_companion_goals)
+            for r in tg_rows
+            if r.is_active
         ],
         telegram_user_connections=[
-            _telegram_user_connection_out(r)
+            _telegram_user_connection_out(r, include_goals=include_companion_goals)
             for r in tg_user_rows
             if r.status
             in (
@@ -453,8 +604,12 @@ async def _integration_status(session: AsyncSession, user: User) -> IntegrationS
             )
         ],
         telegram_user_available=settings.telegram_mtproto_configured,
-        fanvue_connections=[_fanvue_connection_out(r) for r in fv_rows],
-        instagram_connections=[_instagram_connection_out(r) for r in ig_rows],
+        fanvue_connections=[
+            _fanvue_connection_out(r, include_goals=include_companion_goals) for r in fv_rows
+        ],
+        instagram_connections=[
+            _instagram_connection_out(r, include_goals=include_companion_goals) for r in ig_rows
+        ],
         tribute_configured=bool(tr and tr.is_active),
         tribute_connections=[_tribute_connection_out(r) for r in tr_rows if r.is_active],
         max_connections_per_platform=lim.max_models,

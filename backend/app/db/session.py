@@ -397,6 +397,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_instagram_companion_columns)
         await conn.run_sync(_migrate_conversation_peer_avatar_url)
         await conn.run_sync(_migrate_companion_goal_columns)
+    await refresh_companion_goal_columns_ready()
 
 
 def _migrate_companion_goal_columns(sync_conn) -> None:
@@ -439,18 +440,55 @@ def _migrate_companion_goal_columns(sync_conn) -> None:
                 f"ALTER TABLE {table} ADD COLUMN companion_goal_link VARCHAR(512)",
             )
 
-        sync_conn.execute(
-            text(
-                f"UPDATE {table} SET companion_goal_preset = 'chat' "
-                f"WHERE companion_goal_preset IS NULL"
+        fresh_cols = {c["name"] for c in insp.get_columns(table)}
+        if "companion_goal_preset" in fresh_cols:
+            sync_conn.execute(
+                text(
+                    f"UPDATE {table} SET companion_goal_preset = 'chat' "
+                    f"WHERE companion_goal_preset IS NULL"
+                )
             )
-        )
 
 
 async def ensure_companion_goal_columns() -> None:
     """Применить миграцию companion_goal_* (повтор при пропуске на старте)."""
     async with engine.begin() as conn:
         await conn.run_sync(_migrate_companion_goal_columns)
+    await refresh_companion_goal_columns_ready()
+
+
+_companion_goal_columns_ready: bool | None = None
+
+
+def _companion_goal_columns_ready_sync(sync_conn) -> bool:
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    for table in (
+        "telegram_connections",
+        "fanvue_connections",
+        "instagram_connections",
+        "telegram_user_sessions",
+    ):
+        if not insp.has_table(table):
+            continue
+        cols = {c["name"] for c in insp.get_columns(table)}
+        if "companion_goal_preset" not in cols:
+            return False
+    return True
+
+
+async def refresh_companion_goal_columns_ready() -> bool:
+    global _companion_goal_columns_ready
+    async with engine.connect() as conn:
+        ready = await conn.run_sync(_companion_goal_columns_ready_sync)
+    _companion_goal_columns_ready = ready
+    return ready
+
+
+def companion_goal_columns_ready() -> bool:
+    """True когда companion_goal_* есть во всех таблицах подключений."""
+    return bool(_companion_goal_columns_ready)
 
 
 def _migrate_instagram_companion_columns(sync_conn) -> None:
