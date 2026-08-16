@@ -274,29 +274,71 @@ def inject_wavespeed_model_identity(
     body = text
     leg = (wavespeed_identity_legend or "").strip()
     if leg and "Attached model reference photos" not in body:
-        body = f"Attached model reference photos — {leg}\n\n{body}"
+        role_hint = ""
+        low_leg = leg.lower()
+        if "face only" in low_leg and "body only" in low_leg:
+            role_hint = (
+                " Never swap roles: face refs = likeness only; body refs = proportions only."
+            )
+        body = f"Attached model reference photos — {leg}.{role_hint}\n\n{body}"
 
     if anchor:
         body = f"Model identity: {anchor}\n\n{body}"
     return _prepend_priority_rule(body)
 
 
+_CURVY_BUILD_TOKENS = (
+    "large bust",
+    "full bust",
+    "full-busted",
+    "full busted",
+    "voluptuous",
+    "voluptuous hourglass",
+    "soft feminine",
+    "soft flat abdomen",
+    "soft flat",
+    "curvy hourglass",
+    "d-cup",
+    "c-cup",
+    "plus-size",
+    "plus size",
+)
+
+_LEAN_BUST_TOKENS = (
+    "small bust",
+    "small high bust",
+    "a/b",
+    "a-cup",
+    "a cup",
+    "b-cup",
+    "low volume",
+)
+
+
+def _has_curvy_build_signal(text: str) -> bool:
+    low = (text or "").lower()
+    if any(token in low for token in _CURVY_BUILD_TOKENS):
+        return True
+    if any(token in low for token in _LEAN_BUST_TOKENS):
+        return False
+    if "lean athletic" in low:
+        return False
+    return any(token in low for token in ("pronounced hourglass", "wide hips", "wide hip", "curvy"))
+
+
 def _profile_prefers_lean_build(text: str) -> bool:
     """True when profile explicitly locks lean / small-bust silhouette."""
+    if _has_curvy_build_signal(text):
+        return False
     low = (text or "").lower()
     return any(
         token in low
         for token in (
             "lean athletic",
-            "small bust",
-            "small high bust",
-            "a/b",
-            "a-cup",
-            "a cup",
-            "b-cup",
-            "low volume",
+            *_LEAN_BUST_TOKENS,
             "flat defined abdomen",
-            "flat abdomen",
+            "visible abs",
+            "visible muscle",
             "ectomorph",
             "slim-fit",
             "not curvy",
@@ -306,25 +348,9 @@ def _profile_prefers_lean_build(text: str) -> bool:
 
 
 def _profile_prefers_curvy_build(text: str) -> bool:
-    low = (text or "").lower()
     if _profile_prefers_lean_build(text):
         return False
-    return any(
-        token in low
-        for token in (
-            "large bust",
-            "full bust",
-            "d-cup",
-            "c-cup",
-            "curvy",
-            "plus-size",
-            "plus size",
-            "voluptuous",
-            "pronounced hourglass",
-            "wide hips",
-            "wide hip",
-        )
-    )
+    return _has_curvy_build_signal(text)
 
 
 def _extract_build_clause_from_anchor(anchor: str) -> str:
@@ -363,8 +389,9 @@ def _figure_enforcement_tail_message(build: str) -> str:
         )
     if _profile_prefers_curvy_build(build):
         return (
-            f"Mandatory figure lock — NOT a slim/fashion-model body: match turnaround + body reference photos; "
-            f"bust/waist/hip volumes exactly: {build}."
+            f"Mandatory figure lock — voluptuous/curvy hourglass with full bust; "
+            f"NOT lean athletic, NOT small bust, NOT fashion-model slim silhouette, NOT visible abs unless in profile; "
+            f"match body reference photos exactly: {build}."
         )
     return (
         f"Mandatory figure lock — match body reference photos; "

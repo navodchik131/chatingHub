@@ -683,12 +683,15 @@ export async function generateStudioModelProfile(images) {
   })
   const pool = preferred.length ? preferred : images
   const fd = new FormData()
+  const kinds = []
   for (const im of pool.slice(0, 8)) {
     const res = await apiFetch(im.url)
     if (!res.ok) throw new Error('Не удалось прочитать фото модели')
     const blob = await res.blob()
     fd.append('images', blob, `model-${im.id}.jpg`)
+    kinds.push(normalizePhotoKind(im.kind))
   }
+  fd.append('image_kinds', JSON.stringify(kinds))
   const res = await apiFetch('/api/studio/models/generate-profile', { method: 'POST', body: fd })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Генерация не удалась')

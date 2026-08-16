@@ -232,3 +232,33 @@ def test_harmonize_figure_lock_strips_lean_when_hourglass_without_lean_anchor():
     low = out.lower()
     assert "waist 60" in low
     assert "hips 91" in low or "wide hip" in low
+
+
+def test_profile_gen_image_kind_caption_body_vs_face():
+    from app.services.studio_model_images import profile_gen_image_kind_caption
+
+    body_cap = profile_gen_image_kind_caption("body")
+    face_cap = profile_gen_image_kind_caption("face")
+    assert "BODY REFERENCE" in body_cap
+    assert "bust" in body_cap.lower()
+    assert "FACE REFERENCE" in face_cap
+    assert "Do NOT infer body" in face_cap
+
+
+def test_figure_lock_enforcement_tail_curvy_profile():
+    from app.services.studio_prompt_bundle import append_figure_lock_enforcement_tail
+
+    profile = json.dumps(
+        {
+            "consistency": {},
+            "generation_packs": {
+                "figure_lock": (
+                    "172 cm, voluptuous hourglass, large full bust, soft flat abdomen, "
+                    "waist 60 hips 95"
+                ),
+            },
+        }
+    )
+    out = append_figure_lock_enforcement_tail("Scene.", model_profile_text=profile)
+    assert "NOT lean athletic" in out
+    assert "NOT small bust" in out

@@ -292,7 +292,7 @@ def test_figure_lock_enforcement_tail() -> None:
         model_profile_text=profile,
     )
     assert "Mandatory figure lock" in out
-    assert "NOT a slim" in out
+    assert "NOT lean athletic" in out or "NOT a slim" in out
     assert "waist" in out.lower() or "hips" in out.lower()
     assert out.index("Mandatory figure lock") < out.index("Photoreal phone look")
 
@@ -496,12 +496,16 @@ def test_wavespeed_identity_legend_offsets_pose_image() -> None:
         SimpleNamespace(image_kind="turnaround"),
     ]
     assert wavespeed_identity_image_legend(imgs) == (
-        "Image 1: face likeness and skin tone; "
-        "Image 2: character sheet — face, hair, clothed silhouette (primary identity)"
+        "Image 1: FACE ONLY — match face shape, eyes, brows, lips, skin tone; "
+        "never use for bust/waist/hip proportions; "
+        "Image 2: character sheet — face, hair, clothed silhouette; "
+        "secondary for bust/waist/hips (prefer body ref for volumes)"
     )
     assert wavespeed_identity_image_legend(imgs, image_index_offset=1) == (
-        "Image 2: face likeness and skin tone; "
-        "Image 3: character sheet — face, hair, clothed silhouette (primary identity)"
+        "Image 2: FACE ONLY — match face shape, eyes, brows, lips, skin tone; "
+        "never use for bust/waist/hip proportions; "
+        "Image 3: character sheet — face, hair, clothed silhouette; "
+        "secondary for bust/waist/hips (prefer body ref for volumes)"
     )
 
 

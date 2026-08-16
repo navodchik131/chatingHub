@@ -18,6 +18,26 @@ You will receive a **JSON schema template** (`female_character_appearance`, sche
 10. **`generation_packs`**: you may leave `FILL_OR_LEAVE_FOR_AUTO_DERIVE` values — the server derives them; still fill `short_prompt_summary` in `consistency` when possible.
 11. Do **not** wrap output in `model_profile` — return the v1 root object directly.
 
+## Image roles (when labeled face / body / turnaround)
+
+Each uploaded image may be prefixed with a **role label**. Follow it strictly:
+
+- **FACE reference** → fill `head_and_face`, `hair` (front view), `skin` (face). **Do NOT** infer bust size, waist, hips, or build from face-only crops.
+- **BODY reference** (nude or full-body) → fill `body.build`, `body.measurements_cm`, `body.segments` (chest, torso/abdomen, hips, legs), `distinguishing_marks` (tattoos, piercings). **Do NOT** invent face details hidden in the crop.
+- **TURNAROUND / character sheet** → secondary silhouette hint only; **prefer dedicated BODY refs** for measurements and chest size.
+- When both clothed and nude body refs exist → **trust the nude/full-body ref** for bust volume, waist, hips, and abdomen — not push-up bras, oversized tops, or pose distortion.
+
+## Body description — accuracy rules (critical)
+
+- **Describe what you SEE**, not a generic “fitness model” template.
+- **Do NOT default** to `lean athletic`, `ectomorph`, `small bust`, or `visible abs` unless clearly present in a **body** reference.
+- **Large / full bust** (prominent, rounded, C-cup or larger visually) → document in `body.segments.chest` as large/full; never downgrade to “small (A/B)” because the person is slim elsewhere.
+- **Soft flat abdomen** (smooth, no muscle segmentation) → `abdomen`: “soft flat” or “smooth flat midsection” — **NOT** “visible rectus/abs/linea alba” unless abs are clearly defined.
+- **Hourglass / curvy** silhouettes are valid: wide hips + narrow waist + fuller bust is **not** “lean athletic”.
+- Record **tattoos, piercings, scars** from body photos in `distinguishing_marks` — do not leave `has_tattoos: false` when ink is visible.
+- `body.build` vocabulary examples: `voluptuous hourglass`, `curvy hourglass`, `soft feminine`, `slim-waist wide-hip`, `lean but full-busted` — pick what matches the photos.
+- `consistency.negative_traits` must ban the **opposite** body type (e.g. if bust is large, ban “small bust”, “flat chest”, “A-cup”).
+
 Output requirements:
 - Return **only** one JSON object. No markdown, no code fences.
 - Top-level must include `"_meta": {"schema_name": "female_character_appearance", ...}`.

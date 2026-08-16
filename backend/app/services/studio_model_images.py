@@ -263,12 +263,42 @@ def select_model_scene_pose_wavespeed_identity_images(
 
 
 _WAVESPEED_KIND_LEGEND: dict[str, str] = {
-    "turnaround": "character sheet — face, hair, clothed silhouette (primary identity)",
-    "face": "face likeness and skin tone",
-    "body": "body proportions and overall build",
-    "genitals": "nude anatomy",
+    "turnaround": (
+        "character sheet — face, hair, clothed silhouette; "
+        "secondary for bust/waist/hips (prefer body ref for volumes)"
+    ),
+    "face": (
+        "FACE ONLY — match face shape, eyes, brows, lips, skin tone; "
+        "never use for bust/waist/hip proportions"
+    ),
+    "body": (
+        "BODY ONLY — match bust volume, waist, hips, build, abdomen, limb proportions; "
+        "never use for facial features"
+    ),
+    "genitals": "nude anatomy reference",
     "other": "model reference",
 }
+
+
+def profile_gen_image_kind_caption(kind: str) -> str:
+    """Подпись роли фото для vision-генерации профиля."""
+    k = (kind or "other").strip().lower()
+    captions = {
+        "face": (
+            "FACE REFERENCE — use ONLY for head_and_face, eyes, brows, lips, front hair, face skin. "
+            "Do NOT infer body.build, bust size, waist, hips, or abdomen from this image."
+        ),
+        "body": (
+            "BODY REFERENCE — use ONLY for body.build, measurements_cm, chest/bust size, waist, hips, "
+            "abdomen (soft vs muscular), legs, tattoos/piercings. Do NOT invent hidden facial features."
+        ),
+        "turnaround": (
+            "CHARACTER SHEET — overall clothed silhouette; secondary to BODY refs for measurements."
+        ),
+        "genitals": "NUDE ANATOMY REFERENCE — supplementary body identity only.",
+        "other": "REFERENCE — extract only traits clearly visible in this frame.",
+    }
+    return captions.get(k, captions["other"])
 
 
 def wavespeed_identity_image_legend(

@@ -2484,6 +2484,7 @@ async def api_list_studio_models(
 async def api_generate_model_profile(
     images: list[UploadFile] = File(...),
     onboarding_wizard: str | None = Form(None),
+    image_kinds: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioModelProfileGenerateOut:
@@ -2523,6 +2524,7 @@ async def api_generate_model_profile(
             status_code=400,
             detail="Пустые файлы",
         )
+    kinds_list = parse_image_kinds_json(image_kinds, len(image_items))
     cost = apply_studio_credit_cost(plan, studio_model_profile_generate_credit_cost())
     prior_profile = await owner_used_model_profile_generation(session, oid)
     if model_profile_generation_free(
@@ -2534,7 +2536,9 @@ async def api_generate_model_profile(
     billing = await ensure_can_consume_credits(session, user, cost)
     try:
         text = await generate_model_profile_json_from_images(
-            image_items=image_items, credentials=llm_creds
+            image_items=image_items,
+            image_kinds=kinds_list,
+            credentials=llm_creds,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e

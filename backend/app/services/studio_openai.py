@@ -2057,7 +2057,10 @@ def _normalize_model_profile_json_output(raw_text: str, *, template: dict | None
 
 
 async def generate_model_profile_json_from_images(
-    *, image_items: list[tuple[bytes, str | None]], credentials: StudioOpenAiCredentials | None = None
+    *,
+    image_items: list[tuple[bytes, str | None]],
+    image_kinds: list[str] | None = None,
+    credentials: StudioOpenAiCredentials | None = None,
 ) -> str:
     """Один vision-запрос: несколько фото одного человека → JSON model_profile."""
     if not image_items:
@@ -2070,6 +2073,7 @@ async def generate_model_profile_json_from_images(
         _grok_scene_compose_model,
         grok_scene_compose_configured,
     )
+    from app.services.studio_model_images import profile_gen_image_kind_caption
 
     system = load_model_profile_gen_system()
     if not system.strip():
@@ -2105,7 +2109,16 @@ async def generate_model_profile_json_from_images(
             ),
         }
     ]
-    for raw, mime in image_items:
+    kinds = list(image_kinds or [])
+    for idx, (raw, mime) in enumerate(image_items):
+        kind = kinds[idx] if idx < len(kinds) else "other"
+        caption = profile_gen_image_kind_caption(kind)
+        user_content.append(
+            {
+                "type": "text",
+                "text": f"--- Image {idx + 1} ({kind.upper()}) ---\n{caption}",
+            }
+        )
         m = (mime or "image/jpeg").split(";")[0].strip()
         if m not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
             m = "image/jpeg"
