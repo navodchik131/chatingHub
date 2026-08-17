@@ -724,16 +724,96 @@ async def _integration_status(
     )
 
 
+def _listed_connection_count(status: IntegrationStatusOut) -> int:
+    return (
+        len(status.telegram_connections)
+        + len(status.telegram_user_connections)
+        + len(status.fanvue_connections)
+        + len(status.instagram_connections)
+        + len(status.tribute_connections)
+    )
+
+
+async def _owner_connection_count_in_db(session: AsyncSession, owner_id: int) -> int:
+    tg = await session.scalar(
+        select(func.count())
+        .select_from(TelegramConnection)
+        .where(
+            TelegramConnection.user_id == owner_id,
+            TelegramConnection.is_active.is_(True),
+        )
+    )
+    tg_user = await session.scalar(
+        select(func.count())
+        .select_from(TelegramUserSession)
+        .where(
+            TelegramUserSession.user_id == owner_id,
+            TelegramUserSession.is_active.is_(True),
+        )
+    )
+    fv = await session.scalar(
+        select(func.count())
+        .select_from(FanvueConnection)
+        .where(FanvueConnection.user_id == owner_id)
+    )
+    ig = await session.scalar(
+        select(func.count())
+        .select_from(InstagramConnection)
+        .where(InstagramConnection.user_id == owner_id)
+    )
+    tr = await session.scalar(
+        select(func.count())
+        .select_from(TributeConnection)
+        .where(
+            TributeConnection.user_id == owner_id,
+            TributeConnection.is_active.is_(True),
+        )
+    )
+    return int(tg or 0) + int(tg_user or 0) + int(fv or 0) + int(ig or 0) + int(tr or 0)
+
+
+async def _recover_integration_status_if_needed(
+    session: AsyncSession,
+    user: User,
+    status: IntegrationStatusOut,
+) -> IntegrationStatusOut:
+    if _listed_connection_count(status) > 0:
+        return status
+    oid = workspace_owner_id(user)
+    db_n = await _owner_connection_count_in_db(session, oid)
+    if db_n <= 0:
+        return status
+    log.warning(
+        "integration_status empty response but db has %s connections "
+        "for owner=%s auth_user=%s — retrying degraded load",
+        db_n,
+        oid,
+        user.id,
+    )
+    await session.rollback()
+    recovered = await _integration_status_degraded(session, user)
+    if _listed_connection_count(recovered) > 0:
+        return recovered
+    log.error(
+        "integration_status recovery still empty for owner=%s auth_user=%s (db=%s)",
+        oid,
+        user.id,
+        db_n,
+    )
+    return status
+
+
 @router.get("", response_model=IntegrationStatusOut)
 async def integration_status(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
     try:
-        return await _integration_status_or_migrate(session, user)
+        out = await _integration_status_or_migrate(session, user)
     except Exception as exc:
         log.exception("GET /integrations failed: %s", exc)
-        return await _integration_status_degraded(session, user)
+        out = await _integration_status_degraded(session, user)
+    return await _recover_integration_status_if_needed(session, user, out)
 
 
 @router.get("/health", response_model=IntegrationHealthOut)
