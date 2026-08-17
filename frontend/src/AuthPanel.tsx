@@ -136,7 +136,9 @@ export function AuthPanel({
             <TelegramLoginButton
               botUsername={tgBotUsername}
               mode="login"
-              referralCode={referralCode}
+              referralCode={partnerSlug ? null : referralCode}
+              partnerSlug={partnerSlug}
+              partnerSourceTag={partnerSourceTag}
               isPartner={partnerSignup && tab === 'register'}
               onSuccess={tab === 'register' ? onTelegramSuccess : onTelegramLoginSuccess}
               onError={setErr}

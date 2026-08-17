@@ -61,6 +61,9 @@ export function AdminUserPanel({
   const [demoDelta, setDemoDelta] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [partnerSlugDraft, setPartnerSlugDraft] = useState(user.partner_slug ?? '')
+  const [referrerPartnerSlug, setReferrerPartnerSlug] = useState('')
+  const [referrerSourceTag, setReferrerSourceTag] = useState('')
+  const [referrerForce, setReferrerForce] = useState(false)
   const [creditHistory, setCreditHistory] = useState<AdminCreditHistoryRow[]>([])
   const [creditHistoryLoading, setCreditHistoryLoading] = useState(false)
   const [creditHistoryHasMore, setCreditHistoryHasMore] = useState(false)
@@ -152,6 +155,38 @@ export function AdminUserPanel({
       return
     }
     onUpdated((await r.json()) as AdminUserRow)
+  }
+
+  const assignPartnerAttribution = async () => {
+    const slug = referrerPartnerSlug.trim().toLowerCase()
+    if (slug.length < 3) {
+      onError(t('userPanel.partnerAttributionSlugRequired'))
+      return
+    }
+    onError(null)
+    onBusy(true)
+    try {
+      const r = await apiFetch(`/api/admin/users/${user.id}/partner-attribution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          partner_slug: slug,
+          source_tag: referrerSourceTag.trim() || null,
+          backfill_commissions: true,
+          force: referrerForce,
+        }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        onError(formatHttpApiError(r, j))
+        return
+      }
+      const detail = await apiFetch(`/api/admin/users/${user.id}`)
+      if (detail.ok) onUpdated((await detail.json()) as AdminUserDetail)
+      onError(null)
+    } finally {
+      onBusy(false)
+    }
   }
 
   const resetPassword = async () => {
@@ -292,6 +327,56 @@ export function AdminUserPanel({
           </div>
         ) : null}
       </dl>
+
+      {isOwner && !user.is_partner ? (
+        <section className="admin-panel__section">
+          <h3>{t('userPanel.partnerAttributionSection')}</h3>
+          <p className="muted small">{t('userPanel.partnerAttributionHelp')}</p>
+          <label className="admin-field">
+            <span>{t('userPanel.partnerAttributionSlug')}</span>
+            <input
+              type="text"
+              value={referrerPartnerSlug}
+              disabled={busy}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={t('userPanel.partnerSlugPlaceholder')}
+              onChange={(e) => setReferrerPartnerSlug(e.target.value.toLowerCase())}
+            />
+          </label>
+          <label className="admin-field">
+            <span>{t('userPanel.partnerAttributionSourceTag')}</span>
+            <input
+              type="text"
+              value={referrerSourceTag}
+              disabled={busy}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={t('userPanel.partnerAttributionSourceTagPlaceholder')}
+              onChange={(e) => setReferrerSourceTag(e.target.value.toLowerCase())}
+            />
+          </label>
+          {user.referred_by_email ? (
+            <label className="admin-check">
+              <input
+                type="checkbox"
+                checked={referrerForce}
+                disabled={busy}
+                onChange={(e) => setReferrerForce(e.target.checked)}
+              />
+              {t('userPanel.partnerAttributionForce')}
+            </label>
+          ) : null}
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={busy || referrerPartnerSlug.trim().length < 3}
+            onClick={() => void assignPartnerAttribution()}
+          >
+            {t('userPanel.partnerAttributionSubmit')}
+          </button>
+        </section>
+      ) : null}
 
       <section className="admin-panel__section">
         <h3>{t('userPanel.subscriptionSection')}</h3>

@@ -60,11 +60,26 @@ function loadPending(): string | null {
   }
 }
 
-export async function startTelegramMobileAuth(referralCode?: string | null, isPartner?: boolean) {
-  const body: { referral_code?: string; is_partner?: boolean } = {}
-  const ref = (referralCode || '').trim().toUpperCase()
-  if (ref) body.referral_code = ref
-  if (isPartner) body.is_partner = true
+export async function startTelegramMobileAuth(
+  referralCode?: string | null,
+  opts?: { isPartner?: boolean; partnerSlug?: string | null; partnerSourceTag?: string | null },
+) {
+  const body: {
+    referral_code?: string
+    is_partner?: boolean
+    partner_slug?: string
+    partner_source_tag?: string
+  } = {}
+  const slug = (opts?.partnerSlug || '').trim().toLowerCase()
+  if (slug) {
+    body.partner_slug = slug
+    const src = (opts?.partnerSourceTag || '').trim()
+    if (src) body.partner_source_tag = src
+  } else {
+    const ref = (referralCode || '').trim().toUpperCase()
+    if (ref) body.referral_code = ref
+  }
+  if (opts?.isPartner) body.is_partner = true
   const r = await apiFetch('/api/auth/telegram/mobile/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -129,9 +144,14 @@ export function hasPendingTelegramAuth(): boolean {
 
 export async function signInWithTelegramBot(
   referralCode?: string | null,
-  options?: { preopenedPopup?: Window | null; isPartner?: boolean },
+  options?: {
+    preopenedPopup?: Window | null
+    isPartner?: boolean
+    partnerSlug?: string | null
+    partnerSourceTag?: string | null
+  },
 ): Promise<string> {
-  const started = await startTelegramMobileAuth(referralCode, options?.isPartner)
+  const started = await startTelegramMobileAuth(referralCode, options)
   const url = (started.telegram_url || '').trim()
   if (!url) throw new Error('Telegram bot URL missing')
 

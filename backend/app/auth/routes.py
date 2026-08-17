@@ -156,6 +156,8 @@ async def telegram_login_or_register(
             telegram_id=payload.id,
             telegram_username=payload.username,
             referral_code=body.referral_code,
+            partner_slug=body.partner_slug,
+            partner_source_tag=body.partner_source_tag,
             is_partner=body.is_partner,
             device_signal=device_signal_from_request(request),
         )
@@ -173,6 +175,8 @@ async def telegram_mobile_auth_start(
     row = await create_mobile_auth_session(
         session,
         referral_code=body.referral_code,
+        partner_slug=body.partner_slug,
+        partner_source_tag=body.partner_source_tag,
         is_partner=body.is_partner,
         device_key=device_signal_from_request(request).device_key,
     )

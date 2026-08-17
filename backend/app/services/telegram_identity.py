@@ -91,6 +91,8 @@ async def create_owner_from_telegram(
     telegram_id: int,
     telegram_username: str | None,
     referral_code: str | None = None,
+    partner_slug: str | None = None,
+    partner_source_tag: str | None = None,
     is_partner: bool = False,
     device_signal: DeviceSignal | None = None,
 ) -> User:
@@ -102,7 +104,9 @@ async def create_owner_from_telegram(
         email=email,
         hashed_password=hash_password(random_password),
         auth_email_verified=False,
-        referral_code=referral_code,
+        referral_code=referral_code if not (partner_slug or "").strip() else None,
+        partner_slug=partner_slug,
+        partner_source_tag=partner_source_tag,
         is_partner=is_partner,
         device_signal=device_signal,
     )

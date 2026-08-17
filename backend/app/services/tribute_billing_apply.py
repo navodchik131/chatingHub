@@ -28,6 +28,10 @@ from app.services.billing_plan import can_purchase_credits_pack, normalize_billi
 from app.services.billing_subscription import activate_subscription_product, subscription_period_end
 from app.services.plan_catalog import get_plan_spec, resolve_product_id
 from app.services.referral import grant_referrer_reward_if_needed
+from app.services.partner import (
+    grant_partner_commission_if_needed,
+    mark_partner_discount_used,
+)
 from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
 from app.services.creator_donation_apply import apply_creator_donation_webhook
 from app.services.telegram_identity import find_owner_by_telegram_id
@@ -149,6 +153,13 @@ async def _grant_credits_pack(
         trigger_product="credits_pack",
         payment_amount_rub=Decimal(amount_rub),
     )
+    await grant_partner_commission_if_needed(
+        session,
+        billing_uid,
+        payment_ref=payment_ref,
+        payment_amount_rub=amount_rub,
+    )
+    await mark_partner_discount_used(session, billing_uid)
     await provision_full_workflow_workspaces(session, owner_id=billing_uid)
     return {"ok": True, "granted": "credits", "amount": granted}
 
@@ -201,6 +212,7 @@ async def _extend_subscription_period(
     billing_uid: int,
     target: TributeBillingTarget,
     payment_ref: str,
+    amount_rub: int,
 ) -> dict[str, Any]:
     product = resolve_product_id(target.product)
     spec = get_plan_spec(product)
@@ -218,17 +230,29 @@ async def _extend_subscription_period(
     sub.status = SubscriptionStatus.active
     sub.current_period_end = subscription_period_end(product)
 
+    paid_rub = amount_rub if amount_rub > 0 else spec.price_rub
     session.add(
         UsageEvent(
             user_id=billing_uid,
             kind="tribute_subscription_renewed",
             credits_delta=0,
             meta=json.dumps(
-                {"payment_ref": payment_ref, "product": product},
+                {
+                    "payment_ref": payment_ref,
+                    "product": product,
+                    "amount_rub": int(paid_rub),
+                },
                 ensure_ascii=False,
             ),
         )
     )
+    await grant_partner_commission_if_needed(
+        session,
+        billing_uid,
+        payment_ref=payment_ref,
+        payment_amount_rub=paid_rub,
+    )
+    await mark_partner_discount_used(session, billing_uid)
     await provision_full_workflow_workspaces(session, owner_id=billing_uid)
     return {"ok": True, "granted": product, "renewed": True}
 
@@ -311,11 +335,17 @@ async def apply_tribute_billing_webhook(
                 amount_rub=amount_rub,
             )
         else:
+            spec = get_plan_spec(target.product)
+            amount_rub = _amount_rub_from_payload(
+                payload,
+                fallback_rub=spec.price_rub if spec else 0,
+            )
             result = await _extend_subscription_period(
                 session,
                 billing_uid=billing_uid,
                 target=target,
                 payment_ref=payment_ref,
+                amount_rub=amount_rub,
             )
     elif norm in _SUB_CANCEL_EVENTS:
         sub = await session.scalar(select(Subscription).where(Subscription.user_id == billing_uid))

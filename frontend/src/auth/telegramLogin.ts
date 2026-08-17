@@ -50,10 +50,22 @@ export async function postTelegramAuth(
   path: '/api/auth/telegram' | '/api/auth/telegram/link',
   user: TelegramLoginUser,
   referralCode?: string | null,
+  partner?: { slug?: string | null; sourceTag?: string | null },
 ): Promise<Response> {
-  const body: TelegramLoginUser & { referral_code?: string } = { ...user }
-  const ref = (referralCode || '').trim().toUpperCase()
-  if (ref) body.referral_code = ref
+  const body: TelegramLoginUser & {
+    referral_code?: string
+    partner_slug?: string
+    partner_source_tag?: string
+  } = { ...user }
+  const slug = (partner?.slug || '').trim().toLowerCase()
+  if (slug) {
+    body.partner_slug = slug
+    const src = (partner?.sourceTag || '').trim()
+    if (src) body.partner_source_tag = src
+  } else {
+    const ref = (referralCode || '').trim().toUpperCase()
+    if (ref) body.referral_code = ref
+  }
   return apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

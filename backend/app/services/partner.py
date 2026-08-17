@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import PartnerCommission, PartnerLink, Subscription, User
+from app.db.models import PartnerCommission, PartnerLink, Subscription, UsageEvent, User
 from app.services.billing_plan import normalize_billing_plan
 from app.services.plan_catalog import plan_display_name
 from app.services.referral import REFERRER_REWARD_KIND
@@ -284,12 +284,140 @@ def partner_commission_available_at(payment_at: datetime) -> datetime:
     return dt + timedelta(days=hold_days)
 
 
+_PARTNER_COMMISSION_USAGE_KINDS = frozenset(
+    {
+        "tribute_credits_pack",
+        "yookassa_credits_pack",
+        "subscription_payment",
+        "tribute_subscription_renewed",
+    }
+)
+
+
+def _usage_event_meta(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _payment_ref_from_usage_meta(kind: str, meta: dict) -> str | None:
+    ref = str(meta.get("payment_ref") or meta.get("payment_id") or "").strip()
+    if not ref:
+        return None
+    if kind == "subscription_payment":
+        if str(meta.get("payment_kind") or "") not in ("yookassa", "tribute"):
+            return None
+    return ref
+
+
+def _usage_event_payment_rub(kind: str, meta: dict) -> int:
+    from app.services.admin_analytics import _usage_event_revenue_rub
+
+    return max(0, int(_usage_event_revenue_rub(kind, meta)))
+
+
+async def assign_user_to_partner_retroactive(
+    session: AsyncSession,
+    *,
+    user: User,
+    partner_slug: str,
+    source_tag: str | None = None,
+    force: bool = False,
+) -> User:
+    """Ручная привязка клиента к партнёру (для TG/email без pref при регистрации)."""
+    if user.parent_user_id is not None:
+        raise ValueError("Привязка только для аккаунта владельца")
+    if user.referred_by_user_id and not force:
+        raise ValueError("У пользователя уже есть партнёр; укажите force=true для перепривязки")
+
+    partner = await find_partner_by_slug(session, partner_slug)
+    if partner is None:
+        raise ValueError(f"Партнёр не найден: {partner_slug}")
+    if partner.id == user.id:
+        raise ValueError("Нельзя привязать пользователя к самому себе")
+
+    user.referred_by_user_id = partner.id
+    user.partner_discount_eligible = True
+
+    tag = normalize_partner_tag(source_tag or "")
+    if tag:
+        user.referral_source_tag = tag
+        link = await get_partner_link(session, partner_id=partner.id, tag=tag)
+        user.referred_by_partner_link_id = link.id if link is not None else None
+    else:
+        base_link = await ensure_partner_base_link(session, partner.id)
+        user.referred_by_partner_link_id = base_link.id
+
+    await session.flush()
+    return partner
+
+
+async def backfill_partner_commissions_for_user(
+    session: AsyncSession,
+    *,
+    referred_owner_id: int,
+) -> dict[str, int]:
+    """Доначисляет комиссии по usage_events, если referred_by_user_id уже выставлен."""
+    referred = await session.get(User, referred_owner_id)
+    if not referred or not referred.referred_by_user_id:
+        return {"created": 0, "skipped": 0, "events": 0}
+
+    rows = (
+        await session.execute(
+            select(UsageEvent)
+            .where(
+                UsageEvent.user_id == referred_owner_id,
+                UsageEvent.kind.in_(_PARTNER_COMMISSION_USAGE_KINDS),
+            )
+            .order_by(UsageEvent.id.asc())
+        )
+    ).scalars().all()
+
+    created = 0
+    skipped = 0
+    for ev in rows:
+        meta = _usage_event_meta(ev.meta)
+        ref = _payment_ref_from_usage_meta(ev.kind, meta)
+        if not ref:
+            skipped += 1
+            continue
+        amount_rub = _usage_event_payment_rub(ev.kind, meta)
+        if amount_rub <= 0:
+            skipped += 1
+            continue
+        before = await session.scalar(
+            select(PartnerCommission.id).where(PartnerCommission.payment_ref == ref)
+        )
+        payment_at = ev.created_at if ev.created_at else _now()
+        await grant_partner_commission_if_needed(
+            session,
+            referred_owner_id,
+            payment_ref=ref,
+            payment_amount_rub=amount_rub,
+            payment_at=payment_at,
+        )
+        after = await session.scalar(
+            select(PartnerCommission.id).where(PartnerCommission.payment_ref == ref)
+        )
+        if after and not before:
+            created += 1
+        else:
+            skipped += 1
+
+    return {"created": created, "skipped": skipped, "events": len(rows)}
+
+
 async def grant_partner_commission_if_needed(
     session: AsyncSession,
     referred_owner_id: int,
     *,
     payment_ref: str,
     payment_amount_rub: int | Decimal,
+    payment_at: datetime | None = None,
 ) -> None:
     referred = await session.get(User, referred_owner_id)
     if not referred or not referred.referred_by_user_id:
@@ -312,7 +440,12 @@ async def grant_partner_commission_if_needed(
     if commission_kopecks <= 0:
         return
 
+    paid_at = payment_at if payment_at is not None else _now()
+    if paid_at.tzinfo is None:
+        paid_at = paid_at.replace(tzinfo=timezone.utc)
+    available_at = partner_commission_available_at(paid_at)
     now = _now()
+    status = "available" if available_at <= now else "hold"
     session.add(
         PartnerCommission(
             partner_user_id=partner.id,
@@ -321,9 +454,9 @@ async def grant_partner_commission_if_needed(
             payment_ref=ref,
             payment_amount_kopecks=paid_kopecks,
             commission_kopecks=commission_kopecks,
-            status="hold",
-            created_at=now,
-            available_at=partner_commission_available_at(now),
+            status=status,
+            created_at=paid_at,
+            available_at=available_at,
         )
     )
     log.info(

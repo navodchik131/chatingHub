@@ -252,6 +252,8 @@ class TokenOut(BaseModel):
 
 class TelegramMobileAuthStartIn(BaseModel):
     referral_code: str | None = Field(default=None, max_length=16)
+    partner_slug: str | None = Field(default=None, max_length=32)
+    partner_source_tag: str | None = Field(default=None, max_length=64)
     is_partner: bool = False
 
 
@@ -1545,6 +1547,37 @@ class AdminUserPatchIn(BaseModel):
 
 class AdminPasswordResetIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
+
+
+class AdminPartnerAttributionIn(BaseModel):
+    partner_slug: str = Field(min_length=3, max_length=32)
+    source_tag: str | None = Field(default=None, max_length=48)
+    backfill_commissions: bool = True
+    force: bool = False
+
+    @field_validator("partner_slug")
+    @classmethod
+    def _normalize_slug(cls, v: str) -> str:
+        return (v or "").strip().lower()
+
+
+class AdminPartnerAttributionOut(BaseModel):
+    ok: bool = True
+    user_id: int
+    partner_user_id: int
+    partner_slug: str
+    referred_by_email: str
+    commissions_created: int = 0
+    commissions_skipped: int = 0
+    payment_events_scanned: int = 0
+
+
+class AdminPartnerBackfillOut(BaseModel):
+    ok: bool = True
+    partner_user_id: int
+    users_processed: int = 0
+    commissions_created: int = 0
+    commissions_skipped: int = 0
 
 
 class AdminCreditsIn(BaseModel):

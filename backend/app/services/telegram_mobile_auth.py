@@ -88,6 +88,8 @@ async def create_mobile_auth_session(
     session: AsyncSession,
     *,
     referral_code: str | None = None,
+    partner_slug: str | None = None,
+    partner_source_tag: str | None = None,
     is_partner: bool = False,
     device_key: str | None = None,
 ) -> TelegramMobileAuthSession:
@@ -102,6 +104,8 @@ async def create_mobile_auth_session(
         id=session_id,
         status="pending",
         referral_code=(referral_code or "").strip().upper()[:16] or None,
+        partner_slug=(partner_slug or "").strip().lower()[:32] or None,
+        partner_source_tag=(partner_source_tag or "").strip()[:64] or None,
         is_partner=bool(is_partner),
         device_key=(device_key or "").strip()[:64] or None,
         expires_at=_now() + timedelta(seconds=SESSION_TTL_SECONDS),
@@ -244,6 +248,8 @@ async def complete_mobile_auth_session(
             telegram_id=telegram_id,
             telegram_username=telegram_username,
             referral_code=row.referral_code,
+            partner_slug=getattr(row, "partner_slug", None),
+            partner_source_tag=getattr(row, "partner_source_tag", None),
             is_partner=bool(getattr(row, "is_partner", False)),
             device_signal=device_signal,
         )

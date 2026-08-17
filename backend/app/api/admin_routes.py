@@ -27,6 +27,9 @@ from app.schemas import (
     AdminCreditHistoryPageOut,
     AdminDemoGenerationsIn,
     AdminDemoGenerationsOut,
+    AdminPartnerAttributionIn,
+    AdminPartnerAttributionOut,
+    AdminPartnerBackfillOut,
     AdminPasswordResetIn,
     AdminSegmentOut,
     AdminStatsOut,
@@ -490,3 +493,95 @@ async def admin_user_subscription(
         sub.billing_plan = normalize_billing_plan(body.billing_plan)
     await session.commit()
     return {"ok": True}
+
+
+@router.post(
+    "/admin/users/{user_id}/partner-attribution",
+    response_model=AdminPartnerAttributionOut,
+)
+async def admin_user_partner_attribution(
+    user_id: int,
+    body: AdminPartnerAttributionIn,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_platform_admin),
+) -> AdminPartnerAttributionOut:
+    from app.services.partner import (
+        assign_user_to_partner_retroactive,
+        backfill_partner_commissions_for_user,
+    )
+
+    u = await session.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    oid = workspace_owner_id(u)
+    owner = await session.get(User, oid)
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    try:
+        partner = await assign_user_to_partner_retroactive(
+            session,
+            user=owner,
+            partner_slug=body.partner_slug,
+            source_tag=body.source_tag,
+            force=body.force,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    backfill_stats = {"created": 0, "skipped": 0, "events": 0}
+    if body.backfill_commissions:
+        backfill_stats = await backfill_partner_commissions_for_user(
+            session, referred_owner_id=oid
+        )
+
+    await session.commit()
+    slug = (partner.partner_slug or body.partner_slug).strip().lower()
+    return AdminPartnerAttributionOut(
+        user_id=oid,
+        partner_user_id=partner.id,
+        partner_slug=slug,
+        referred_by_email=partner.email,
+        commissions_created=int(backfill_stats.get("created") or 0),
+        commissions_skipped=int(backfill_stats.get("skipped") or 0),
+        payment_events_scanned=int(backfill_stats.get("events") or 0),
+    )
+
+
+@router.post(
+    "/admin/partners/{partner_id}/backfill-commissions",
+    response_model=AdminPartnerBackfillOut,
+)
+async def admin_partner_backfill_commissions(
+    partner_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_platform_admin),
+) -> AdminPartnerBackfillOut:
+    from app.services.partner import backfill_partner_commissions_for_user
+
+    partner = await session.get(User, partner_id)
+    if partner is None or not getattr(partner, "is_partner", False):
+        raise HTTPException(status_code=404, detail="Партнёр не найден")
+
+    referred_ids = (
+        await session.execute(
+            select(User.id).where(User.referred_by_user_id == partner_id)
+        )
+    ).scalars().all()
+
+    total_created = 0
+    total_skipped = 0
+    for rid in referred_ids:
+        stats = await backfill_partner_commissions_for_user(
+            session, referred_owner_id=int(rid)
+        )
+        total_created += int(stats.get("created") or 0)
+        total_skipped += int(stats.get("skipped") or 0)
+
+    await session.commit()
+    return AdminPartnerBackfillOut(
+        partner_user_id=partner_id,
+        users_processed=len(referred_ids),
+        commissions_created=total_created,
+        commissions_skipped=total_skipped,
+    )
