@@ -414,6 +414,8 @@ _CONNECTION_COMPANION_COLUMNS = (
     "companion_delay_max_sec",
     "companion_max_replies_per_hour",
     "companion_goal_preset",
+    "companion_goal_text",
+    "companion_goal_link",
 )
 
 
