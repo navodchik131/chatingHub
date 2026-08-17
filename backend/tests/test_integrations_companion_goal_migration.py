@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy.exc import DBAPIError
 
 from app.api.integrations_routes import (
+    _companion_mode_fields,
     _integration_status_fallback,
     _missing_connection_companion_column,
 )
@@ -47,3 +48,13 @@ def test_integration_status_fallback_shape() -> None:
     assert out.telegram_configured is False
     assert out.llm_configured in (True, False)
     assert out.max_connections_per_platform == 1
+
+
+def test_companion_mode_fields_skip_unloaded_row() -> None:
+    class Row:
+        pass
+
+    row = Row()
+    fields = _companion_mode_fields(row, include=False)
+    assert fields["companion_mode"] == "off"
+    assert fields["companion_delay_min_sec"] == 5

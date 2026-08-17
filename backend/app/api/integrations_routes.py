@@ -11,7 +11,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.utils.token import TokenValidationError
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, inspect as sa_inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
@@ -316,13 +316,14 @@ async def _integration_status_or_migrate(
     )
 
     oid = workspace_owner_id(user)
-    include_goals = companion_goal_columns_ready()
+    ready = companion_goal_columns_ready()
     try:
         return await _integration_status(
             session,
             user,
             owner_id=oid,
-            include_companion_goals=include_goals,
+            include_companion_goals=ready,
+            include_companion_fields=ready,
         )
     except SQLAlchemyError as exc:
         if not _missing_connection_companion_column(exc):
@@ -330,7 +331,7 @@ async def _integration_status_or_migrate(
             raise
         log.warning(
             "integration_status schema mismatch (include_goals=%s), healing: %s",
-            include_goals,
+            ready,
             exc,
         )
         await session.rollback()
@@ -346,12 +347,14 @@ async def _integration_status_or_migrate(
                     user,
                     owner_id=oid,
                     include_companion_goals=True,
+                    include_companion_fields=True,
                 )
             return await _integration_status(
                 session,
                 user,
                 owner_id=oid,
                 include_companion_goals=False,
+                include_companion_fields=False,
             )
         except Exception as retry_exc:
             log.exception("integration_status retry failed: %s", retry_exc)
@@ -443,15 +446,49 @@ def _companion_goal_fields(row, *, include: bool = True) -> dict[str, str | None
         }
     return {
         "companion_goal_preset": normalize_companion_goal_preset(
-            getattr(row, "companion_goal_preset", None)
+            _loaded_attr(row, "companion_goal_preset", "chat")
         ),
-        "companion_goal_text": getattr(row, "companion_goal_text", None),
-        "companion_goal_link": getattr(row, "companion_goal_link", None),
+        "companion_goal_text": _loaded_attr(row, "companion_goal_text", None),
+        "companion_goal_link": _loaded_attr(row, "companion_goal_link", None),
+    }
+
+
+def _loaded_attr(row: object, name: str, default: object) -> object:
+    """Читает поле ORM только если оно уже загружено (без lazy-load)."""
+    try:
+        state = sa_inspect(row)
+        if state.expired or name in state.unloaded:
+            return default
+        val = getattr(row, name)
+        return default if val is None else val
+    except Exception:
+        return default
+
+
+def _companion_mode_fields(row: object, *, include: bool = True) -> dict[str, int | str]:
+    if not include:
+        return {
+            "companion_mode": "off",
+            "companion_delay_min_sec": 5,
+            "companion_delay_max_sec": 45,
+            "companion_max_replies_per_hour": 60,
+        }
+    return {
+        "companion_mode": str(_loaded_attr(row, "companion_mode", "off") or "off"),
+        "companion_delay_min_sec": int(_loaded_attr(row, "companion_delay_min_sec", 5) or 5),
+        "companion_delay_max_sec": int(_loaded_attr(row, "companion_delay_max_sec", 45) or 45),
+        "companion_max_replies_per_hour": int(
+            _loaded_attr(row, "companion_max_replies_per_hour", 60) or 60
+        ),
     }
 
 
 def _telegram_connection_out(
-    tg: TelegramConnection, *, base: str, include_goals: bool = True
+    tg: TelegramConnection,
+    *,
+    base: str,
+    include_goals: bool = True,
+    include_companion_fields: bool = True,
 ) -> PlatformConnectionOut:
     return PlatformConnectionOut(
         id=tg.id,
@@ -462,18 +499,16 @@ def _telegram_connection_out(
         webhook_registered=_telegram_webhook_registered(tg),
         webhook_url=f"{base}/api/webhooks/telegram/{tg.webhook_secret}",
         is_active=bool(tg.is_active),
-        companion_mode=getattr(tg, "companion_mode", None) or "off",
-        companion_delay_min_sec=int(getattr(tg, "companion_delay_min_sec", None) or 5),
-        companion_delay_max_sec=int(getattr(tg, "companion_delay_max_sec", None) or 45),
-        companion_max_replies_per_hour=int(
-            getattr(tg, "companion_max_replies_per_hour", None) or 60
-        ),
+        **_companion_mode_fields(tg, include=include_companion_fields),
         **_companion_goal_fields(tg, include=include_goals),
     )
 
 
 def _fanvue_connection_out(
-    fv: FanvueConnection, *, include_goals: bool = True
+    fv: FanvueConnection,
+    *,
+    include_goals: bool = True,
+    include_companion_fields: bool = True,
 ) -> PlatformConnectionOut:
     return PlatformConnectionOut(
         id=fv.id,
@@ -484,18 +519,16 @@ def _fanvue_connection_out(
         oauth_connected=bool(fv.oauth_connected_at),
         webhook_url=_fanvue_webhook_url_for_conn(fv),
         is_active=True,
-        companion_mode=getattr(fv, "companion_mode", None) or "off",
-        companion_delay_min_sec=int(getattr(fv, "companion_delay_min_sec", None) or 5),
-        companion_delay_max_sec=int(getattr(fv, "companion_delay_max_sec", None) or 45),
-        companion_max_replies_per_hour=int(
-            getattr(fv, "companion_max_replies_per_hour", None) or 60
-        ),
+        **_companion_mode_fields(fv, include=include_companion_fields),
         **_companion_goal_fields(fv, include=include_goals),
     )
 
 
 def _instagram_connection_out(
-    ig: InstagramConnection, *, include_goals: bool = True
+    ig: InstagramConnection,
+    *,
+    include_goals: bool = True,
+    include_companion_fields: bool = True,
 ) -> PlatformConnectionOut:
     return PlatformConnectionOut(
         id=ig.id,
@@ -507,12 +540,7 @@ def _instagram_connection_out(
         oauth_connected=bool(ig.oauth_connected_at),
         webhook_url=instagram_platform_webhook_url(),
         is_active=True,
-        companion_mode=getattr(ig, "companion_mode", None) or "off",
-        companion_delay_min_sec=int(getattr(ig, "companion_delay_min_sec", None) or 5),
-        companion_delay_max_sec=int(getattr(ig, "companion_delay_max_sec", None) or 45),
-        companion_max_replies_per_hour=int(
-            getattr(ig, "companion_max_replies_per_hour", None) or 60
-        ),
+        **_companion_mode_fields(ig, include=include_companion_fields),
         **_companion_goal_fields(ig, include=include_goals),
     )
 
@@ -529,7 +557,10 @@ def _tribute_connection_out(tr: TributeConnection) -> PlatformConnectionOut:
 
 
 def _telegram_user_connection_out(
-    row: TelegramUserSession, *, include_goals: bool = True
+    row: TelegramUserSession,
+    *,
+    include_goals: bool = True,
+    include_companion_fields: bool = True,
 ) -> PlatformConnectionOut:
     import re
 
@@ -548,12 +579,7 @@ def _telegram_user_connection_out(
         phone_masked=masked,
         last_seen_at=row.last_seen_at,
         is_active=bool(row.is_active and row.status == TelegramUserSessionStatus.active.value),
-        companion_mode=getattr(row, "companion_mode", None) or "off",
-        companion_delay_min_sec=int(getattr(row, "companion_delay_min_sec", None) or 5),
-        companion_delay_max_sec=int(getattr(row, "companion_delay_max_sec", None) or 45),
-        companion_max_replies_per_hour=int(
-            getattr(row, "companion_max_replies_per_hour", None) or 60
-        ),
+        **_companion_mode_fields(row, include=include_companion_fields),
         **_companion_goal_fields(row, include=include_goals),
     )
 
@@ -706,12 +732,21 @@ async def _integration_status(
         wavespeed_managed_by_platform=wavespeed_managed_by_platform,
         llm_configured=llm_configured,
         telegram_connections=[
-            _telegram_connection_out(r, base=base, include_goals=include_companion_goals)
+            _telegram_connection_out(
+                r,
+                base=base,
+                include_goals=include_companion_goals,
+                include_companion_fields=include_companion_fields,
+            )
             for r in tg_rows
             if r.is_active
         ],
         telegram_user_connections=[
-            _telegram_user_connection_out(r, include_goals=include_companion_goals)
+            _telegram_user_connection_out(
+                r,
+                include_goals=include_companion_goals,
+                include_companion_fields=include_companion_fields,
+            )
             for r in tg_user_rows
             if r.status
             in (
@@ -722,10 +757,20 @@ async def _integration_status(
         ],
         telegram_user_available=settings.telegram_mtproto_configured,
         fanvue_connections=[
-            _fanvue_connection_out(r, include_goals=include_companion_goals) for r in fv_rows
+            _fanvue_connection_out(
+                r,
+                include_goals=include_companion_goals,
+                include_companion_fields=include_companion_fields,
+            )
+            for r in fv_rows
         ],
         instagram_connections=[
-            _instagram_connection_out(r, include_goals=include_companion_goals) for r in ig_rows
+            _instagram_connection_out(
+                r,
+                include_goals=include_companion_goals,
+                include_companion_fields=include_companion_fields,
+            )
+            for r in ig_rows
         ],
         tribute_configured=bool(tr and tr.is_active),
         tribute_connections=[_tribute_connection_out(r) for r in tr_rows if r.is_active],
