@@ -274,12 +274,16 @@ def _telegram_user_session_load(include_goals: bool, *, include_companion_fields
 async def _integration_status_degraded(
     session: AsyncSession,
     user: User,
+    *,
+    owner_id: int | None = None,
 ) -> IntegrationStatusOut:
     """Загрузить подключения без companion-колонок (если полный статус недоступен)."""
+    oid = owner_id if owner_id is not None else workspace_owner_id(user)
     try:
         out = await _integration_status(
             session,
             user,
+            owner_id=oid,
             include_companion_goals=False,
             include_companion_fields=False,
         )
@@ -292,7 +296,7 @@ async def _integration_status_degraded(
         if n:
             log.warning(
                 "integration_status: degraded load ok (owner=%s, connections=%s)",
-                workspace_owner_id(user),
+                oid,
                 n,
             )
         return out
@@ -311,11 +315,13 @@ async def _integration_status_or_migrate(
         refresh_companion_goal_columns_ready,
     )
 
+    oid = workspace_owner_id(user)
     include_goals = companion_goal_columns_ready()
     try:
         return await _integration_status(
             session,
             user,
+            owner_id=oid,
             include_companion_goals=include_goals,
         )
     except SQLAlchemyError as exc:
@@ -338,16 +344,18 @@ async def _integration_status_or_migrate(
                 return await _integration_status(
                     session,
                     user,
+                    owner_id=oid,
                     include_companion_goals=True,
                 )
             return await _integration_status(
                 session,
                 user,
+                owner_id=oid,
                 include_companion_goals=False,
             )
         except Exception as retry_exc:
             log.exception("integration_status retry failed: %s", retry_exc)
-            return await _integration_status_degraded(session, user)
+            return await _integration_status_degraded(session, user, owner_id=oid)
 
 
 def _apply_companion_connection_patch(
@@ -554,10 +562,11 @@ async def _integration_status(
     session: AsyncSession,
     user: User,
     *,
+    owner_id: int | None = None,
     include_companion_goals: bool = True,
     include_companion_fields: bool = True,
 ) -> IntegrationStatusOut:
-    oid = workspace_owner_id(user)
+    oid = owner_id if owner_id is not None else workspace_owner_id(user)
     tg_rows = list(
         (
             await session.scalars(
@@ -779,28 +788,37 @@ async def _recover_integration_status_if_needed(
 ) -> IntegrationStatusOut:
     if _listed_connection_count(status) > 0:
         return status
-    oid = workspace_owner_id(user)
-    db_n = await _owner_connection_count_in_db(session, oid)
-    if db_n <= 0:
+    try:
+        oid = workspace_owner_id(user)
+        db_n = await _owner_connection_count_in_db(session, oid)
+        if db_n <= 0:
+            return status
+        log.warning(
+            "integration_status empty response but db has %s connections "
+            "for owner=%s auth_user=%s — retrying degraded load",
+            db_n,
+            oid,
+            user.id,
+        )
+        await session.rollback()
+        recovered = await _integration_status_degraded(session, user, owner_id=oid)
+        if _listed_connection_count(recovered) > 0:
+            return recovered
+        log.error(
+            "integration_status recovery still empty for owner=%s auth_user=%s (db=%s)",
+            oid,
+            user.id,
+            db_n,
+        )
         return status
-    log.warning(
-        "integration_status empty response but db has %s connections "
-        "for owner=%s auth_user=%s — retrying degraded load",
-        db_n,
-        oid,
-        user.id,
-    )
-    await session.rollback()
-    recovered = await _integration_status_degraded(session, user)
-    if _listed_connection_count(recovered) > 0:
-        return recovered
-    log.error(
-        "integration_status recovery still empty for owner=%s auth_user=%s (db=%s)",
-        oid,
-        user.id,
-        db_n,
-    )
-    return status
+    except Exception as exc:
+        log.exception("integration_status recovery failed: %s", exc)
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        oid = workspace_owner_id(user)
+        return await _integration_status_degraded(session, user, owner_id=oid)
 
 
 @router.get("", response_model=IntegrationStatusOut)
@@ -808,12 +826,28 @@ async def integration_status(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
+    oid = workspace_owner_id(user)
     try:
-        out = await _integration_status_or_migrate(session, user)
+        try:
+            out = await _integration_status_or_migrate(session, user)
+        except Exception as exc:
+            log.exception("GET /integrations primary failed: %s", exc)
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+            out = await _integration_status_degraded(session, user, owner_id=oid)
+        return await _recover_integration_status_if_needed(session, user, out)
     except Exception as exc:
-        log.exception("GET /integrations failed: %s", exc)
-        out = await _integration_status_degraded(session, user)
-    return await _recover_integration_status_if_needed(session, user, out)
+        log.exception("GET /integrations fatal: %s", exc)
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+        try:
+            return await _integration_status_degraded(session, user, owner_id=oid)
+        except Exception:
+            return _integration_status_fallback()
 
 
 @router.get("/health", response_model=IntegrationHealthOut)
