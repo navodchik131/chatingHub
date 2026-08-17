@@ -89,6 +89,7 @@ from app.services.instagram_connection import (
 from app.services.companion_bot.feedback import list_feedback_reports
 from app.services.fanvue_sync import sync_fanvue_chat_history
 from app.services.plan_entitlements import plan_limits_for_sub
+from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.platform_connections import (
     assert_can_add_platform_connection,
     assert_can_add_tribute_connection,
@@ -830,29 +831,31 @@ async def _recover_integration_status_if_needed(
     session: AsyncSession,
     user: User,
     status: IntegrationStatusOut,
+    *,
+    owner_id: int,
+    auth_user_id: int,
 ) -> IntegrationStatusOut:
     if _listed_connection_count(status) > 0:
         return status
     try:
-        oid = workspace_owner_id(user)
-        db_n = await _owner_connection_count_in_db(session, oid)
+        db_n = await _owner_connection_count_in_db(session, owner_id)
         if db_n <= 0:
             return status
         log.warning(
             "integration_status empty response but db has %s connections "
             "for owner=%s auth_user=%s — retrying degraded load",
             db_n,
-            oid,
-            user.id,
+            owner_id,
+            auth_user_id,
         )
         await session.rollback()
-        recovered = await _integration_status_degraded(session, user, owner_id=oid)
+        recovered = await _integration_status_degraded(session, user, owner_id=owner_id)
         if _listed_connection_count(recovered) > 0:
             return recovered
         log.error(
             "integration_status recovery still empty for owner=%s auth_user=%s (db=%s)",
-            oid,
-            user.id,
+            owner_id,
+            auth_user_id,
             db_n,
         )
         return status
@@ -862,8 +865,7 @@ async def _recover_integration_status_if_needed(
             await session.rollback()
         except Exception:
             pass
-        oid = workspace_owner_id(user)
-        return await _integration_status_degraded(session, user, owner_id=oid)
+        return await _integration_status_degraded(session, user, owner_id=owner_id)
 
 
 @router.get("", response_model=IntegrationStatusOut)
@@ -872,6 +874,7 @@ async def integration_status(
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
     oid = workspace_owner_id(user)
+    auth_uid = int(user.id)
     try:
         try:
             out = await _integration_status_or_migrate(session, user)
@@ -882,7 +885,9 @@ async def integration_status(
             except Exception:
                 pass
             out = await _integration_status_degraded(session, user, owner_id=oid)
-        return await _recover_integration_status_if_needed(session, user, out)
+        return await _recover_integration_status_if_needed(
+            session, user, out, owner_id=oid, auth_user_id=auth_uid
+        )
     except Exception as exc:
         log.exception("GET /integrations fatal: %s", exc)
         try:
