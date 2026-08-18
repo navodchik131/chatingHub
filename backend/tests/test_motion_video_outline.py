@@ -140,3 +140,28 @@ def test_append_motion_original_audio_prompt():
     assert "@Video1" in out
     again = append_motion_original_audio_prompt(out)
     assert again == out
+
+
+def test_outline_ffmpeg_keeps_audio_when_source_has_it(monkeypatch):
+    from app.services.motion_video_outline import EdgeOutlineParams, _outline_ffmpeg_cmd
+
+    monkeypatch.setattr("app.services.motion_video_outline._ffmpeg_bin", lambda: "ffmpeg")
+    params = EdgeOutlineParams(sigma=1.0, low=0.06, high=0.18, out_w=540, out_h=960)
+    with_audio = _outline_ffmpeg_cmd(
+        Path("/tmp/src.mp4"),
+        Path("/tmp/out.mp4"),
+        params,
+        keep_audio=True,
+    )
+    assert "-an" not in with_audio
+    assert "0:a:0" in with_audio
+    assert "aac" in with_audio
+
+    silent = _outline_ffmpeg_cmd(
+        Path("/tmp/src.mp4"),
+        Path("/tmp/out.mp4"),
+        params,
+        keep_audio=False,
+    )
+    assert "-an" in silent
+    assert "0:a:0" not in silent

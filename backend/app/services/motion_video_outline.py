@@ -277,7 +277,7 @@ def measure_gray_stats(path: Path) -> tuple[float, float]:
 def _cache_key(meta: MotionVideoInputMeta, params: EdgeOutlineParams) -> str:
     raw = (
         f"{meta.content_sha256}|{params.sigma}|{params.low}|{params.high}|"
-        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}|audio-v2"
+        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}|audio-v3"
     )
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -349,10 +349,13 @@ def _build_vf(params: EdgeOutlineParams) -> str:
     )
 
 
-def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        dest.unlink()
+def _outline_ffmpeg_cmd(
+    source: Path,
+    dest: Path,
+    params: EdgeOutlineParams,
+    *,
+    keep_audio: bool,
+) -> list[str]:
     cmd = [
         _ffmpeg_bin(),
         "-v",
@@ -360,6 +363,8 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
         "-y",
         "-i",
         str(source),
+        "-map",
+        "0:v:0",
         "-vf",
         _build_vf(params),
         "-c:v",
@@ -370,9 +375,34 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
         "28",
         "-pix_fmt",
         "yuv420p",
-        "-an",
-        str(dest),
     ]
+    if keep_audio:
+        cmd.extend(
+            [
+                "-map",
+                "0:a:0",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-ac",
+                "2",
+                "-ar",
+                "44100",
+            ]
+        )
+    else:
+        cmd.append("-an")
+    cmd.append(str(dest))
+    return cmd
+
+
+def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        dest.unlink()
+    keep_audio = source_has_audio_stream(source)
+    cmd = _outline_ffmpeg_cmd(source, dest, params, keep_audio=keep_audio)
     timeout = max(30, int(settings.motion_outline_render_timeout_sec))
     r = _run_cmd(cmd, timeout=timeout)
     if r.returncode != 0:
@@ -385,7 +415,10 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
     if not _moov_valid(dest):
         dest.unlink(missing_ok=True)
         raise RuntimeError("Обработка видео прервалась — файл битый. Повторите загрузку.")
-    mux_original_audio_onto_video(dest, source)
+    if keep_audio and not source_has_audio_stream(dest):
+        if not mux_original_audio_onto_video(dest, source):
+            dest.unlink(missing_ok=True)
+            raise RuntimeError("После обработки референс-видео пропал звук.")
 
 
 def _mean_adjacent_frame_delta(path: Path) -> float:
@@ -662,12 +695,17 @@ async def ensure_motion_outline_ready(owner_id: int, file_id: str) -> None:
     if source is not None:
         existing = resolve_motion_video_file(owner_id, fid)
         if existing is not None:
-            def _restore_existing() -> None:
-                mux_original_audio_onto_video(existing, source)
+            def _restore_existing() -> bool:
                 extract_motion_audio_file(owner_id=owner_id, file_id=fid, source=source)
+                if not source_has_audio_stream(source):
+                    return True
+                if source_has_audio_stream(existing):
+                    return True
+                return mux_original_audio_onto_video(existing, source)
 
-            await anyio.to_thread.run_sync(_restore_existing)
-            return
+            if await anyio.to_thread.run_sync(_restore_existing):
+                return
+            log.info("motion outline: silent cache, re-render with audio file_id=%s", fid)
         log.info("motion outline: processing source for file_id=%s", fid)
     else:
         legacy = resolve_motion_video_file(owner_id, fid)
