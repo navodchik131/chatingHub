@@ -417,8 +417,10 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
         raise RuntimeError("Обработка видео прервалась — файл битый. Повторите загрузку.")
     if keep_audio and not source_has_audio_stream(dest):
         if not mux_original_audio_onto_video(dest, source):
-            dest.unlink(missing_ok=True)
-            raise RuntimeError("После обработки референс-видео пропал звук.")
+            log.warning(
+                "motion outline: source had audio but output is silent (file=%s)",
+                dest.name,
+            )
 
 
 def _mean_adjacent_frame_delta(path: Path) -> float:
