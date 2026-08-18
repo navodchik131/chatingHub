@@ -20,7 +20,7 @@ def test_wavespeed_tags_to_evolink():
     assert wavespeed_tags_to_evolink("Identity @Image1, motion @Video1") == (
         "Identity @image1, motion @video1"
     )
-    assert wavespeed_tags_to_evolink("@Image2 @Video3") == "@image2 @video3"
+    assert wavespeed_tags_to_evolink("@Image2 @Video3 @Audio1") == "@image2 @video3 @audio1"
 
 
 def test_resolve_evolink_model_variants():
@@ -112,3 +112,16 @@ def test_upload_filename_motion_video_jwt_url_uses_mp4_not_jpg():
     )
     assert name.endswith(".mp4"), name
     assert mime.startswith("video/")
+
+
+def test_upload_filename_motion_audio_jwt_url_uses_mp3_not_jpg():
+    mp3_head = b"ID3" + b"\x00" * 64
+    url = "https://model-mate.online/api/studio/public-motion-audio?t=token"
+    name, mime = _upload_filename_for_bytes(
+        url,
+        mp3_head,
+        default_stem="audio_1",
+        media_kind="audio",
+    )
+    assert name.endswith(".mp3"), name
+    assert mime.startswith("audio/")

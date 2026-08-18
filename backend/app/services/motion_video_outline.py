@@ -19,6 +19,8 @@ from app.services.studio_motion_video import (
     _ext_for_filename,
     _ffmpeg_bin,
     _ffprobe_bin,
+    extract_motion_audio_file,
+    mux_original_audio_onto_video,
     resolve_motion_video_file,
     resolve_motion_video_source,
 )
@@ -32,6 +34,12 @@ MOTION_OUTLINE_VIDEO_PROMPT_TEMPLATE = (
     "path, framing, timing, body movement and gesture only — it contains no "
     "readable face, hair, skin or clothing detail by construction. "
     "All appearance comes from {appearance_refs}."
+)
+
+MOTION_ORIGINAL_AUDIO_PROMPT = (
+    "@Audio1 is the original soundtrack of the motion clip. "
+    "Use @Audio1 as the output soundtrack — keep speech, music, timing and "
+    "sound effects in sync with @Video1. Do not replace it with new music."
 )
 
 _RENDER_SEM = threading.Semaphore(max(1, int(getattr(settings, "motion_outline_max_parallel", 1) or 1)))
@@ -72,6 +80,13 @@ def assert_ffmpeg_tools_available() -> None:
 def motion_outline_video_prompt_block(*, appearance_refs: str) -> str:
     refs = (appearance_refs or "@Image1").strip()
     return MOTION_OUTLINE_VIDEO_PROMPT_TEMPLATE.format(appearance_refs=refs)
+
+
+def append_motion_original_audio_prompt(prompt: str) -> str:
+    text = (prompt or "").strip()
+    if not text or "@Audio1" in text or "@audio1" in text:
+        return text
+    return f"{text}\n\n{MOTION_ORIGINAL_AUDIO_PROMPT}"
 
 
 def _run_cmd(
@@ -262,7 +277,7 @@ def measure_gray_stats(path: Path) -> tuple[float, float]:
 def _cache_key(meta: MotionVideoInputMeta, params: EdgeOutlineParams) -> str:
     raw = (
         f"{meta.content_sha256}|{params.sigma}|{params.low}|{params.high}|"
-        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}|audio-v1"
+        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}|audio-v2"
     )
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -312,9 +327,9 @@ def source_has_audio_stream(path: Path) -> bool:
             "-select_streams",
             "a:0",
             "-show_entries",
-            "stream=codec_type",
+            "stream=codec_name",
             "-of",
-            "csv=p=0",
+            "default=noprint_wrappers=1:nokey=1",
             str(path),
         ],
         timeout=30,
@@ -322,7 +337,7 @@ def source_has_audio_stream(path: Path) -> bool:
     if r.returncode != 0:
         return False
     out = r.stdout if isinstance(r.stdout, str) else (r.stdout or b"").decode("utf-8", errors="replace")
-    return "audio" in out.lower()
+    return bool(out.strip())
 
 
 def _build_vf(params: EdgeOutlineParams) -> str:
@@ -355,12 +370,9 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
         "28",
         "-pix_fmt",
         "yuv420p",
+        "-an",
+        str(dest),
     ]
-    if source_has_audio_stream(source):
-        cmd.extend(["-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "44100"])
-    else:
-        cmd.append("-an")
-    cmd.append(str(dest))
     timeout = max(30, int(settings.motion_outline_render_timeout_sec))
     r = _run_cmd(cmd, timeout=timeout)
     if r.returncode != 0:
@@ -373,6 +385,7 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
     if not _moov_valid(dest):
         dest.unlink(missing_ok=True)
         raise RuntimeError("Обработка видео прервалась — файл битый. Повторите загрузку.")
+    mux_original_audio_onto_video(dest, source)
 
 
 def _mean_adjacent_frame_delta(path: Path) -> float:
@@ -645,36 +658,48 @@ async def ensure_motion_outline_ready(owner_id: int, file_id: str) -> None:
         raise RuntimeError("Не указан motion_video_file_id.")
 
     source = resolve_motion_video_source(owner_id, fid)
+
     if source is not None:
         existing = resolve_motion_video_file(owner_id, fid)
         if existing is not None:
-            try:
-                restore_audio = source_has_audio_stream(source) and not source_has_audio_stream(existing)
-            except Exception:
-                restore_audio = False
-            if not restore_audio:
-                return
-            log.info("motion outline: re-render to restore audio file_id=%s", fid)
-        else:
-            log.info("motion outline: processing source for file_id=%s", fid)
+            def _restore_existing() -> None:
+                mux_original_audio_onto_video(existing, source)
+                extract_motion_audio_file(owner_id=owner_id, file_id=fid, source=source)
+
+            await anyio.to_thread.run_sync(_restore_existing)
+            return
+        log.info("motion outline: processing source for file_id=%s", fid)
     else:
         legacy = resolve_motion_video_file(owner_id, fid)
         if legacy is None:
             raise RuntimeError("Референс-видео не найдено. Загрузите файл снова.")
         marker = legacy.parent / f"{fid}.outlined"
         if marker.is_file():
+            def _restore_legacy() -> None:
+                mux_original_audio_onto_video(legacy, legacy)
+                extract_motion_audio_file(owner_id=owner_id, file_id=fid, source=legacy)
+
+            await anyio.to_thread.run_sync(_restore_legacy)
             return
         log.info("motion outline: legacy raw clip file_id=%s (no .source)", fid)
         source = legacy
 
     result = await anyio.to_thread.run_sync(process_motion_video_outline, source)
     try:
-        publish_outline_for_owner(owner_id=owner_id, file_id=fid, outline=result.outline_path)
-        if resolve_motion_video_source(owner_id, fid) is None:
-            marker_path = (
-                resolve_motion_video_file(owner_id, fid) or source
-            ).parent / f"{fid}.outlined"
-            marker_path.write_text("1", encoding="utf-8")
+        def _publish_and_audio() -> None:
+            publish_outline_for_owner(owner_id=owner_id, file_id=fid, outline=result.outline_path)
+            published = resolve_motion_video_file(owner_id, fid)
+            audio_src = resolve_motion_video_source(owner_id, fid) or source
+            if published is not None:
+                mux_original_audio_onto_video(published, audio_src)
+            extract_motion_audio_file(owner_id=owner_id, file_id=fid, source=audio_src)
+            if resolve_motion_video_source(owner_id, fid) is None:
+                marker_path = (
+                    resolve_motion_video_file(owner_id, fid) or source
+                ).parent / f"{fid}.outlined"
+                marker_path.write_text("1", encoding="utf-8")
+
+        await anyio.to_thread.run_sync(_publish_and_audio)
     finally:
         result.outline_path.unlink(missing_ok=True)
 

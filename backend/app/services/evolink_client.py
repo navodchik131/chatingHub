@@ -225,8 +225,14 @@ def _sniff_media_ext(data: bytes) -> str | None:
         return ".mp4"
     if len(data) >= 4 and data[:4] == b"\x1aE\xdf\xa3":
         return ".webm"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return ".wav"
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return ".webp"
+    if len(data) >= 3 and data[:3] == b"ID3":
+        return ".mp3"
+    if len(data) >= 2 and data[0] == 0xFF and data[1] in (0xFB, 0xF3, 0xF2):
+        return ".mp3"
     if len(data) >= 3 and data[:3] == b"\xff\xd8\xff":
         return ".jpg"
     if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
@@ -253,6 +259,9 @@ def _upload_filename_for_bytes(
     elif path.endswith("/studio/public-motion-video") or kind == "video":
         ext = sniffed or ".mp4"
         stem = default_stem
+    elif path.endswith("/studio/public-motion-audio") or kind == "audio":
+        ext = sniffed or ".mp3"
+        stem = default_stem
     elif sniffed:
         ext = sniffed
         stem = default_stem
@@ -272,6 +281,8 @@ def _upload_filename_for_bytes(
     mime = mimetypes.guess_type(f"{stem}{ext}")[0] or "application/octet-stream"
     if ext in (".mp4", ".webm", ".mov") and not mime.startswith("video/"):
         mime = "video/mp4" if ext == ".mp4" else mime
+    if ext in (".mp3", ".wav", ".m4a") and not mime.startswith("audio/"):
+        mime = "audio/mpeg" if ext == ".mp3" else ("audio/wav" if ext == ".wav" else "audio/mp4")
     if ext in (".jpg", ".jpeg", ".png", ".webp") and not mime.startswith("image/"):
         mime = "image/jpeg"
     return f"{stem}{ext}", mime
@@ -364,7 +375,12 @@ async def evolink_mirror_media_urls(
             continue
         data = await _load_media_bytes_for_evolink_mirror(url, session=session)
         default_stem = f"{label.lower()}_{i}"
-        media_kind = "video" if label.lower().startswith("video") else "image"
+        if label.lower().startswith("video"):
+            media_kind = "video"
+        elif label.lower().startswith("audio"):
+            media_kind = "audio"
+        else:
+            media_kind = "image"
         filename, mime = _upload_filename_for_bytes(
             url,
             data,
@@ -439,6 +455,7 @@ async def seedance_evolink_video_url(
     variant: EvolinkSeedanceVariant | str = "standard",
     image_urls: list[str] | None = None,
     video_urls: list[str] | None = None,
+    audio_urls: list[str] | None = None,
     aspect_ratio: str | None = None,
     resolution: str | None = None,
     duration: int | None = None,
@@ -451,8 +468,10 @@ async def seedance_evolink_video_url(
     api_key = evolink_platform_api_key()
     imgs = [u.strip() for u in (image_urls or []) if (u or "").strip()]
     vids = [u.strip() for u in (video_urls or []) if (u or "").strip()]
+    auds = [u.strip() for u in (audio_urls or []) if (u or "").strip()]
     imgs = await evolink_mirror_media_urls(imgs, session=session, label="Image")
     vids = await evolink_mirror_media_urls(vids, session=session, label="Video")
+    auds = await evolink_mirror_media_urls(auds, session=session, label="Audio")
     has_vids = bool(vids)
     has_imgs = bool(imgs)
     image_to_video = has_imgs and not has_vids and len(imgs) == 1
@@ -483,17 +502,21 @@ async def seedance_evolink_video_url(
         body["image_urls"] = imgs[:30]
     if has_vids:
         body["video_urls"] = vids[:10]
+    if auds:
+        body["audio_urls"] = auds[:3]
 
     await assert_evolink_media_urls_reachable(imgs, label="Image", session=session)
     await assert_evolink_media_urls_reachable(vids, label="Video", session=session)
+    await assert_evolink_media_urls_reachable(auds, label="Audio", session=session)
 
     log.info(
-        "evolink submit prepare model=%s dur=%s quality=%s imgs=%s vids=%s i2v=%s",
+        "evolink submit prepare model=%s dur=%s quality=%s imgs=%s vids=%s auds=%s i2v=%s",
         model,
         body.get("duration"),
         quality,
         len(imgs),
         len(vids),
+        len(auds),
         image_to_video,
     )
 

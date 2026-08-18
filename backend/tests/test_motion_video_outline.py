@@ -111,7 +111,7 @@ def test_source_has_audio_stream_true_and_false(monkeypatch):
     def fake_run(cmd, *, timeout, binary_stdout=False):
         class R:
             returncode = 0
-            stdout = "audio\n"
+            stdout = "aac\n"
             stderr = ""
 
         return R()
@@ -130,3 +130,13 @@ def test_source_has_audio_stream_true_and_false(monkeypatch):
 
     monkeypatch.setattr("app.services.motion_video_outline._run_cmd", fake_run_empty)
     assert source_has_audio_stream(Path("/tmp/silent.mp4")) is False
+
+
+def test_append_motion_original_audio_prompt():
+    from app.services.motion_video_outline import append_motion_original_audio_prompt
+
+    out = append_motion_original_audio_prompt("Replace the person in @Video1.")
+    assert "@Audio1" in out
+    assert "@Video1" in out
+    again = append_motion_original_audio_prompt(out)
+    assert again == out

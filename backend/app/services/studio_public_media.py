@@ -95,4 +95,16 @@ async def read_studio_public_media_bytes(
             return None
         return vpath.read_bytes()
 
+    if path.endswith("/studio/public-motion-audio"):
+        try:
+            uid, file_id = decode_motion_video_access_token(tok)
+        except ValueError:
+            return None
+        from app.services.studio_motion_video import resolve_motion_audio_file
+
+        apath = resolve_motion_audio_file(uid, file_id)
+        if apath is None or not apath.is_file():
+            return None
+        return apath.read_bytes()
+
     return None

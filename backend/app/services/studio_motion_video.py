@@ -83,9 +83,9 @@ def probe_video_has_audio(video_path: Path) -> bool:
                 "-select_streams",
                 "a:0",
                 "-show_entries",
-                "stream=codec_type",
+                "stream=codec_name",
                 "-of",
-                "csv=p=0",
+                "default=noprint_wrappers=1:nokey=1",
                 str(video_path),
             ],
             check=False,
@@ -93,9 +93,153 @@ def probe_video_has_audio(video_path: Path) -> bool:
             text=True,
             timeout=30,
         )
-        return r.returncode == 0 and "audio" in (r.stdout or "").lower()
+        name = (r.stdout or "").strip().lower()
+        return r.returncode == 0 and bool(name)
     except Exception:
         return False
+
+
+def mux_original_audio_onto_video(video_path: Path, audio_source: Path) -> bool:
+    """Накладывает аудио из исходника на уже готовый ролик (без перекодирования картинки)."""
+    if not video_path.is_file() or not audio_source.is_file():
+        return False
+    if not probe_video_has_audio(audio_source):
+        return False
+    if probe_video_has_audio(video_path):
+        return True
+    fd, tmp_path_str = tempfile.mkstemp(prefix="motion_mux_", suffix=".mp4")
+    os.close(fd)
+    tmp_path = Path(tmp_path_str)
+    try:
+        cmd = [
+            _ffmpeg_bin(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(video_path),
+            "-i",
+            str(audio_source),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-ac",
+            "2",
+            "-ar",
+            "44100",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            str(tmp_path),
+        ]
+        r = subprocess.run(cmd, check=False, timeout=600, capture_output=True)
+        if r.returncode != 0 or not tmp_path.is_file() or tmp_path.stat().st_size < 1024:
+            log_motion.warning(
+                "motion audio mux failed: %s",
+                (r.stderr or b"").decode("utf-8", errors="replace")[:800],
+            )
+            tmp_path.unlink(missing_ok=True)
+            return False
+        video_path.unlink(missing_ok=True)
+        tmp_path.replace(video_path)
+        return probe_video_has_audio(video_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        log_motion.warning("motion audio mux failed", exc_info=True)
+        return False
+
+
+def _owner_motion_dir(owner_id: int) -> Path:
+    owner_dir = (MOTION_VIDEO_ROOT / str(int(owner_id))).resolve()
+    root = MOTION_VIDEO_ROOT.resolve()
+    if not str(owner_dir).startswith(str(root)):
+        raise RuntimeError("invalid motion video path")
+    owner_dir.mkdir(parents=True, exist_ok=True)
+    return owner_dir
+
+
+def resolve_motion_audio_file(owner_id: int, file_id: str) -> Path | None:
+    fid = str(file_id or "").strip()[:128]
+    if not fid:
+        return None
+    try:
+        base = _owner_motion_dir(owner_id)
+    except RuntimeError:
+        return None
+    for name in (f"{fid}.audio.mp3", f"{fid}.audio.wav"):
+        path = base / name
+        if path.is_file() and path.stat().st_size > 256:
+            rp = path.resolve()
+            if str(rp).startswith(str(base)):
+                return rp
+    return None
+
+
+def extract_motion_audio_file(
+    *,
+    owner_id: int,
+    file_id: str,
+    source: Path,
+    target_sec: int | None = None,
+) -> Path | None:
+    """Вынимает звук исходника в mp3/wav рядом с motion-файлом — для Seedance @Audio1."""
+    fid = str(file_id or "").strip()[:128]
+    if not fid or not source.is_file() or not probe_video_has_audio(source):
+        return None
+    existing = resolve_motion_audio_file(owner_id, fid)
+    if existing is not None and not target_sec:
+        return existing
+    if existing is not None:
+        existing.unlink(missing_ok=True)
+    dest_mp3 = _owner_motion_dir(owner_id) / f"{fid}.audio.mp3"
+    dest_wav = _owner_motion_dir(owner_id) / f"{fid}.audio.wav"
+    dur_args: list[str] = []
+    if target_sec and int(target_sec) > 0:
+        target = max(1, min(30, int(target_sec)))
+        src_dur = probe_video_duration_seconds(source) or 0.0
+        if src_dur > target + 0.25:
+            dur_args.extend(["-t", str(target)])
+        elif src_dur > 0 and src_dur < target - 0.25:
+            pad = max(0.05, target - src_dur)
+            dur_args.extend(["-af", f"apad=pad_dur={pad:.3f}", "-t", str(target)])
+    attempts: list[tuple[Path, list[str]]] = [
+        (dest_mp3, ["-c:a", "libmp3lame", "-q:a", "4", "-ac", "2", "-ar", "44100"]),
+        (dest_wav, ["-c:a", "pcm_s16le", "-ac", "2", "-ar", "44100"]),
+    ]
+    for dest, codec in attempts:
+        dest.unlink(missing_ok=True)
+        cmd = [
+            _ffmpeg_bin(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source),
+            "-vn",
+            *dur_args,
+            *codec,
+            str(dest),
+        ]
+        try:
+            r = subprocess.run(cmd, check=False, timeout=180, capture_output=True)
+        except Exception:
+            dest.unlink(missing_ok=True)
+            continue
+        if r.returncode == 0 and dest.is_file() and dest.stat().st_size > 256:
+            log_motion.info("motion audio extracted file_id=%s dest=%s", fid, dest.name)
+            return dest
+        dest.unlink(missing_ok=True)
+    log_motion.warning("motion audio extract failed file_id=%s", fid)
+    return None
 
 
 def fit_motion_video_to_duration(source: Path, target_sec: int) -> tuple[Path, bool]:
@@ -175,6 +319,8 @@ def prepare_motion_video_file_for_duration(
     При необходимости подгоняет длительность и сохраняет копию на диск.
     Возвращает (file_id_for_url, path_on_disk, duration_sec).
     """
+    audio_src = resolve_motion_video_source(owner_id, file_id) or source_path
+    mux_original_audio_onto_video(source_path, audio_src)
     fit_path, is_temp = fit_motion_video_to_duration(source_path, target_sec)
     out_id = file_id
     out_path = source_path
@@ -188,6 +334,13 @@ def prepare_motion_video_file_for_duration(
             resolved = resolve_motion_video_file(owner_id, out_id)
             if resolved is not None:
                 out_path = resolved
+                mux_original_audio_onto_video(out_path, audio_src)
+        extract_motion_audio_file(
+            owner_id=owner_id,
+            file_id=out_id,
+            source=audio_src,
+            target_sec=target_sec,
+        )
         probed = probe_video_duration_seconds(out_path)
         dur = int(math.ceil(probed)) if probed and probed > 0 else int(target_sec)
         return out_id, out_path, dur

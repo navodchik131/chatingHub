@@ -36,7 +36,7 @@ from app.services.studio_image_token import (
     create_model_image_access_token,
     create_motion_video_access_token,
 )
-from app.services.studio_motion_video import resolve_motion_video_file
+from app.services.studio_motion_video import resolve_motion_audio_file, resolve_motion_video_file
 from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
     build_seedance_t2v_prompt,
@@ -186,6 +186,7 @@ async def execute_evolink_motion_render_video(
         n_start = 1
 
     motion_vid_url: str | None = None
+    motion_aud_url: str | None = None
     motion_summary = motion_timeline or None
     vpath = None
     ref_video_duration: int | None = None
@@ -207,6 +208,8 @@ async def execute_evolink_motion_render_video(
         )
         vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
         motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
+        if _truthy_flag(generate_audio) and resolve_motion_audio_file(oid, mv_id_eff) is not None:
+            motion_aud_url = f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
 
     ref_images: list[str] = []
     ref_videos = [motion_vid_url] if motion_vid_url else []
@@ -288,6 +291,10 @@ async def execute_evolink_motion_render_video(
         remove_face_grid=False,
         soft_identity=False,
     )
+    if motion_aud_url:
+        from app.services.motion_video_outline import append_motion_original_audio_prompt
+
+        seed_prompt = append_motion_original_audio_prompt(seed_prompt)
 
     image_to_video = prompt_only_mode and ff_url and not mv_id and not model_imgs
     evolink_images = [ff_url] if image_to_video and ff_url else ref_images
@@ -313,6 +320,7 @@ async def execute_evolink_motion_render_video(
             variant=seedance_v,
             image_urls=evolink_images or None,
             video_urls=ref_videos or None,
+            audio_urls=[motion_aud_url] if motion_aud_url else None,
             aspect_ratio=ar_t2v,
             resolution=video_res,
             duration=ds_effective,

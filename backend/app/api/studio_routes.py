@@ -239,6 +239,7 @@ from app.services import studio_jobs
 from app.services.studio_motion_video import (
     extract_first_frame_jpeg,
     extract_video_sample_frames_jpeg,
+    resolve_motion_audio_file,
     resolve_motion_video_file,
     resolve_motion_video_uploaded,
     save_motion_video_bytes,
@@ -1320,6 +1321,22 @@ async def public_studio_motion_video(t: str) -> FileResponse:
     if path is None or not path.is_file():
         raise HTTPException(status_code=404, detail="Не найдено") from None
     mime = mimetypes.guess_type(path.name)[0] or "video/mp4"
+    return FileResponse(path, media_type=mime)
+
+
+@router.get("/studio/public-motion-audio")
+async def public_studio_motion_audio(t: str) -> FileResponse:
+    """Исходный звук референс-видео по JWT — Seedance @Audio1."""
+    try:
+        uid, fid = decode_motion_video_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    path = resolve_motion_audio_file(uid, fid)
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    mime = mimetypes.guess_type(path.name)[0] or (
+        "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
+    )
     return FileResponse(path, media_type=mime)
 
 
@@ -6631,6 +6648,7 @@ async def _studio_job_execute_motion_render_video(
             await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
 
     motion_vid_url: str | None = None
+    motion_aud_url: str | None = None
     motion_summary: str | None = motion_timeline or None
     vpath = None
     if mv_id:
@@ -6654,6 +6672,13 @@ async def _studio_job_execute_motion_render_video(
             motion_vid_url = (
                 f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
             )
+            if (
+                _truthy_wavespeed_flag(generate_audio)
+                and resolve_motion_audio_file(oid, mv_id_eff) is not None
+            ):
+                motion_aud_url = (
+                    f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
+                )
             if _truthy_wavespeed_flag(auto_motion_prompt) and not motion_summary:
                 try:
                     if (
@@ -7118,6 +7143,11 @@ async def _studio_job_execute_motion_render_video(
                 soft_identity=False,
             )
 
+        if motion_aud_url:
+            from app.services.motion_video_outline import append_motion_original_audio_prompt
+
+            seed_prompt = append_motion_original_audio_prompt(seed_prompt)
+
         if not use_seedance_i2v:
             try:
                 if use_boardstory_video_edit:
@@ -7145,6 +7175,7 @@ async def _studio_job_execute_motion_render_video(
                         prompt=seed_prompt,
                         reference_images=ref_images or None,
                         reference_videos=ref_videos or None,
+                        reference_audios=[motion_aud_url] if motion_aud_url else None,
                         aspect_ratio=ar_t2v,
                         resolution=video_res,
                         duration=ds_effective,
