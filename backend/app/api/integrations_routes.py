@@ -1124,9 +1124,16 @@ async def put_telegram(
     except Exception as e:
         await session.rollback()
         log.exception("put_telegram failed user=%s owner=%s", user.id, oid)
+        # В 500 важно вернуть хотя бы тип и короткий текст исключения,
+        # иначе в UI невозможно понять, почему добавление второго TG-канала падает.
+        # Секреты (токены) в исключениях обычно не печатаются, но всё равно режем строку.
+        err_txt = str(e)[:400].strip()
         raise HTTPException(
             status_code=500,
-            detail="Не удалось сохранить подключение Telegram. Обновите сервер (миграции БД) или проверьте FERNET_KEY.",
+            detail=(
+                "Не удалось сохранить подключение Telegram. "
+                f"{e.__class__.__name__}: {err_txt}"
+            ),
         ) from e
 
 
