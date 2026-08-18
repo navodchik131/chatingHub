@@ -103,3 +103,30 @@ def test_detect_face_in_jpeg_graceful_without_cascade(monkeypatch):
     monkeypatch.setitem(sys.modules, "cv2", FakeCv2())
     monkeypatch.setitem(sys.modules, "numpy", __import__("numpy"))
     assert _detect_face_in_jpeg(b"\xff\xd8\xff") is False
+
+
+def test_source_has_audio_stream_true_and_false(monkeypatch):
+    from app.services.motion_video_outline import source_has_audio_stream
+
+    def fake_run(cmd, *, timeout, binary_stdout=False):
+        class R:
+            returncode = 0
+            stdout = "audio\n"
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr("app.services.motion_video_outline._run_cmd", fake_run)
+    monkeypatch.setattr("app.services.motion_video_outline._ffprobe_bin", lambda: "ffprobe")
+    assert source_has_audio_stream(Path("/tmp/with-audio.mp4")) is True
+
+    def fake_run_empty(cmd, *, timeout, binary_stdout=False):
+        class R:
+            returncode = 1
+            stdout = ""
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr("app.services.motion_video_outline._run_cmd", fake_run_empty)
+    assert source_has_audio_stream(Path("/tmp/silent.mp4")) is False

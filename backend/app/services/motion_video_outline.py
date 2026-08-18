@@ -262,7 +262,7 @@ def measure_gray_stats(path: Path) -> tuple[float, float]:
 def _cache_key(meta: MotionVideoInputMeta, params: EdgeOutlineParams) -> str:
     raw = (
         f"{meta.content_sha256}|{params.sigma}|{params.low}|{params.high}|"
-        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}"
+        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}|audio-v1"
     )
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -303,6 +303,28 @@ def _save_cache(key: str, outline: Path, params: EdgeOutlineParams, meta: Motion
     )
 
 
+def source_has_audio_stream(path: Path) -> bool:
+    r = _run_cmd(
+        [
+            _ffprobe_bin(),
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "csv=p=0",
+            str(path),
+        ],
+        timeout=30,
+    )
+    if r.returncode != 0:
+        return False
+    out = r.stdout if isinstance(r.stdout, str) else (r.stdout or b"").decode("utf-8", errors="replace")
+    return "audio" in out.lower()
+
+
 def _build_vf(params: EdgeOutlineParams) -> str:
     p = params
     return (
@@ -325,7 +347,6 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
         str(source),
         "-vf",
         _build_vf(params),
-        "-an",
         "-c:v",
         "libx264",
         "-preset",
@@ -334,8 +355,12 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
         "28",
         "-pix_fmt",
         "yuv420p",
-        str(dest),
     ]
+    if source_has_audio_stream(source):
+        cmd.extend(["-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "44100"])
+    else:
+        cmd.append("-an")
+    cmd.append(str(dest))
     timeout = max(30, int(settings.motion_outline_render_timeout_sec))
     r = _run_cmd(cmd, timeout=timeout)
     if r.returncode != 0:
@@ -621,9 +646,17 @@ async def ensure_motion_outline_ready(owner_id: int, file_id: str) -> None:
 
     source = resolve_motion_video_source(owner_id, fid)
     if source is not None:
-        if resolve_motion_video_file(owner_id, fid) is not None:
-            return
-        log.info("motion outline: processing source for file_id=%s", fid)
+        existing = resolve_motion_video_file(owner_id, fid)
+        if existing is not None:
+            try:
+                restore_audio = source_has_audio_stream(source) and not source_has_audio_stream(existing)
+            except Exception:
+                restore_audio = False
+            if not restore_audio:
+                return
+            log.info("motion outline: re-render to restore audio file_id=%s", fid)
+        else:
+            log.info("motion outline: processing source for file_id=%s", fid)
     else:
         legacy = resolve_motion_video_file(owner_id, fid)
         if legacy is None:

@@ -73,6 +73,31 @@ def probe_video_duration_seconds(video_path: Path) -> float | None:
         return None
 
 
+def probe_video_has_audio(video_path: Path) -> bool:
+    try:
+        r = subprocess.run(
+            [
+                _ffprobe_bin(),
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
+                str(video_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return r.returncode == 0 and "audio" in (r.stdout or "").lower()
+    except Exception:
+        return False
+
+
 def fit_motion_video_to_duration(source: Path, target_sec: int) -> tuple[Path, bool]:
     """
     Подгоняет референс под целевую длительность: обрезка или дополнение последним кадром.
@@ -85,6 +110,7 @@ def fit_motion_video_to_duration(source: Path, target_sec: int) -> tuple[Path, b
     if abs(src_dur - target) < 0.35:
         return source, False
 
+    has_audio = probe_video_has_audio(source)
     fd, tmp_path_str = tempfile.mkstemp(prefix="motion_fit_", suffix=".mp4")
     os.close(fd)
     out_path = Path(tmp_path_str)
@@ -103,6 +129,8 @@ def fit_motion_video_to_duration(source: Path, target_sec: int) -> tuple[Path, b
         else:
             pad = max(0.05, target - src_dur)
             cmd.extend(["-vf", f"tpad=stop_mode=clone:stop_duration={pad:.3f}"])
+            if has_audio:
+                cmd.extend(["-af", f"apad=pad_dur={pad:.3f}"])
         cmd.extend(
             [
                 "-movflags",
@@ -115,13 +143,13 @@ def fit_motion_video_to_duration(source: Path, target_sec: int) -> tuple[Path, b
                 "23",
                 "-pix_fmt",
                 "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "128k",
-                str(out_path),
             ]
         )
+        if has_audio:
+            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+        else:
+            cmd.append("-an")
+        cmd.append(str(out_path))
         subprocess.run(cmd, check=True, timeout=600, capture_output=True)
         log_motion.info(
             "motion video fit %.2fs -> %ss (src=%.2fs)",
