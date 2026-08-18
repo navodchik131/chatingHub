@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v8-funnel-steer-2"
+    assert PROMPT_VERSION == "v9-funnel-handoff"
 
     out_msg = Message(
         id=2,
@@ -621,3 +621,74 @@ def test_build_companion_system_prompt_includes_connection_goal():
     assert "STEER" in prompt
     assert "IDENTITY LOCK" in prompt
     assert "sexting" in prompt.lower()
+
+
+def test_funnel_prompt_switches_to_handoff_after_two_replies():
+    from datetime import datetime, timezone
+
+    from app.services.companion_bot.persona import CompanionPersona
+    from app.services.companion_bot.prompt import (
+        analyze_thread_signals,
+        build_companion_system_prompt,
+        build_companion_user_prompt,
+    )
+
+    now = datetime.now(timezone.utc)
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="привет",
+            created_at=now,
+        ),
+        Message(
+            id=2,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_original="приветик",
+            created_at=now,
+        ),
+        Message(
+            id=3,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="как ты?",
+            created_at=now,
+        ),
+        Message(
+            id=4,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_original="нормально, дома пока",
+            created_at=now,
+        ),
+        Message(
+            id=5,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="чем занимаешься",
+            created_at=now,
+        ),
+    ]
+    sig = analyze_thread_signals(messages)
+    assert sig.outbound_count == 2
+    conv = SimpleNamespace(user_display_name="Renat")
+    sys = build_companion_system_prompt(
+        persona_name="Luna",
+        persona_profile="You are Luna.",
+        persona=CompanionPersona(city="Madrid"),
+        target_lang="ru",
+        relationship_score=40,
+        mood="playful",
+        notes=[],
+        messages=messages,
+        connection_platform="instagram",
+        goal_preset="funnel",
+        goal_text="Веди в Telegram",
+        goal_link="https://t.me/luna",
+    )
+    assert "Handoff phase" in sys
+    assert "3-4 sentences max" in sys
+    user = build_companion_user_prompt(conv=conv, messages=messages)
+    assert "FUNNEL HANDOFF" in user

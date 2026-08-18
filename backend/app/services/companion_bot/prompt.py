@@ -12,7 +12,7 @@ from app.services.companion_bot.persona import CompanionPersona, format_companio
 from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v8-funnel-steer-2"
+PROMPT_VERSION = "v9-funnel-handoff"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -118,6 +118,8 @@ class ThreadSignals:
     factual_pressure: bool
     casual_checkin: bool
     last_fan_text: str | None
+    inbound_count: int
+    outbound_count: int
 
 
 def recent_outbound_texts(messages: list[Message], *, limit: int = 4) -> list[str]:
@@ -480,6 +482,8 @@ def analyze_thread_signals(messages: list[Message]) -> ThreadSignals:
         factual_pressure=pressure,
         casual_checkin=casual,
         last_fan_text=last_fan_text,
+        inbound_count=len(inbound),
+        outbound_count=len(outbound),
     )
 
 
@@ -572,6 +576,30 @@ def _initiative_rules(*, followup: bool, signals: ThreadSignals, funnel: bool = 
     if signals.direct_factual or signals.trust_repair:
         return base + "- End on the answer — question optional only if genuinely new, not a recycled flirt hook.\n"
     return base + "- End naturally; questions are optional, not mandatory every time.\n"
+
+
+def _funnel_stage_rules(signals: ThreadSignals) -> str:
+    if signals.outbound_count <= 0:
+        return (
+            "FUNNEL STAGE NOW:\n"
+            "- First reply only: 1-3 short sentences max.\n"
+            "- If fan just said hi/hello/привет, simply greet back and lightly mirror them.\n"
+            "- No long self-disclosure, no essay, no instant promo block unless they directly ask where to chat.\n"
+        )
+    if signals.outbound_count == 1:
+        return (
+            "FUNNEL STAGE NOW:\n"
+            "- Early dialog: give a real short answer, keep it to about 2-4 short sentences.\n"
+            "- You may ask or answer one simple thing, but do NOT settle into a long Instagram conversation.\n"
+            "- Start steering if they keep talking: say you don't really stay in this inbox and invite them to the destination.\n"
+        )
+    return (
+        "FUNNEL STAGE NOW:\n"
+        "- Handoff phase: after 2-3 of your replies here, stop building a long chat in Instagram.\n"
+        "- Answer briefly, then clearly say you don't really chat here and it's better in the destination.\n"
+        "- Include the actual destination link/handle when available.\n"
+        "- Keep it short: usually 3-4 sentences max, not a paragraph essay.\n"
+    )
 
 
 def _format_recent_outbound_ban(recent: list[str]) -> str:
@@ -723,6 +751,7 @@ def build_companion_system_prompt(
         + _fan_tier_block(manual_category)
         + _daily_lore_block(daily_state_json)
         + checkin_note
+        + (_funnel_stage_rules(signals) if funnel else "")
         + f"Character sheet (voice & facts for {persona_name}):\n{profile_block}\n\n"
         f"Relationship warmth: {relationship_score}/100.\n"
         f"Mood subtext: {mood_line}.\n"
@@ -786,6 +815,12 @@ def build_companion_user_prompt(
             focus += (
                 "\nTRUST REPAIR: fan just challenged you — acknowledge, answer the fact, "
                 "do not say «не бот». No tease pivot.\n"
+            )
+        if signals.outbound_count >= 2:
+            focus += (
+                "\nFUNNEL HANDOFF: you've already replied here a couple of times. "
+                "Do not keep a long Instagram back-and-forth. "
+                "After a brief human answer, move them to the destination with the real link/handle.\n"
             )
         focus += _format_fan_reactions_block(trigger_message)
         if signals.greeting_reset and signals.last_fan_text:
