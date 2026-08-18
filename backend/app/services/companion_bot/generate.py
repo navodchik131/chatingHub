@@ -37,6 +37,21 @@ from app.services.studio_openai import _chat_completion_text
 
 log = logging.getLogger(__name__)
 
+
+def companion_chat_model() -> str:
+    """Chat-модель для DM. Reasoning-флагманы слишком дорогие и болтливые для автоответчика."""
+    explicit = (settings.companion_llm_model or "").strip()
+    if explicit:
+        return explicit
+    studio = (settings.openai_studio_model or "").strip()
+    low = studio.lower()
+    if studio and "reasoning" not in low:
+        return studio
+    base = (settings.openai_base_url or "").lower()
+    if "x.ai" in base or low.startswith("grok"):
+        return "grok-3-mini"
+    return "gpt-4o-mini"
+
 _NOTE_KINDS = (
     ConversationNoteKind.ai_profile,
     ConversationNoteKind.ai_daily,
@@ -88,6 +103,8 @@ async def generate_companion_reply(
 
     state = await _load_or_create_state(session, conv.id)
 
+    cfg = await get_companion_config_for_conversation(session, conv, owner_id=owner_id)
+
     sub, llm_row, _, plan, _, _ = await load_owner_studio_billing(session, owner_id)
     cred = studio_llm_credentials(plan=plan, llm_row=llm_row)
 
@@ -114,7 +131,6 @@ async def generate_companion_reply(
 
     target_lang = resolve_target_lang(conv, last_fan_text=last_fan_message_text(messages))
     persona = parse_companion_persona(model_row.companion_persona_json)
-    cfg = await get_companion_config_for_conversation(session, conv, owner_id=owner_id)
     system = build_companion_system_prompt(
         persona_name=model_row.name,
         persona_profile=model_row.profile_text,
@@ -144,7 +160,7 @@ async def generate_companion_reply(
     if style_block:
         system += "\n" + style_block
 
-    model = (settings.openai_studio_model or "").strip() or "gpt-4o-mini"
+    model = companion_chat_model()
     recent = recent_outbound_texts(messages, limit=4)
     signals = analyze_thread_signals(messages)
     extra_avoid: str | None = None

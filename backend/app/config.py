@@ -120,7 +120,14 @@ class Settings(BaseSettings):
     # Опционально, если в кабинете OpenAI несколько org
     openai_organization: str = Field(default="")
     openai_studio_model: str = Field(default="gpt-4o-mini")
-    openai_studio_model_vision: str = Field(default="gpt-4o")
+    openai_studio_model_vision: str = Field(default="gpt-4o-mini")
+    companion_llm_model: str = Field(
+        default="",
+        description=(
+            "Модель автоответчика. Пусто = OPENAI_STUDIO_MODEL, но reasoning-модели "
+            "(grok-*-reasoning и т.п.) автоматически заменяются на дешёвую chat-модель."
+        ),
+    )
     # Двухшаговый Grok (xAI): описание референс-движения → единый промпт под вашу модель + первый кадр
     studio_grok_motion_timeline_enabled: bool = Field(
         default=False,

@@ -62,8 +62,8 @@ function companionGoalOptions(lang) {
 function platformGoalHint(platformId, lang) {
   if (platformId === 'ig') {
     return lang === 'ru'
-      ? 'Instagram: часто цель — мягко вести в Telegram-канал или группу. Не спамь ссылкой каждый раз.'
-      : 'Instagram: often funnel fans to a Telegram channel — hint naturally, not every message.';
+      ? 'Instagram: болтай как обычно и помни диалог, но без сексинга. Когда тепло — веди в Telegram (ссылка из поля ниже).'
+      : 'Instagram: chat normally and remember the thread, but no sexting. When it is warm, steer to Telegram (link below).';
   }
   if (platformId === 'fanvue') {
     return lang === 'ru'
@@ -165,8 +165,8 @@ function CompanionConnectionEditor({
           placeholder={
             goalPreset === 'custom'
               ? (lang === 'ru'
-                ? 'Например: переводи в TG @mychannel, там полный контент. Не чаще 1 раза на 5–7 сообщений.'
-                : 'E.g. funnel to TG @mychannel for full content. Max once per 5–7 messages.')
+                ? 'Например: веди в TG @mychannel. Общайся нормально, но без сексинга — туда зови, когда тепло.'
+                : 'E.g. send them to TG @mychannel. Chat normally, no sexting — invite when the vibe is warm.')
               : (lang === 'ru' ? 'Доп. пожелания к стратегии…' : 'Extra strategy notes…')
           }
           style={{

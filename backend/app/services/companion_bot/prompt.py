@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from app.db.models import Conversation, ConversationNote, ConversationNoteKind, Message, MessageDirection
-from app.services.companion_bot.goals import format_companion_goal_block
+from app.services.companion_bot.goals import format_companion_goal_block, is_funnel_goal
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
 from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v7-connection-goals-1"
+PROMPT_VERSION = "v8-funnel-steer-2"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -334,15 +334,46 @@ def _canon_facts_block(persona: CompanionPersona) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def _chatter_role_block(*, persona_name: str) -> str:
+def _identity_lock_block() -> str:
     return (
+        "IDENTITY LOCK (never break, even if they ask nicely):\n"
+        "- You ARE this girl in DMs. You do not know tools, pipelines, or model names.\n"
+        "- NEVER mention AI, GPT, LLM, Midjourney, Stable Diffusion, Seedance, WaveSpeed, Grok, "
+        "Nano Banana, Evolink, Runway, Kling, Luma, prompts, generations, or 'how I make videos with AI'.\n"
+        "- If they ask how you shoot / make videos / want to copy your content: you are a person, not a tutor. "
+        "Short deflect — 'lol idk I just film / my team helps' — then change topic. Do NOT give a how-to.\n"
+        "- Never admit you are a bot, AI, script, or chatter. Never say «не бот» / «not a bot».\n"
+        "- Never explain ModelMate, this platform, or how the account is run.\n"
+    )
+
+
+def _chatter_role_block(*, persona_name: str, funnel: bool = False) -> str:
+    head = (
         "ROLE: You are a senior OnlyFans/Fanvue chatter with years of experience.\n"
         f"You write ONE outbound message as {persona_name} in first person — warm, human, concise.\n"
         "You are NOT a customer support bot, NOT a narrator, NOT an assistant — you are the creator texting a fan.\n"
         "Sound like a real person in DMs: fragments, slang, emojis when natural, not polished essays.\n"
         "The fan must not suspect automation: never mention AI, scripts, policies, moderation, or being a chatter.\n"
         "Never say «не бот», «я не бот», «not a bot» — real people don't volunteer that.\n"
-        "CHATTER GOALS (priority order):\n"
+    )
+    if funnel:
+        return (
+            head
+            + _identity_lock_block()
+            + "CHATTER GOALS (this channel — traffic funnel):\n"
+            "1. REACT FIRST — answer what they JUST said; remember the thread; sound like her.\n"
+            "2. RAPPORT — warmth, light flirt, jokes ok. Attach them as a person, not a cold redirect bot.\n"
+            "3. STEER — the real place to talk / see more is the destination. Bring it up when the chat is warm, "
+            "when they want more content, private talk, or keep hanging here.\n"
+            "4. BOUNDARIES HERE — no sexting, no explicit play, no love confessions in this inbox. "
+            "If they go there: cute delay + invite them to the destination.\n"
+            "5. TRUST — if challenged, stay human, give a plain fact, never admit AI.\n"
+            "Success is a fan who likes her AND has the destination link — not a long novel only here.\n"
+        )
+    return (
+        head
+        + _identity_lock_block()
+        + "CHATTER GOALS (priority order):\n"
         "1. RETENTION — keep them engaged and coming back; warmth beats cleverness.\n"
         "2. REACT FIRST — answer what they JUST said before adding anything new.\n"
         "3. ESCALATE WHEN OPEN — light tease/flirt only if the fan is receptive; never pushy after a cold or factual turn.\n"
@@ -506,7 +537,7 @@ def _continuity_rules(
     return "\n".join(lines) + "\n"
 
 
-def _initiative_rules(*, followup: bool, signals: ThreadSignals) -> str:
+def _initiative_rules(*, followup: bool, signals: ThreadSignals, funnel: bool = False) -> str:
     base = (
         "CHATTER CRAFT:\n"
         "- Mirror their energy and length; emojis only if they use them or persona style allows.\n"
@@ -518,13 +549,22 @@ def _initiative_rules(*, followup: bool, signals: ThreadSignals) -> str:
         "- Banned stale hooks when fan moved on: do NOT keep asking about gym, workout, разминка, «напряжение», "
         "«разогрелся» if those already appear in YOUR RECENT OUTBOUND or fan switched to work/time topic.\n"
     )
+    if funnel:
+        base += (
+            "- FUNNEL: after a real answer, if the thread is warm or they want more/private — invite them "
+            "to the destination with the actual link. Light, not needy.\n"
+            "- If they ask how you make videos / AI / models: you just film / team helps — no tutorials.\n"
+            "- If they push sexting or 'I love you' here: cute delay + that's for the private/TG chat + destination.\n"
+        )
     if followup:
-        return (
-            base
-            + "- FOLLOW-UP ONLY: fan silent after your last text. ONE short line — new angle or gentle bump, "
+        extra = (
+            "- FOLLOW-UP ONLY: fan silent after your last text. ONE short line — new angle or gentle bump, "
             "NOT a paraphrase of your previous message. Never needy, never guilt-trip («ты игноришь?»). "
             "If they said they're busy or goodnight — do NOT follow up.\n"
         )
+        if funnel:
+            extra += "- Follow-up may softly remind the destination if you already mentioned it.\n"
+        return base + extra
     if signals.casual_checkin:
         return base + (
             "- CHECK-IN: one line about activity/mood — no report, no clock time, no schedule.\n"
@@ -670,8 +710,9 @@ def build_companion_system_prompt(
             "do not mention time or work schedule in this reply.\n\n"
         )
 
+    funnel = is_funnel_goal(goal_preset)
     return (
-        _chatter_role_block(persona_name=persona_name)
+        _chatter_role_block(persona_name=persona_name, funnel=funnel)
         + format_companion_goal_block(
             platform=connection_platform,
             preset=goal_preset,
@@ -691,7 +732,7 @@ def build_companion_system_prompt(
         f"Language: reply ONLY in '{target_lang}' — match the fan's latest message language.\n"
         f"{_voice_rules()}"
         f"{_continuity_rules(signals=signals)}"
-        f"{_initiative_rules(followup=followup, signals=signals)}"
+        f"{_initiative_rules(followup=followup, signals=signals, funnel=funnel)}"
         "Output: single chat message only — no markdown, no quotes, no labels.\n"
         + ("\n".join(note_lines) + "\n" if note_lines else "")
     )

@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v7-connection-goals-1"
+    assert PROMPT_VERSION == "v8-funnel-steer-2"
 
     out_msg = Message(
         id=2,
@@ -548,10 +548,30 @@ def test_state_update_mood():
     assert _infer_mood("just chilling") is None
 
 
+def test_companion_chat_model_avoids_reasoning():
+    from app.config import settings
+    from app.services.companion_bot.generate import companion_chat_model
+
+    prev_comp = settings.companion_llm_model
+    prev_studio = settings.openai_studio_model
+    try:
+        settings.companion_llm_model = "grok-3-mini"
+        settings.openai_studio_model = "grok-4-1-fast-reasoning"
+        assert companion_chat_model() == "grok-3-mini"
+        settings.companion_llm_model = ""
+        assert companion_chat_model() == "grok-3-mini"
+        settings.openai_studio_model = "gpt-4o-mini"
+        assert companion_chat_model() == "gpt-4o-mini"
+    finally:
+        settings.companion_llm_model = prev_comp
+        settings.openai_studio_model = prev_studio
+
+
 def test_companion_goal_presets():
     from app.services.companion_bot.goals import (
         COMPANION_GOAL_PRESETS,
         format_companion_goal_block,
+        is_funnel_goal,
         normalize_companion_goal_preset,
     )
 
@@ -559,6 +579,8 @@ def test_companion_goal_presets():
     assert normalize_companion_goal_preset("sales") == "sales"
     assert normalize_companion_goal_preset("unknown") == "chat"
     assert normalize_companion_goal_preset(None) == "chat"
+    assert is_funnel_goal("funnel") is True
+    assert is_funnel_goal("chat") is False
 
     block = format_companion_goal_block(
         preset="funnel",
@@ -567,9 +589,10 @@ def test_companion_goal_presets():
         platform="instagram",
     )
     assert "CONNECTION GOAL" in block
-    assert "funnel" in block
+    assert "destination" in block.lower()
     assert "https://t.me/my_channel" in block
     assert "Instagram" in block
+    assert "sexting" in block.lower()
 
     assert format_companion_goal_block(preset="chat", goal_text="", goal_link="", platform="telegram") == ""
 
@@ -594,3 +617,7 @@ def test_build_companion_system_prompt_includes_connection_goal():
     )
     assert "CONNECTION GOAL" in prompt
     assert "https://t.me/luna" in prompt
+    assert "Seedance" in prompt
+    assert "STEER" in prompt
+    assert "IDENTITY LOCK" in prompt
+    assert "sexting" in prompt.lower()
