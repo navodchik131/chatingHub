@@ -110,6 +110,37 @@ def _migrate_telegram_webhook_registered_column(sync_conn) -> None:
             )
 
 
+def _migrate_drop_legacy_telegram_user_unique(sync_conn) -> None:
+    """Снять старое one-to-one ограничение, если БД ещё запрещает >1 TG connection на user."""
+    from sqlalchemy import inspect
+
+    if sync_conn.dialect.name != "postgresql":
+        return
+    insp = inspect(sync_conn)
+    if not insp.has_table("telegram_connections"):
+        return
+
+    try:
+        uniques = list(insp.get_unique_constraints("telegram_connections") or [])
+    except Exception:
+        uniques = []
+    for uq in uniques:
+        cols = uq.get("column_names") or []
+        name = (uq.get("name") or "").strip()
+        if name and cols == ["user_id"]:
+            sync_conn.execute(text(f'ALTER TABLE telegram_connections DROP CONSTRAINT IF EXISTS "{name}"'))
+
+    try:
+        indexes = list(insp.get_indexes("telegram_connections") or [])
+    except Exception:
+        indexes = []
+    for idx in indexes:
+        cols = idx.get("column_names") or []
+        name = (idx.get("name") or "").strip()
+        if name and cols == ["user_id"] and idx.get("unique"):
+            sync_conn.execute(text(f'DROP INDEX IF EXISTS "{name}"'))
+
+
 def _migrate_user_is_platform_admin(sync_conn) -> None:
     from sqlalchemy import inspect, text
 
@@ -336,6 +367,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_conversation_outbound_lang)
         await conn.run_sync(_migrate_user_workspace_columns)
         await conn.run_sync(_migrate_telegram_webhook_registered_column)
+        await conn.run_sync(_migrate_drop_legacy_telegram_user_unique)
         await conn.run_sync(_migrate_user_is_platform_admin)
         await conn.run_sync(_migrate_studio_generation_refined_prompt)
         await conn.run_sync(_migrate_studio_generation_motion_video_prompt)

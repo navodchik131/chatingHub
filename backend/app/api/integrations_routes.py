@@ -1020,6 +1020,7 @@ async def put_telegram(
 ) -> IntegrationStatusOut:
     assert_permission(user, PERM_INTEGRATIONS)
     oid = workspace_owner_id(user)
+    auth_uid = int(user.id)
     raw = body.bot_token.strip()
     if not raw:
         raise HTTPException(status_code=400, detail="empty bot token")
@@ -1123,7 +1124,7 @@ async def put_telegram(
         raise
     except Exception as e:
         await session.rollback()
-        log.exception("put_telegram failed user=%s owner=%s", user.id, oid)
+        log.exception("put_telegram failed user=%s owner=%s", auth_uid, oid)
         # В 500 важно вернуть хотя бы тип и короткий текст исключения,
         # иначе в UI невозможно понять, почему добавление второго TG-канала падает.
         # Секреты (токены) в исключениях обычно не печатаются, но всё равно режем строку.
