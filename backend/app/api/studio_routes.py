@@ -1546,6 +1546,53 @@ async def api_studio_seedance_probe(
     )
 
 
+@router.post("/studio/debug/shot-batch-plan")
+async def api_studio_shot_batch_plan(
+    motion_video: UploadFile = File(...),
+    scene_threshold: float = Form(0.35),
+    max_shots_per_batch: int = Form(4),
+    max_batch_duration_sec: float = Form(12),
+    min_shot_duration_sec: float = Form(0.4),
+    face_samples: int = Form(6),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """
+    Debug: plan shot/batch segmentation for shot_batch mode.
+
+    Returns JSON with:
+    - shots[]: subject_visible+difficulty heuristics
+    - batches[]: grouped by 1..4 shots and <= max_batch_duration_sec
+    """
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    if motion_video is None or not (motion_video.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Выберите motion видео файл.")
+
+    raw = await motion_video.read()
+    if not raw or len(raw) < 64:
+        raise HTTPException(status_code=400, detail="Пустой motion video.")
+
+    import tempfile
+
+    suffix = Path(motion_video.filename or "").suffix or ".mp4"
+    with tempfile.TemporaryDirectory() as td:
+        vp = Path(td) / f"shot_batch_plan{suffix}"
+        vp.write_bytes(raw)
+
+        from app.services.studio_shot_batch_plan import plan_shot_batches
+
+        plan = await anyio.to_thread.run_sync(
+            plan_shot_batches,
+            vp,
+            scene_threshold=scene_threshold,
+            max_shots_per_batch=max_shots_per_batch,
+            max_batch_duration_sec=max_batch_duration_sec,
+            min_shot_duration_sec=min_shot_duration_sec,
+            face_samples=face_samples,
+        )
+
+    return JSONResponse(plan)
+
+
 @router.get("/studio/public-workflow-ref")
 async def public_studio_workflow_ref(t: str) -> Response:
     """Workflow reference image по JWT — для Seedance reference_images."""

@@ -660,6 +660,20 @@ export async function runSeedanceProbe(params) {
   return data
 }
 
+export async function runShotBatchPlan(params) {
+  const fd = new FormData()
+  fd.append('motion_video', params.motionVideo, params.motionVideo.name || 'motion.mp4')
+  fd.append('scene_threshold', String(params.sceneThreshold ?? 0.35))
+  fd.append('max_shots_per_batch', String(params.maxShotsPerBatch ?? 4))
+  fd.append('max_batch_duration_sec', String(params.maxBatchDurationSec ?? 12))
+  fd.append('min_shot_duration_sec', String(params.minShotDurationSec ?? 0.4))
+  fd.append('face_samples', String(params.faceSamples ?? 6))
+  const res = await apiFetch('/api/studio/debug/shot-batch-plan', { method: 'POST', body: fd, timeoutMs: 240_000 })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Shot-batch plan failed')
+  return data
+}
+
 export async function createStudioModel(name) {
   const fd = new FormData()
   fd.append('name', name.trim())
