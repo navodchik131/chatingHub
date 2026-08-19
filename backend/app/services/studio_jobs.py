@@ -29,6 +29,7 @@ STUDIO_JOB_TYPES = frozenset(
         "workflow_compose_video_prompt",
         "motion_render_video",
         "shot_batch_render",
+        "shot_batch_wizard",
         "video_upscale",
         "upscale",
         "carousel",
@@ -67,6 +68,21 @@ async def update_studio_job_params(
     params: dict[str, Any],
 ) -> None:
     job.params_json = json.dumps(params, ensure_ascii=False)
+    job.updated_at = datetime.now(timezone.utc)
+    session.add(job)
+    await session.commit()
+
+
+async def update_studio_job_result(
+    session: AsyncSession,
+    job: StudioJob,
+    result: dict[str, Any],
+    *,
+    status: str | None = None,
+) -> None:
+    job.result_json = json.dumps(result, ensure_ascii=False)
+    if status is not None:
+        job.status = status
     job.updated_at = datetime.now(timezone.utc)
     session.add(job)
     await session.commit()

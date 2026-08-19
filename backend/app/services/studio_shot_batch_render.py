@@ -34,6 +34,7 @@ from app.services.studio_motion_video import (
     MOTION_VIDEO_ROOT,
     _ffmpeg_bin,
     prepare_motion_video_file_for_duration,
+    probe_video_duration_seconds,
     probe_video_has_audio,
     resolve_motion_audio_file,
 )
@@ -104,6 +105,101 @@ def _extract_opening_frame_jpeg(video_path: Path, *, t: float, jpeg_quality: int
         if not out.is_file() or out.stat().st_size < 64:
             raise RuntimeError("ffmpeg did not extract opening frame")
         return out.read_bytes()
+
+
+def _extract_last_frame_jpeg(video_path: Path, *, jpeg_quality: int = 5) -> bytes:
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "last.jpg"
+        cmd = [
+            _ffmpeg_bin(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-sseof",
+            "-0.08",
+            "-i",
+            str(video_path),
+            "-frames:v",
+            "1",
+            "-q:v",
+            str(jpeg_quality),
+            str(out),
+        ]
+        _run_ffmpeg(cmd, timeout=120)
+        if not out.is_file() or out.stat().st_size < 64:
+            raise RuntimeError("ffmpeg did not extract last frame")
+        return out.read_bytes()
+
+
+def _stitch_with_crossfade(
+    *,
+    paths: list[Path],
+    out_path: Path,
+    crossfade_sec: float,
+) -> None:
+    if len(paths) < 2:
+        raise RuntimeError("crossfade stitch needs at least 2 inputs")
+    cf = max(0.05, min(float(crossfade_sec), 1.5))
+    durations = [probe_video_duration_seconds(p) or 1.0 for p in paths]
+    keep_audio = all(probe_video_has_audio(p) for p in paths)
+    n = len(paths)
+
+    inputs: list[str] = []
+    for p in paths:
+        inputs.extend(["-i", str(p)])
+
+    v_parts: list[str] = []
+    cur_v = "[0:v]"
+    cumulative = durations[0]
+    for i in range(1, n):
+        offset = max(0.0, cumulative - cf)
+        out_label = "vout" if i == n - 1 else f"vx{i}"
+        v_parts.append(
+            f"{cur_v}[{i}:v]xfade=transition=fade:duration={cf:.3f}:offset={offset:.3f}[{out_label}]"
+        )
+        cur_v = f"[{out_label}]"
+        cumulative += durations[i] - cf
+
+    filter_parts = list(v_parts)
+    maps = ["-map", "[vout]"]
+    if keep_audio:
+        a_parts: list[str] = []
+        cur_a = "[0:a]"
+        for i in range(1, n):
+            out_a = "aout" if i == n - 1 else f"ax{i}"
+            a_parts.append(f"{cur_a}[{i}:a]acrossfade=d={cf:.3f}[{out_a}]")
+            cur_a = f"[{out_a}]"
+        filter_parts.extend(a_parts)
+        maps.extend(["-map", "[aout]"])
+
+    cmd = [
+        _ffmpeg_bin(),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        *inputs,
+        "-filter_complex",
+        ";".join(filter_parts),
+        *maps,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+    ]
+    if keep_audio:
+        cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+    else:
+        cmd.append("-an")
+    cmd.extend(["-movflags", "+faststart", str(out_path)])
+    _run_ffmpeg(cmd, timeout=1800)
+    if not out_path.is_file() or out_path.stat().st_size < 1024:
+        raise RuntimeError("crossfade stitched output is empty")
 
 
 def _trim_segment_to_motion_root(
@@ -197,8 +293,18 @@ def _trim_rendered_video_to_duration(
         raise RuntimeError("trimmed rendered batch is empty")
 
 
-def _stitch_video_urls_to_mp4(*, video_urls: list[str], out_path: Path) -> None:
+def _stitch_video_urls_to_mp4(
+    *,
+    video_urls: list[str],
+    out_path: Path,
+    crossfade_ms: int = 0,
+) -> None:
     paths = [Path(u) for u in video_urls]
+    cf_sec = max(0.0, float(crossfade_ms) / 1000.0)
+    if cf_sec > 0 and len(paths) >= 2 and all(p.is_file() for p in paths):
+        _stitch_with_crossfade(paths=paths, out_path=out_path, crossfade_sec=cf_sec)
+        return
+
     keep_audio = bool(paths) and all(p.is_file() and probe_video_has_audio(p) for p in paths)
 
     if len(video_urls) == 1:

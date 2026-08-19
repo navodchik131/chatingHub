@@ -13,6 +13,7 @@ import Video from './pages/Video';
 import SeedanceProbe from './pages/SeedanceProbe';
 import ShotBatchPlan from './pages/ShotBatchPlan';
 import ShotBatchRender from './pages/ShotBatchRender';
+import ShotBatchWizard from './pages/ShotBatchWizard';
 import SeedanceSale from './pages/SeedanceSale';
 import Characters from './pages/Characters';
 import Donations from './pages/Donations';
@@ -34,6 +35,7 @@ const pages = {
   'seedance-probe': SeedanceProbe,
   'shot-batch-plan': ShotBatchPlan,
   'shot-batch-render': ShotBatchRender,
+  'shot-batch-wizard': ShotBatchWizard,
   'seedance-sale': SeedanceSale,
   characters: Characters,
   donations: Donations,

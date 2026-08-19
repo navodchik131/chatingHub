@@ -1703,7 +1703,8 @@ def _shot_batch_output_path(
         return out_dir / f"batch_{safe_batch}.mp4"
     if kind == "frame":
         safe_name = Path(str(frame_name or "")).name
-        if not safe_name.lower().startswith("opening_batch_"):
+        allowed_prefixes = ("opening_batch_", "segment_preview_batch_")
+        if not safe_name.lower().endswith(".jpg") or not safe_name.lower().startswith(allowed_prefixes):
             raise HTTPException(status_code=404, detail="Не найдено")
         return out_dir / safe_name
     raise HTTPException(status_code=404, detail="Не найдено")
@@ -1720,7 +1721,7 @@ async def public_studio_shot_batch_output(
     except ValueError:
         raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
     job = await session.get(StudioJob, jid)
-    if not job or job.user_id != uid or job.job_type != "shot_batch_render":
+    if not job or job.user_id != uid or job.job_type not in ("shot_batch_render", "shot_batch_wizard"):
         raise HTTPException(status_code=404, detail="Не найдено") from None
     try:
         path = _shot_batch_output_path(
@@ -1748,7 +1749,7 @@ async def api_studio_shot_batch_output(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
-    if not job or job.job_type != "shot_batch_render":
+    if not job or job.job_type not in ("shot_batch_render", "shot_batch_wizard"):
         raise HTTPException(status_code=404, detail="Не найдено")
     out_path = studio_jobs.studio_job_dir(job_id) / "shot_batch_output.mp4"
     if not out_path.is_file():
@@ -1766,7 +1767,7 @@ async def api_studio_shot_batch_output_frame(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
-    if not job or job.job_type != "shot_batch_render":
+    if not job or job.job_type not in ("shot_batch_render", "shot_batch_wizard"):
         raise HTTPException(status_code=404, detail="Не найдено")
     safe_name = Path(name).name
     if safe_name != name or not safe_name.lower().startswith("opening_batch_"):
@@ -1787,13 +1788,220 @@ async def api_studio_shot_batch_output_batch_video(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
-    if not job or job.job_type != "shot_batch_render":
+    if not job or job.job_type not in ("shot_batch_render", "shot_batch_wizard"):
         raise HTTPException(status_code=404, detail="Не найдено")
     safe_batch = max(1, int(batch_id))
     path = studio_jobs.studio_job_dir(job_id) / f"batch_{safe_batch}.mp4"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Видео батча ещё не готово.")
     return FileResponse(path, media_type="video/mp4")
+
+
+async def _wizard_job_or_404(
+    session: AsyncSession,
+    job_id: int,
+    user: User,
+) -> StudioJob:
+    oid = workspace_owner_id(user)
+    job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
+    if not job or job.job_type != "shot_batch_wizard":
+        raise HTTPException(status_code=404, detail="Wizard job не найден")
+    return job
+
+
+@router.post("/studio/debug/shot-batch-wizard")
+async def api_studio_shot_batch_wizard_create(
+    motion_video: UploadFile = File(...),
+    model_id: str = Form(...),
+    scene_brief: str = Form(""),
+    prompt: str = Form(""),
+    negative_prompt: str = Form(""),
+    motion_timeline: str = Form(""),
+    output_aspect: str = Form("9:16"),
+    seedance_variant: str = Form("standard"),
+    video_resolution: str = Form("720p"),
+    generate_audio: str = Form("0"),
+    scene_threshold: float = Form(0.35),
+    max_shots_per_batch: int = Form(4),
+    max_batch_duration_sec: float = Form(12),
+    min_shot_duration_sec: float = Form(0.4),
+    face_samples: int = Form(6),
+    crossfade_ms: int = Form(200),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Create step-by-step shot-batch wizard job."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    if motion_video is None or not (motion_video.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Выберите motion видео файл.")
+    raw = await motion_video.read()
+    if not raw or len(raw) < 64:
+        raise HTTPException(status_code=400, detail="Пустой motion video.")
+
+    suffix = Path(motion_video.filename or "").suffix or ".mp4"
+    params: dict[str, Any] = {
+        "model_id": (model_id or "").strip(),
+        "scene_brief": (scene_brief or "").strip(),
+        "prompt": ((scene_brief or "").strip() or (prompt or "").strip()),
+        "negative_prompt": (negative_prompt or "").strip(),
+        "motion_timeline": (motion_timeline or "").strip(),
+        "output_aspect": (output_aspect or "9:16").strip(),
+        "seedance_variant": (seedance_variant or "standard").strip(),
+        "video_resolution": (video_resolution or "720p").strip(),
+        "generate_audio": (generate_audio or "0").strip(),
+        "scene_threshold": float(scene_threshold),
+        "max_shots_per_batch": int(max_shots_per_batch),
+        "max_batch_duration_sec": float(max_batch_duration_sec),
+        "min_shot_duration_sec": float(min_shot_duration_sec),
+        "face_samples": int(face_samples),
+    }
+    from app.services.studio_shot_batch_wizard import wizard_create_job, wizard_state_for_api
+
+    job, _state = await wizard_create_job(
+        session,
+        user,
+        motion_bytes=raw,
+        motion_suffix=suffix,
+        params=params,
+        crossfade_ms=int(crossfade_ms),
+    )
+    return JSONResponse(wizard_state_for_api(job))
+
+
+@router.get("/studio/debug/shot-batch-wizard/{job_id}")
+async def api_studio_shot_batch_wizard_get(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_state_for_api
+
+    return JSONResponse(wizard_state_for_api(job))
+
+
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/plan")
+async def api_studio_shot_batch_wizard_plan(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_run_plan, wizard_state_for_api
+
+    try:
+        await wizard_run_plan(session, job, user)
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
+
+
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/opening-frame")
+async def api_studio_shot_batch_wizard_opening_generate(
+    job_id: int,
+    batch_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_generate_opening, wizard_state_for_api
+
+    try:
+        await wizard_generate_opening(session, job, user, batch_id=batch_id)
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
+
+
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/opening-frame/approve")
+async def api_studio_shot_batch_wizard_opening_approve(
+    job_id: int,
+    batch_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_approve_opening, wizard_state_for_api
+
+    try:
+        await wizard_approve_opening(session, job, batch_id=batch_id)
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
+
+
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/render")
+async def api_studio_shot_batch_wizard_batch_render(
+    job_id: int,
+    batch_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_render_batch, wizard_state_for_api
+
+    try:
+        await wizard_render_batch(session, job, user, batch_id=batch_id)
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
+
+
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/render/approve")
+async def api_studio_shot_batch_wizard_batch_approve(
+    job_id: int,
+    batch_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_approve_video, wizard_state_for_api
+
+    try:
+        await wizard_approve_video(session, job, batch_id=batch_id)
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
+
+
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/stitch")
+async def api_studio_shot_batch_wizard_stitch(
+    job_id: int,
+    crossfade_ms: int | None = Form(None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import (
+        _save_state,
+        _wizard_state,
+        wizard_state_for_api,
+        wizard_stitch,
+    )
+
+    if crossfade_ms is not None:
+        state = _wizard_state(job)
+        state["crossfade_ms"] = int(crossfade_ms)
+        await _save_state(session, job, state)
+        await session.refresh(job)
+    try:
+        await wizard_stitch(session, job, user)
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
 
 
 async def _studio_job_execute_shot_batch_render(

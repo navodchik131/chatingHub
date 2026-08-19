@@ -1,0 +1,721 @@
+"""Step-by-step shot-batch wizard: plan → opening frames → batch videos → stitch."""
+
+from __future__ import annotations
+
+import logging
+import math
+import tempfile
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
+import anyio
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.config import settings
+from app.db.models import StudioJob, StudioJobStatus, User, UserStudioModel
+from app.services.evolink_client import evolink_upload_file_bytes, seedance_evolink_video_url
+from app.services.evolink_client import evolink_platform_api_key
+from app.services.motion_video_outline import append_motion_original_audio_prompt
+from app.services.studio_evolink_motion_pricing import (
+    evolink_video_duration_seconds,
+    normalize_evolink_resolution,
+    normalize_evolink_seedance_variant,
+)
+from app.services.studio_image_token import (
+    create_model_image_access_token,
+    create_motion_video_access_token,
+    create_shot_batch_output_access_token,
+)
+from app.services.studio_jobs import (
+    create_studio_job,
+    job_params,
+    job_result_dict,
+    load_studio_job_file,
+    save_studio_job_file,
+    studio_job_dir,
+    update_studio_job_params,
+    update_studio_job_result,
+)
+from app.services.studio_motion_video import prepare_motion_video_file_for_duration, resolve_motion_audio_file
+from app.services.studio_seedance_t2v import (
+    MAX_SEEDANCE_REFERENCE_IMAGES,
+    build_seedance_t2v_prompt,
+    filter_model_images_for_seedance_motion_swap,
+    model_reference_public_urls,
+)
+from app.services.studio_aspect import aspect_ratio_for_seedance_i2v
+from app.services.workspace import workspace_owner_id
+from app.services.studio_shot_batch_plan import plan_shot_batches
+from app.services.studio_shot_batch_render import (
+    _download_url_bytes,
+    _extract_last_frame_jpeg,
+    _extract_opening_frame_jpeg,
+    _generate_synthetic_opening_frame,
+    _jpeg_data_url,
+    _stitch_video_urls_to_mp4,
+    _trim_rendered_video_to_duration,
+    _trim_segment_to_motion_root,
+    _truthy,
+)
+
+log = logging.getLogger(__name__)
+
+WIZARD_JOB_TYPES = frozenset({"shot_batch_render", "shot_batch_wizard"})
+
+
+def _empty_wizard_state(*, crossfade_ms: int = 200) -> dict[str, Any]:
+    return {
+        "wizard_phase": "created",
+        "crossfade_ms": int(crossfade_ms),
+        "use_previous_tail_as_opening": True,
+        "identity_anchor_batch_id": None,
+        "plan": None,
+        "batches": {},
+        "stitched": {"status": "pending"},
+    }
+
+
+def _batch_key(batch_id: int | str) -> str:
+    return str(int(batch_id))
+
+
+def _public_media_url(
+    *,
+    pub: str,
+    owner_id: int,
+    job_id: int,
+    kind: str,
+    batch_id: int | None = None,
+    frame_name: str | None = None,
+) -> str:
+    tok = create_shot_batch_output_access_token(
+        user_id=owner_id,
+        job_id=job_id,
+        kind=kind,
+        batch_id=batch_id,
+        frame_name=frame_name,
+    )
+    return f"{pub}/api/studio/public-shot-batch-output?t={quote(tok, safe='')}"
+
+
+async def _save_state(session: AsyncSession, job: StudioJob, state: dict[str, Any]) -> dict[str, Any]:
+    await update_studio_job_result(
+        session,
+        job,
+        state,
+        status=StudioJobStatus.completed.value,
+    )
+    return state
+
+
+def _wizard_state(job: StudioJob) -> dict[str, Any]:
+    raw = job_result_dict(job)
+    if isinstance(raw, dict) and raw.get("wizard_phase"):
+        return raw
+    return _empty_wizard_state()
+
+
+def _load_source_video_path(p: dict[str, Any]) -> tuple[Path, tempfile.TemporaryDirectory[str] | None]:
+    rel = str(p.get("motion_video_path") or "").strip()
+    if not rel:
+        raise RuntimeError("motion_video_path missing")
+    raw = load_studio_job_file(rel)
+    if len(raw) < 64:
+        raise RuntimeError("empty motion video")
+    suffix = str(p.get("motion_video_suffix") or ".mp4").strip() or ".mp4"
+    if not suffix.startswith("."):
+        suffix = "." + suffix
+    td = tempfile.TemporaryDirectory()
+    src_path = Path(td.name) / f"wizard_src{suffix}"
+    src_path.write_bytes(raw)
+    return src_path, td
+
+
+async def _load_model_context(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    model_id: int,
+    pub: str,
+) -> tuple[UserStudioModel, list[str]]:
+    stmt = (
+        select(UserStudioModel)
+        .where(UserStudioModel.id == model_id, UserStudioModel.user_id == owner_id)
+        .options(selectinload(UserStudioModel.images))
+    )
+    sm = (await session.execute(stmt)).scalar_one_or_none()
+    if not sm:
+        raise RuntimeError("studio model not found")
+    model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
+    if not model_imgs:
+        raise RuntimeError("model has no face refs for motion")
+    model_urls = model_reference_public_urls(
+        owner_id=owner_id,
+        images=model_imgs,
+        public_app_base=pub,
+        token_factory=create_model_image_access_token,
+    )
+    if not model_urls:
+        raise RuntimeError("no model reference urls")
+    return sm, model_urls
+
+
+def _identity_brief(base: str, *, batch_id: int, anchor_hint: bool) -> str:
+    brief = (base or "").strip()
+    if batch_id <= 1:
+        return brief
+    lock = (
+        " CRITICAL continuity: same person, same outfit, same hairstyle and accessories "
+        "as the approved previous batch — do not change clothing or styling."
+    )
+    if anchor_hint:
+        lock += " Match the approved identity anchor opening frame exactly."
+    return (brief + lock).strip()
+
+
+async def wizard_create_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    motion_bytes: bytes,
+    motion_suffix: str,
+    params: dict[str, Any],
+    crossfade_ms: int = 200,
+) -> tuple[StudioJob, dict[str, Any]]:
+    oid = workspace_owner_id(user)
+    job = await create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="shot_batch_wizard",
+        params={**params, "motion_video_path": "", "motion_video_suffix": motion_suffix},
+    )
+    rel = save_studio_job_file(job.id, "motion_video.bin", motion_bytes)
+    p = job_params(job)
+    p["motion_video_path"] = rel
+    await update_studio_job_params(session, job, p)
+    state = _empty_wizard_state(crossfade_ms=crossfade_ms)
+    await _save_state(session, job, state)
+    return job, state
+
+
+async def wizard_run_plan(session: AsyncSession, job: StudioJob, user: User) -> dict[str, Any]:
+    p = job_params(job)
+    state = _wizard_state(job)
+    src_path, td = _load_source_video_path(p)
+    try:
+        plan: dict[str, Any] = await anyio.to_thread.run_sync(
+            lambda: plan_shot_batches(
+                src_path,
+                scene_threshold=float(p.get("scene_threshold") or 0.35),
+                max_shots_per_batch=int(p.get("max_shots_per_batch") or 4),
+                max_batch_duration_sec=float(p.get("max_batch_duration_sec") or 12),
+                min_shot_duration_sec=float(p.get("min_shot_duration_sec") or 0.4),
+                face_samples=int(p.get("face_samples") or 6),
+            )
+        )
+    finally:
+        td.cleanup()
+
+    resolved = plan.get("resolved_batches") or []
+    if not isinstance(resolved, list) or not resolved:
+        raise RuntimeError("no resolved_batches in plan")
+
+    oid = workspace_owner_id(user)
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    out_dir = studio_job_dir(int(job.id))
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    batches: dict[str, Any] = {}
+    src_path2, td2 = _load_source_video_path(p)
+    try:
+        for rb in resolved:
+            bid = int(rb.get("id") or 0)
+            if bid <= 0:
+                continue
+            t_start = float(rb.get("effective_t_start") or 0.0)
+            seg_jpeg = await anyio.to_thread.run_sync(
+                lambda ts=t_start, sp=src_path2: _extract_opening_frame_jpeg(sp, t=ts)
+            )
+            seg_name = f"segment_preview_batch_{bid}.jpg"
+            (out_dir / seg_name).write_bytes(seg_jpeg)
+            batches[_batch_key(bid)] = {
+                "batch_id": bid,
+                "resolved": rb,
+                "segment_preview_url": _jpeg_data_url(seg_jpeg),
+                "segment_preview_public_url": _public_media_url(
+                    pub=pub,
+                    owner_id=oid,
+                    job_id=int(job.id),
+                    kind="frame",
+                    frame_name=seg_name,
+                ),
+                "opening": {
+                    "status": "pending",
+                    "generation": 0,
+                    "mode": None,
+                    "preview_url": None,
+                    "public_url": None,
+                    "evolink_url": None,
+                    "local_name": None,
+                },
+                "video": {
+                    "status": "pending",
+                    "generation": 0,
+                    "preview_public_url": None,
+                    "provider_url": None,
+                    "local_name": None,
+                },
+            }
+    finally:
+        td2.cleanup()
+
+    state["wizard_phase"] = "planned"
+    state["plan"] = plan
+    state["batches"] = batches
+    state["stitched"] = {"status": "pending"}
+    return await _save_state(session, job, state)
+
+
+def _sorted_batch_ids(state: dict[str, Any]) -> list[int]:
+    batches = state.get("batches") or {}
+    ids: list[int] = []
+    for k in batches:
+        try:
+            ids.append(int(k))
+        except (TypeError, ValueError):
+            continue
+    return sorted(ids)
+
+
+def _prev_approved_video_path(state: dict[str, Any], batch_id: int, out_dir: Path) -> Path | None:
+    for bid in reversed(_sorted_batch_ids(state)):
+        if bid >= batch_id:
+            continue
+        entry = (state.get("batches") or {}).get(_batch_key(bid)) or {}
+        video = entry.get("video") or {}
+        if video.get("status") != "approved":
+            continue
+        name = str(video.get("local_name") or "").strip()
+        if not name:
+            continue
+        path = out_dir / name
+        if path.is_file():
+            return path
+    return None
+
+
+def _identity_anchor_evolink_url(state: dict[str, Any]) -> str | None:
+    anchor_id = state.get("identity_anchor_batch_id")
+    if anchor_id is None:
+        return None
+    entry = (state.get("batches") or {}).get(_batch_key(anchor_id)) or {}
+    opening = entry.get("opening") or {}
+    if opening.get("status") != "approved":
+        return None
+    url = str(opening.get("evolink_url") or opening.get("public_url") or "").strip()
+    return url or None
+
+
+async def wizard_generate_opening(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+    *,
+    batch_id: int,
+) -> dict[str, Any]:
+    p = job_params(job)
+    state = _wizard_state(job)
+    if state.get("wizard_phase") not in ("planned", "openings", "videos", "stitched"):
+        raise RuntimeError("run plan first")
+
+    key = _batch_key(batch_id)
+    entry = (state.get("batches") or {}).get(key)
+    if not entry:
+        raise RuntimeError(f"unknown batch {batch_id}")
+
+    rb = entry.get("resolved") or {}
+    oid = workspace_owner_id(user)
+    mid = int(str(p.get("model_id") or "").strip())
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise RuntimeError("PUBLIC_APP_URL must be https://")
+
+    prompt = str(p.get("scene_brief") or p.get("prompt") or "").strip()
+    output_aspect = str(p.get("output_aspect") or "9:16")
+    out_dir = studio_job_dir(int(job.id))
+
+    opening = dict(entry.get("opening") or {})
+    gen = int(opening.get("generation") or 0) + 1
+    opening["generation"] = gen
+    opening["status"] = "generating"
+
+    src_path, td = _load_source_video_path(p)
+    try:
+        eff_start = float(rb.get("effective_t_start") or 0.0)
+        eff_end = float(rb.get("effective_t_end") or 0.0)
+
+        seg_file_id, seg_path = await anyio.to_thread.run_sync(
+            lambda: _trim_segment_to_motion_root(
+                owner_id=oid,
+                src_video_path=src_path,
+                t_start=eff_start,
+                t_end=eff_end,
+            )
+        )
+        ds = max(1, int(math.ceil(float(rb.get("effective_duration") or (eff_end - eff_start)))))
+        ds_effective = evolink_video_duration_seconds(
+            ds,
+            variant=normalize_evolink_seedance_variant(str(p.get("seedance_variant") or "standard")),
+        )
+        _mv_id, vpath_eff, _ = await anyio.to_thread.run_sync(
+            lambda: prepare_motion_video_file_for_duration(
+                owner_id=oid,
+                file_id=seg_file_id,
+                source_path=seg_path,
+                target_sec=ds_effective,
+            )
+        )
+
+        mode = "extracted"
+        opening_jpeg: bytes | None = None
+        use_tail = _truthy(state.get("use_previous_tail_as_opening", True))
+        if batch_id > 1 and use_tail:
+            prev_path = _prev_approved_video_path(state, batch_id, out_dir)
+            if prev_path is not None:
+                opening_jpeg = await anyio.to_thread.run_sync(
+                    lambda pp=prev_path: _extract_last_frame_jpeg(pp)
+                )
+                mode = "previous_batch_tail"
+
+        if opening_jpeg is None:
+            opening_jpeg = await anyio.to_thread.run_sync(
+                lambda vp=vpath_eff: _extract_opening_frame_jpeg(vp, t=0.0)
+            )
+            mode = "extracted"
+
+        anchor_url = _identity_anchor_evolink_url(state)
+        scene = _identity_brief(prompt, batch_id=batch_id, anchor_hint=anchor_url is not None)
+
+        if rb.get("requires_synthetic_opening_frame") or batch_id > 1:
+            try:
+                synth = await _generate_synthetic_opening_frame(
+                    session=session,
+                    user=user,
+                    owner_id=oid,
+                    model_id=mid,
+                    scene_brief=scene,
+                    output_aspect=output_aspect,
+                    segment_video_path=vpath_eff,
+                    opening_frame_jpeg=opening_jpeg,
+                )
+            except Exception as e:
+                log.warning("wizard opening synth failed job=%s batch=%s: %s", job.id, batch_id, e)
+                synth = None
+            synth_url = str((synth or {}).get("generated_image_url") or "").strip()
+            if synth_url:
+                opening_url = synth_url
+                mode = "synthetic_generated"
+            else:
+                opening_url = await evolink_upload_file_bytes(
+                    data=opening_jpeg,
+                    filename=f"opening_batch_{batch_id}_g{gen}.jpg",
+                    content_type="image/jpeg",
+                )
+        else:
+            opening_url = await evolink_upload_file_bytes(
+                data=opening_jpeg,
+                filename=f"opening_batch_{batch_id}_g{gen}.jpg",
+                content_type="image/jpeg",
+            )
+
+        local_name = f"opening_batch_{batch_id}_g{gen}.jpg"
+        (out_dir / local_name).write_bytes(opening_jpeg)
+
+        opening.update(
+            {
+                "status": "ready",
+                "mode": mode,
+                "preview_url": _jpeg_data_url(opening_jpeg),
+                "public_url": _public_media_url(
+                    pub=pub,
+                    owner_id=oid,
+                    job_id=int(job.id),
+                    kind="frame",
+                    frame_name=local_name,
+                ),
+                "evolink_url": opening_url,
+                "local_name": local_name,
+            }
+        )
+    finally:
+        td.cleanup()
+
+    entry["opening"] = opening
+    state["batches"][key] = entry
+    state["wizard_phase"] = "openings"
+    return await _save_state(session, job, state)
+
+
+async def wizard_approve_opening(
+    session: AsyncSession,
+    job: StudioJob,
+    *,
+    batch_id: int,
+) -> dict[str, Any]:
+    state = _wizard_state(job)
+    key = _batch_key(batch_id)
+    entry = (state.get("batches") or {}).get(key)
+    if not entry:
+        raise RuntimeError(f"unknown batch {batch_id}")
+    opening = entry.get("opening") or {}
+    if opening.get("status") not in ("ready", "approved"):
+        raise RuntimeError("generate opening frame first")
+    opening["status"] = "approved"
+    entry["opening"] = opening
+    state["batches"][key] = entry
+    if state.get("identity_anchor_batch_id") is None:
+        state["identity_anchor_batch_id"] = batch_id
+    state["wizard_phase"] = "openings"
+    return await _save_state(session, job, state)
+
+
+async def wizard_render_batch(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+    *,
+    batch_id: int,
+) -> dict[str, Any]:
+    p = job_params(job)
+    state = _wizard_state(job)
+    key = _batch_key(batch_id)
+    entry = (state.get("batches") or {}).get(key)
+    if not entry:
+        raise RuntimeError(f"unknown batch {batch_id}")
+
+    opening = entry.get("opening") or {}
+    if opening.get("status") != "approved":
+        raise RuntimeError("approve opening frame before rendering video")
+
+    rb = entry.get("resolved") or {}
+    oid = workspace_owner_id(user)
+    mid = int(str(p.get("model_id") or "").strip())
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    prompt = str(p.get("scene_brief") or p.get("prompt") or "").strip()
+    negative_prompt = str(p.get("negative_prompt") or "").strip()
+    motion_timeline = str(p.get("motion_timeline") or "").strip()
+    output_aspect = str(p.get("output_aspect") or "9:16")
+    generate_audio = _truthy(p.get("generate_audio") or "0")
+    video_resolution = str(p.get("video_resolution") or settings.evolink_video_default_resolution)
+    seedance_variant = normalize_evolink_seedance_variant(str(p.get("seedance_variant") or "standard"))
+
+    _sm, model_urls = await _load_model_context(session, owner_id=oid, model_id=mid, pub=pub)
+    _ = evolink_platform_api_key()
+
+    video = dict(entry.get("video") or {})
+    gen = int(video.get("generation") or 0) + 1
+    video["generation"] = gen
+    video["status"] = "generating"
+
+    eff_start = float(rb.get("effective_t_start") or 0.0)
+    eff_end = float(rb.get("effective_t_end") or 0.0)
+    eff_dur = float(rb.get("effective_duration") or (eff_end - eff_start))
+    requested_dur = max(1, int(math.ceil(eff_dur)))
+    ds_effective = evolink_video_duration_seconds(requested_dur, variant=seedance_variant)
+    video_res = normalize_evolink_resolution(video_resolution, variant=seedance_variant)
+    ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
+
+    src_path, td = _load_source_video_path(p)
+    out_dir = studio_job_dir(int(job.id))
+    try:
+        seg_file_id, seg_path = await anyio.to_thread.run_sync(
+            lambda sp=src_path: _trim_segment_to_motion_root(
+                owner_id=oid,
+                src_video_path=sp,
+                t_start=eff_start,
+                t_end=eff_end,
+            )
+        )
+        mv_id_eff, _vpath_eff, _ = await anyio.to_thread.run_sync(
+            lambda: prepare_motion_video_file_for_duration(
+                owner_id=oid,
+                file_id=seg_file_id,
+                source_path=seg_path,
+                target_sec=ds_effective,
+            )
+        )
+        vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
+        motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
+        motion_aud_url: str | None = None
+        if generate_audio and resolve_motion_audio_file(oid, mv_id_eff) is not None:
+            motion_aud_url = f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
+
+        opening_url = str(opening.get("evolink_url") or "").strip()
+        if not opening_url:
+            raise RuntimeError("approved opening has no evolink_url")
+
+        scene = _identity_brief(
+            prompt,
+            batch_id=batch_id,
+            anchor_hint=_identity_anchor_evolink_url(state) is not None,
+        )
+        seed_prompt, _prompt_source = await build_seedance_t2v_prompt(
+            user_brief=scene,
+            n_start_frame=1,
+            n_model_images=len(model_urls),
+            n_outfit_images=0,
+            n_motion_videos=1,
+            motion_summary=motion_timeline or None,
+            model_profile_text=None,
+            negative=negative_prompt,
+            output_aspect=ar_t2v or output_aspect,
+            duration_seconds=ds_effective,
+            force_template=False,
+            reference_only=False,
+            remove_face_grid=False,
+            soft_identity=False,
+        )
+        if motion_aud_url:
+            seed_prompt = append_motion_original_audio_prompt(seed_prompt)
+
+        evolink_images = [opening_url] + list(model_urls)
+        anchor = _identity_anchor_evolink_url(state)
+        if anchor and anchor not in evolink_images:
+            evolink_images.append(anchor)
+        evolink_images = evolink_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+
+        provider_url = await seedance_evolink_video_url(
+            prompt=seed_prompt,
+            variant=seedance_variant,
+            image_urls=evolink_images,
+            video_urls=[motion_vid_url],
+            audio_urls=[motion_aud_url] if motion_aud_url else None,
+            aspect_ratio=ar_t2v,
+            resolution=video_res,
+            duration=ds_effective,
+            generate_audio=generate_audio,
+            session=session,
+        )
+
+        rendered_raw = await _download_url_bytes(provider_url)
+        raw_path = out_dir / f"batch_{batch_id}_g{gen}_provider.mp4"
+        raw_path.write_bytes(rendered_raw)
+        local_name = f"batch_{batch_id}_g{gen}.mp4"
+        trimmed_path = out_dir / local_name
+        await anyio.to_thread.run_sync(
+            lambda: _trim_rendered_video_to_duration(
+                source_path=raw_path,
+                out_path=trimmed_path,
+                duration_sec=eff_dur,
+            )
+        )
+
+        video.update(
+            {
+                "status": "ready",
+                "provider_url": provider_url,
+                "local_name": local_name,
+                "preview_public_url": _public_media_url(
+                    pub=pub,
+                    owner_id=oid,
+                    job_id=int(job.id),
+                    kind="batch",
+                    batch_id=batch_id,
+                ),
+            }
+        )
+        canonical = out_dir / f"batch_{batch_id}.mp4"
+        canonical.write_bytes(trimmed_path.read_bytes())
+    finally:
+        td.cleanup()
+
+    entry["video"] = video
+    state["batches"][key] = entry
+    state["wizard_phase"] = "videos"
+    return await _save_state(session, job, state)
+
+
+async def wizard_approve_video(
+    session: AsyncSession,
+    job: StudioJob,
+    *,
+    batch_id: int,
+) -> dict[str, Any]:
+    state = _wizard_state(job)
+    key = _batch_key(batch_id)
+    entry = (state.get("batches") or {}).get(key)
+    if not entry:
+        raise RuntimeError(f"unknown batch {batch_id}")
+    video = entry.get("video") or {}
+    if video.get("status") not in ("ready", "approved"):
+        raise RuntimeError("render batch video first")
+    video["status"] = "approved"
+    entry["video"] = video
+    state["batches"][key] = entry
+    state["wizard_phase"] = "videos"
+    return await _save_state(session, job, state)
+
+
+async def wizard_stitch(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    state = _wizard_state(job)
+    out_dir = studio_job_dir(int(job.id))
+    oid = workspace_owner_id(user)
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+
+    video_paths: list[str] = []
+    for bid in _sorted_batch_ids(state):
+        entry = (state.get("batches") or {}).get(_batch_key(bid)) or {}
+        video = entry.get("video") or {}
+        if video.get("status") != "approved":
+            raise RuntimeError(f"batch {bid} video not approved")
+        name = str(video.get("local_name") or "").strip()
+        path = out_dir / name
+        if not path.is_file():
+            raise RuntimeError(f"batch {bid} video file missing")
+        video_paths.append(path.as_posix())
+
+    if not video_paths:
+        raise RuntimeError("no approved batch videos")
+
+    crossfade_ms = int(state.get("crossfade_ms") or 0)
+    out_path = out_dir / "shot_batch_output.mp4"
+    await anyio.to_thread.run_sync(
+        lambda: _stitch_video_urls_to_mp4(
+            video_urls=video_paths,
+            out_path=out_path,
+            crossfade_ms=crossfade_ms,
+        )
+    )
+
+    stitched_tok = create_shot_batch_output_access_token(
+        user_id=oid,
+        job_id=int(job.id),
+        kind="stitched",
+    )
+    state["stitched"] = {
+        "status": "ready",
+        "local_path": out_path.as_posix(),
+        "public_url": f"{pub}/api/studio/public-shot-batch-output?t={quote(stitched_tok, safe='')}",
+        "endpoint": f"/api/studio/debug/shot-batch-output/{job.id}",
+        "crossfade_ms": crossfade_ms,
+    }
+    state["wizard_phase"] = "stitched"
+    return await _save_state(session, job, state)
+
+
+def wizard_state_for_api(job: StudioJob) -> dict[str, Any]:
+    state = _wizard_state(job)
+    return {
+        "job_id": job.id,
+        "job_type": job.job_type,
+        "status": job.status,
+        **state,
+    }

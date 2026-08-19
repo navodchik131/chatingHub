@@ -707,6 +707,109 @@ export async function runShotBatchRender(params, opts = {}) {
   return { accepted, result }
 }
 
+function appendShotBatchWizardForm(fd, params) {
+  fd.append('motion_video', params.motionVideo, params.motionVideo.name || 'motion.mp4')
+  fd.append('model_id', String(params.modelId || ''))
+  fd.append('scene_brief', String(params.sceneBrief || ''))
+  fd.append('prompt', String(params.prompt || params.sceneBrief || ''))
+  fd.append('negative_prompt', String(params.negativePrompt || ''))
+  fd.append('motion_timeline', String(params.motionTimeline || ''))
+  fd.append('output_aspect', String(params.outputAspect || '9:16'))
+  fd.append('seedance_variant', String(params.seedanceVariant || 'standard'))
+  fd.append('video_resolution', String(params.videoResolution || '720p'))
+  fd.append('generate_audio', params.generateAudio ? '1' : '0')
+  fd.append('scene_threshold', String(params.sceneThreshold ?? 0.35))
+  fd.append('max_shots_per_batch', String(params.maxShotsPerBatch ?? 4))
+  fd.append('max_batch_duration_sec', String(params.maxBatchDurationSec ?? 12))
+  fd.append('min_shot_duration_sec', String(params.minShotDurationSec ?? 0.4))
+  fd.append('face_samples', String(params.faceSamples ?? 6))
+  if (params.crossfadeMs != null) fd.append('crossfade_ms', String(params.crossfadeMs))
+}
+
+export async function createShotBatchWizard(params) {
+  const fd = new FormData()
+  appendShotBatchWizardForm(fd, params)
+  fd.append('crossfade_ms', String(params.crossfadeMs ?? 200))
+  const res = await apiFetch('/api/studio/debug/shot-batch-wizard', {
+    method: 'POST',
+    body: fd,
+    timeoutMs: 240_000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Wizard create failed')
+  return data
+}
+
+export async function fetchShotBatchWizard(jobId) {
+  const res = await apiFetch(`/api/studio/debug/shot-batch-wizard/${jobId}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Wizard fetch failed')
+  return data
+}
+
+export async function planShotBatchWizard(jobId) {
+  const res = await apiFetch(`/api/studio/debug/shot-batch-wizard/${jobId}/plan`, {
+    method: 'POST',
+    timeoutMs: 240_000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Wizard plan failed')
+  return data
+}
+
+export async function generateWizardOpening(jobId, batchId) {
+  const res = await apiFetch(
+    `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/opening-frame`,
+    { method: 'POST', timeoutMs: 45 * 60 * 1000 },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Opening frame failed')
+  return data
+}
+
+export async function approveWizardOpening(jobId, batchId) {
+  const res = await apiFetch(
+    `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/opening-frame/approve`,
+    { method: 'POST' },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Approve opening failed')
+  return data
+}
+
+export async function renderWizardBatch(jobId, batchId) {
+  const res = await apiFetch(
+    `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/render`,
+    { method: 'POST', timeoutMs: 45 * 60 * 1000 },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Batch render failed')
+  return data
+}
+
+export async function approveWizardBatch(jobId, batchId) {
+  const res = await apiFetch(
+    `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/render/approve`,
+    { method: 'POST' },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Approve batch failed')
+  return data
+}
+
+export async function stitchShotBatchWizard(jobId, crossfadeMs) {
+  const fd = new FormData()
+  if (crossfadeMs != null) fd.append('crossfade_ms', String(crossfadeMs))
+  const res = await apiFetch(`/api/studio/debug/shot-batch-wizard/${jobId}/stitch`, {
+    method: 'POST',
+    body: fd,
+    timeoutMs: 20 * 60 * 1000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Stitch failed')
+  return data
+}
+
 export async function createStudioModel(name) {
   const fd = new FormData()
   fd.append('name', name.trim())
