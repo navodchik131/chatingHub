@@ -5,6 +5,7 @@ import Hoverable from '../components/Hoverable';
 import { color, line, font } from '../styles/tokens';
 import { useApp } from '../hooks/useApp';
 import { runShotBatchRender } from '../api/actions';
+import { apiFetch } from '../../api';
 
 function shortDur(v) {
   const n = Number(v);
@@ -14,6 +15,71 @@ function shortDur(v) {
 
 function fileLabel(file) {
   return file?.name || '';
+}
+
+function isDirectMediaUrl(src) {
+  const value = String(src || '').trim();
+  if (!value) return false;
+  return value.startsWith('http') || value.startsWith('data:') || value.includes('public-shot-batch-output');
+}
+
+function AuthMedia({ src, as = 'video', alt = '', style }) {
+  const [resolvedSrc, setResolvedSrc] = useState(() => (isDirectMediaUrl(src) ? src : null));
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+    if (!src) {
+      setResolvedSrc(null);
+      return undefined;
+    }
+    if (isDirectMediaUrl(src)) {
+      setResolvedSrc(src);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let objectUrl = null;
+    void (async () => {
+      try {
+        const res = await apiFetch(src);
+        if (!res.ok || cancelled) {
+          if (!cancelled) setFailed(true);
+          return;
+        }
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setResolvedSrc(objectUrl);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src]);
+
+  if (!src) return null;
+  if (failed) {
+    return (
+      <div style={{ ...style, display: 'grid', placeItems: 'center', color: color.textMuted, fontSize: 12 }}>
+        media load failed
+      </div>
+    );
+  }
+  if (!resolvedSrc) {
+    return (
+      <div style={{ ...style, display: 'grid', placeItems: 'center', color: color.textMuted, fontSize: 12 }}>
+        loading…
+      </div>
+    );
+  }
+  if (as === 'img') {
+    return <img src={resolvedSrc} alt={alt} style={style} />;
+  }
+  return <video src={resolvedSrc} controls preload="metadata" style={style} />;
 }
 
 export default function ShotBatchRender() {
@@ -283,9 +349,14 @@ export default function ShotBatchRender() {
                       </div>
                     </div>
 
-                    {!!item.opening_frame_endpoint && (
-                      <img
-                        src={item.opening_frame_preview_url || item.opening_frame_endpoint}
+                    {(item.opening_frame_preview_url || item.opening_frame_public_url || item.opening_frame_endpoint) && (
+                      <AuthMedia
+                        as="img"
+                        src={
+                          item.opening_frame_preview_url
+                          || item.opening_frame_public_url
+                          || item.opening_frame_endpoint
+                        }
                         alt={`batch-${item.batch_id}-opening`}
                         style={{
                           width: '100%',
@@ -300,10 +371,9 @@ export default function ShotBatchRender() {
                     )}
 
                     {!!item.video_url && (
-                      <video
-                        src={item.rendered_batch_endpoint || item.video_url}
-                        controls
-                        preload="metadata"
+                      <AuthMedia
+                        as="video"
+                        src={item.rendered_batch_url || item.rendered_batch_endpoint || item.video_url}
                         style={{
                           width: '100%',
                           borderRadius: 10,
@@ -317,15 +387,14 @@ export default function ShotBatchRender() {
               </div>
             )}
 
-            {!!result?.stitched_output_endpoint && (
+            {(result?.stitched_output_url || result?.stitched_output_endpoint) && (
               <div style={{ display: 'grid', gap: 8 }}>
                 <div style={{ fontSize: 11, color: color.textMuted }}>
                   {lang === 'ru' ? 'ИТОГОВАЯ СКЛЕЙКА' : 'STITCHED OUTPUT'}
                 </div>
-                <video
-                  src={result.stitched_output_endpoint}
-                  controls
-                  preload="metadata"
+                <AuthMedia
+                  as="video"
+                  src={result.stitched_output_url || result.stitched_output_endpoint}
                   style={{
                     width: '100%',
                     maxWidth: 420,

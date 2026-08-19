@@ -152,11 +152,13 @@ from app.services.studio_image_token import (
     create_model_image_access_token,
     create_motion_video_access_token,
     create_pose_reference_access_token,
+    create_shot_batch_output_access_token,
     create_workflow_ref_access_token,
     decode_generation_image_access_token,
     decode_model_image_access_token,
     decode_motion_video_access_token,
     decode_pose_reference_access_token,
+    decode_shot_batch_output_access_token,
     decode_workflow_ref_access_token,
 )
 from app.services.studio_openai import (
@@ -1684,6 +1686,57 @@ async def api_studio_shot_batch_render(
             generation_id=None,
         ).model_dump(),
     )
+
+
+def _shot_batch_output_path(
+    *,
+    job_id: int,
+    kind: str,
+    batch_id: int | None = None,
+    frame_name: str | None = None,
+) -> Path:
+    out_dir = studio_jobs.studio_job_dir(job_id)
+    if kind == "stitched":
+        return out_dir / "shot_batch_output.mp4"
+    if kind == "batch":
+        safe_batch = max(1, int(batch_id or 1))
+        return out_dir / f"batch_{safe_batch}.mp4"
+    if kind == "frame":
+        safe_name = Path(str(frame_name or "")).name
+        if not safe_name.lower().startswith("opening_batch_"):
+            raise HTTPException(status_code=404, detail="Не найдено")
+        return out_dir / safe_name
+    raise HTTPException(status_code=404, detail="Не найдено")
+
+
+@router.get("/studio/public-shot-batch-output")
+async def public_studio_shot_batch_output(
+    t: str,
+    session: AsyncSession = Depends(get_session),
+) -> FileResponse:
+    """Shot-batch debug output по JWT — для <video src> без Bearer."""
+    try:
+        uid, jid, kind, batch_id, frame_name = decode_shot_batch_output_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    job = await session.get(StudioJob, jid)
+    if not job or job.user_id != uid or job.job_type != "shot_batch_render":
+        raise HTTPException(status_code=404, detail="Не найдено") from None
+    try:
+        path = _shot_batch_output_path(
+            job_id=jid,
+            kind=kind,
+            batch_id=batch_id,
+            frame_name=frame_name,
+        )
+    except HTTPException:
+        raise
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Файл ещё не готов.")
+    if kind == "frame":
+        return FileResponse(path, media_type="image/jpeg")
+    mime = mimetypes.guess_type(path.name)[0] or "video/mp4"
+    return FileResponse(path, media_type=mime)
 
 
 @router.get("/studio/debug/shot-batch-output/{job_id}")

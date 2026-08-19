@@ -28,6 +28,7 @@ from app.services.studio_evolink_motion_pricing import (
 )
 from app.services.studio_image_token import create_model_image_access_token
 from app.services.studio_image_token import create_motion_video_access_token
+from app.services.studio_image_token import create_shot_batch_output_access_token
 from app.services.studio_jobs import job_params, studio_job_dir
 from app.services.studio_motion_video import (
     MOTION_VIDEO_ROOT,
@@ -548,6 +549,20 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                 )
             )
 
+            batch_id_int = int(rb_id or len(batch_outputs) + 1)
+            batch_tok = create_shot_batch_output_access_token(
+                user_id=oid,
+                job_id=job.id,
+                kind="batch",
+                batch_id=batch_id_int,
+            )
+            frame_tok = create_shot_batch_output_access_token(
+                user_id=oid,
+                job_id=job.id,
+                kind="frame",
+                frame_name=opening_local_name,
+            )
+
             batch_outputs.append(
                 {
                     "batch_id": rb_id,
@@ -557,9 +572,11 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                     "object_risk_level": rb.get("object_risk_level"),
                     "resolution_action": rb.get("resolution_action"),
                     "video_url": video_url,
-                    "rendered_batch_endpoint": f"/api/studio/debug/shot-batch-output/{job.id}/batches/{int(rb_id or len(batch_outputs) + 1)}",
+                    "rendered_batch_endpoint": f"/api/studio/debug/shot-batch-output/{job.id}/batches/{batch_id_int}",
+                    "rendered_batch_url": f"{pub}/api/studio/public-shot-batch-output?t={quote(batch_tok, safe='')}",
                     "opening_frame_url": opening_url,
                     "opening_frame_endpoint": f"/api/studio/debug/shot-batch-output/{job.id}/frames/{opening_local_name}",
+                    "opening_frame_public_url": f"{pub}/api/studio/public-shot-batch-output?t={quote(frame_tok, safe='')}",
                     "opening_frame_preview_url": _jpeg_data_url(opening_jpeg),
                     "opening_frame_mode": opening_mode,
                     "prompt_source": prompt_source,
@@ -574,11 +591,18 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
             lambda: _stitch_video_urls_to_mp4(video_urls=video_urls, out_path=out_path),
         )
 
+        stitched_tok = create_shot_batch_output_access_token(
+            user_id=oid,
+            job_id=job.id,
+            kind="stitched",
+        )
+
         return {
             "ok": True,
             "plan": plan,
             "batch_outputs": batch_outputs,
             "stitched_job_output_path": out_path.as_posix(),
             "stitched_output_endpoint": f"/api/studio/debug/shot-batch-output/{job.id}",
+            "stitched_output_url": f"{pub}/api/studio/public-shot-batch-output?t={quote(stitched_tok, safe='')}",
         }
 

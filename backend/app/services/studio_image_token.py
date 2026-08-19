@@ -181,3 +181,57 @@ def decode_workflow_ref_access_token(token: str) -> tuple[int, str]:
     if uid is None or rid is None:
         raise ValueError("missing claims")
     return int(uid), str(rid)
+
+
+def create_shot_batch_output_access_token(
+    *,
+    user_id: int,
+    job_id: int,
+    kind: str,
+    batch_id: int | None = None,
+    frame_name: str | None = None,
+    days: int = 7,
+) -> str:
+    """JWT для debug shot-batch output (<video src> без Bearer)."""
+    now = datetime.now(timezone.utc)
+    day_bucket = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    expire = day_bucket + timedelta(days=max(1, int(days)))
+    payload: dict[str, object] = {
+        "typ": "studio_shot_batch_out",
+        "uid": user_id,
+        "jid": job_id,
+        "kind": str(kind)[:24],
+        "exp": expire,
+    }
+    if batch_id is not None:
+        payload["bid"] = int(batch_id)
+    if frame_name:
+        payload["fname"] = str(frame_name)[:80]
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_shot_batch_output_access_token(token: str) -> tuple[int, int, str, int | None, str | None]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "studio_shot_batch_out":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    jid = data.get("jid")
+    kind = data.get("kind")
+    if uid is None or jid is None or not kind:
+        raise ValueError("missing claims")
+    bid = data.get("bid")
+    fname = data.get("fname")
+    return (
+        int(uid),
+        int(jid),
+        str(kind),
+        int(bid) if bid is not None else None,
+        str(fname) if fname is not None else None,
+    )
