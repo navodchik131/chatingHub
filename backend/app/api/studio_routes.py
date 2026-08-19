@@ -6094,8 +6094,8 @@ async def _studio_job_execute_motion_first_frame(
         marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
         motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
 
-    # Первый кадр motion: face_swap — сцена из видео + identity модели (не model_scene).
-    mode_n = "face_swap"
+    # Первый кадр motion: по умолчанию face_swap; shot-batch synthetic — model_scene.
+    mode_n = _normalize_studio_mode(str(p.get("studio_mode") or "face_swap"))
     skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=not skip_ws,
@@ -6194,18 +6194,31 @@ async def _studio_job_execute_motion_first_frame(
         user_pose_ref_prepended = False
         pose_ct = first_frame_media if first_frame_media.startswith("image/") else "image/jpeg"
         try:
-            image_urls = motion_face_swap_wavespeed_image_urls(
-                pub=pub,
-                owner_id=oid,
-                pose_bytes=first_frame,
-                pose_mime=pose_ct,
-                sm=sm_loaded,
-                wave_profile=wave_profile_n,
-                reference_scene=reference_scene or None,
-                save_pose_reference_bytes=save_pose_reference_bytes,
-                create_pose_reference_access_token=create_pose_reference_access_token,
-                create_model_image_access_token=create_model_image_access_token,
-            )
+            if mode_n == "model_scene":
+                image_urls = motion_model_scene_wavespeed_image_urls(
+                    pub=pub,
+                    owner_id=oid,
+                    pose_bytes=first_frame,
+                    pose_mime=pose_ct,
+                    sm=sm_loaded,
+                    wave_profile=wave_profile_n,
+                    save_pose_reference_bytes=save_pose_reference_bytes,
+                    create_pose_reference_access_token=create_pose_reference_access_token,
+                    create_model_image_access_token=create_model_image_access_token,
+                )
+            else:
+                image_urls = motion_face_swap_wavespeed_image_urls(
+                    pub=pub,
+                    owner_id=oid,
+                    pose_bytes=first_frame,
+                    pose_mime=pose_ct,
+                    sm=sm_loaded,
+                    wave_profile=wave_profile_n,
+                    reference_scene=reference_scene or None,
+                    save_pose_reference_bytes=save_pose_reference_bytes,
+                    create_pose_reference_access_token=create_pose_reference_access_token,
+                    create_model_image_access_token=create_model_image_access_token,
+                )
             user_pose_ref_prepended = True
         except Exception as e:
             log.warning("motion: grok pose/identity urls failed: %s", e)

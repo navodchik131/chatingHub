@@ -412,6 +412,7 @@ async def wizard_generate_opening(
                     output_aspect=output_aspect,
                     segment_video_path=vpath_eff,
                     opening_frame_jpeg=opening_jpeg,
+                    lock_model_hairstyle=batch_id > 1,
                 )
             except Exception as e:
                 log.warning("wizard opening synth failed job=%s batch=%s: %s", job.id, batch_id, e)

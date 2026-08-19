@@ -427,24 +427,32 @@ async def _generate_synthetic_opening_frame(
     output_aspect: str,
     segment_video_path: Path,
     opening_frame_jpeg: bytes,
+    lock_model_hairstyle: bool = False,
 ) -> dict[str, Any] | None:
-    # Reuse the existing motion_first_frame pipeline so the opening anchor is
-    # actually synthesized from the target model + local segment context.
+    # Reuse motion_first_frame in model_scene mode (BoardStory-style): pose from video,
+    # full model identity — not face_swap which keeps the video actor when face is hidden.
     from app.api import studio_routes as sr
     from app.services import studio_jobs
 
+    identity_note = (
+        " CRITICAL: completely replace the person from the reference video with the selected "
+        "studio model — keep pose, camera, and scene, but use only the model's face, hair, and body. "
+        "Do not preserve the original video actor."
+    )
     params: dict[str, Any] = {
         "existing_generation_id": "",
         "model_id": str(model_id),
-        "description": scene_brief,
+        "description": ((scene_brief or "").strip() + identity_note).strip(),
         "output_aspect": output_aspect,
         "wan_edit_tier": "standard",
         "studio_wave_profile": "regular",
         "workflow_wave_model": None,
         "auto_motion_prompt": "1",
-        "lock_model_hairstyle": "1",
+        "lock_model_hairstyle": "1" if lock_model_hairstyle else "0",
         "use_still_as_final": "0",
         "exif_camera": "main",
+        "studio_mode": "model_scene",
+        "workflow_first_frame": "1",
     }
     job = await studio_jobs.create_studio_job(
         session,
