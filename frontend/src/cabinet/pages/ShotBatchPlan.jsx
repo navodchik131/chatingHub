@@ -27,6 +27,7 @@ export default function ShotBatchPlan() {
       dur: b.duration,
       hasSubject: b.has_subject,
       anchorOk: b.identity_anchor_visible,
+      objectRisk: b.object_risk_level,
       risky: b.risky,
     }));
   }, [result]);
@@ -134,7 +135,7 @@ export default function ShotBatchPlan() {
                       >
                         <div style={{ fontWeight: 800, marginBottom: 3 }}>Batch {b.id}</div>
                         <div style={{ color: color.textDim }}>
-                          shots {b.shots} · dur {String(b.dur).slice(0, 6)}s · subject {String(b.hasSubject)} · anchor {String(b.anchorOk)}
+                          shots {b.shots} · dur {String(b.dur).slice(0, 6)}s · subject {String(b.hasSubject)} · anchor {String(b.anchorOk)} · object {b.objectRisk || '—'}
                           {b.risky ? ' · risky' : ''}
                         </div>
                       </div>

@@ -20,9 +20,10 @@ class ShotPlan:
     t_start: float
     t_end: float
     duration: float
-    subject_visible: bool
+    subject_visibility_status: str  # visible|uncertain|not_detected
     difficulty: str  # low|medium|high
     face_hits: int
+    object_risk_level: str  # low|medium|high
     motion_score: float
 
 
@@ -35,6 +36,7 @@ class BatchPlan:
     duration: float
     has_subject: bool
     identity_anchor_visible: bool  # first shot in batch has subject_visible
+    object_risk_level: str  # low|medium|high
     risky: bool
     risky_reason: str | None
 
@@ -132,7 +134,7 @@ def _subject_visible_in_shot(
     t_start: float,
     t_end: float,
     face_samples: int,
-) -> tuple[bool, int]:
+) -> tuple[int, bool]:
     dur = max(0.0, float(t_end) - float(t_start))
     if dur <= 0.05:
         t_samples = [t_start]
@@ -150,7 +152,7 @@ def _subject_visible_in_shot(
             continue
         if _detect_face_in_jpeg(frame):
             hits += 1
-    return hits > 0, hits
+    return hits, hits > 0
 
 
 def _motion_score_in_shot(
@@ -202,18 +204,45 @@ def _motion_score_in_shot(
 
 def _difficulty_from_heuristics(
     *,
-    subject_visible: bool,
+    subject_visibility_status: str,
     shot_dur: float,
     motion_score: float,
+    object_risk_level: str,
 ) -> str:
-    if not subject_visible:
+    if subject_visibility_status == "not_detected":
         return "low"
+    if object_risk_level == "high":
+        return "high"
     # Rough heuristic: longer + more motion => high.
     if shot_dur >= 2.2 or motion_score >= 14.0:
         return "high"
     if shot_dur >= 1.2 or motion_score >= 8.0:
         return "medium"
     return "low"
+
+
+def _object_risk_from_motion(motion_score: float) -> str:
+    if motion_score >= 18.0:
+        return "high"
+    if motion_score >= 12.0:
+        return "medium"
+    return "low"
+
+
+def _subject_status_from_face_and_motion(
+    *,
+    face_hits: int,
+    face_detected: bool,
+    shot_dur: float,
+    motion_score: float,
+) -> str:
+    if face_detected:
+        return "visible"
+    # No face detected, but if the shot is long/dynamic we treat it as "uncertain"
+    # (this matches your real-world case where the subject is turned back).
+    if shot_dur >= 1.1 or motion_score >= 10.0:
+        return "uncertain"
+    return "not_detected"
 
 
 def plan_shot_batches(
@@ -245,7 +274,7 @@ def plan_shot_batches(
 
     shots: list[ShotPlan] = []
     for idx, (t0, t1) in enumerate(shots_raw, start=1):
-        subject_visible, face_hits = _subject_visible_in_shot(
+        face_hits, face_detected = _subject_visible_in_shot(
             video_path,
             t_start=t0,
             t_end=t1,
@@ -257,10 +286,18 @@ def plan_shot_batches(
             t_end=t1,
             samples=min(6, max(2, face_samples)),
         )
-        difficulty = _difficulty_from_heuristics(
-            subject_visible=subject_visible,
+        object_risk_level = _object_risk_from_motion(motion_score)
+        subject_status = _subject_status_from_face_and_motion(
+            face_hits=face_hits,
+            face_detected=face_detected,
             shot_dur=t1 - t0,
             motion_score=motion_score,
+        )
+        difficulty = _difficulty_from_heuristics(
+            subject_visibility_status=subject_status,
+            shot_dur=t1 - t0,
+            motion_score=motion_score,
+            object_risk_level=object_risk_level,
         )
         shots.append(
             ShotPlan(
@@ -268,9 +305,10 @@ def plan_shot_batches(
                 t_start=t0,
                 t_end=t1,
                 duration=t1 - t0,
-                subject_visible=subject_visible,
+                subject_visibility_status=subject_status,
                 difficulty=difficulty,
                 face_hits=face_hits,
+                object_risk_level=object_risk_level,
                 motion_score=motion_score,
             )
         )
@@ -287,8 +325,10 @@ def plan_shot_batches(
         shot_ids = [s.id for s in cur]
         t_start = cur[0].t_start
         t_end = cur[-1].t_end
-        has_subject = any(s.subject_visible for s in cur)
-        anchor_visible = bool(cur[0].subject_visible)
+        has_subject = any(s.subject_visibility_status != "not_detected" for s in cur)
+        anchor_visible = bool(cur[0].subject_visibility_status == "visible")
+        risk_order = {"low": 0, "medium": 1, "high": 2}
+        object_risk_level = max((s.object_risk_level for s in cur), key=lambda x: risk_order.get(x, 0))
         risky = False
         risky_reason = None
         if has_subject and not anchor_visible:
@@ -308,6 +348,7 @@ def plan_shot_batches(
                 duration=t_end - t_start,
                 has_subject=has_subject,
                 identity_anchor_visible=anchor_visible,
+                object_risk_level=object_risk_level,
                 risky=risky,
                 risky_reason=risky_reason,
             )
@@ -357,9 +398,10 @@ def plan_shot_batches(
                 "t_start": s.t_start,
                 "t_end": s.t_end,
                 "duration": s.duration,
-                "subject_visible": s.subject_visible,
+                "subject_visibility_status": s.subject_visibility_status,
                 "difficulty": s.difficulty,
                 "face_hits": s.face_hits,
+                "object_risk_level": s.object_risk_level,
                 "motion_score": s.motion_score,
             }
             for s in shots
@@ -373,6 +415,7 @@ def plan_shot_batches(
                 "duration": b.duration,
                 "has_subject": b.has_subject,
                 "identity_anchor_visible": b.identity_anchor_visible,
+                "object_risk_level": b.object_risk_level,
                 "risky": b.risky,
                 "risky_reason": b.risky_reason,
             }
