@@ -269,8 +269,26 @@ def plan_shot_batches(
         if t1 - t0 < min_shot_duration_sec:
             continue
         shots_raw.append((t0, t1))
+    segmentation_mode = "scene_detect"
     if not shots_raw:
         shots_raw = [(0.0, duration)]
+    elif len(shots_raw) < 2:
+        # Fallback: if scene-detect doesn't find meaningful cuts, split uniformly
+        # so we still can isolate problematic mid-shots by heuristics.
+        # (Your real cases often have low/ambiguous visual scene changes.)
+        segmentation_mode = "scene_detect+uniform_fallback"
+        target_len = 1.7  # seconds
+        n = max(2, int(math.ceil(duration / target_len)))
+        n = min(n, 10)  # hard limit for debug speed
+        step = duration / n
+        shots_raw = []
+        for i in range(n):
+            t0 = i * step
+            t1 = duration if i == n - 1 else (i + 1) * step
+            if t1 - t0 >= min_shot_duration_sec:
+                shots_raw.append((t0, t1))
+        if not shots_raw:
+            shots_raw = [(0.0, duration)]
 
     shots: list[ShotPlan] = []
     for idx, (t0, t1) in enumerate(shots_raw, start=1):
@@ -392,6 +410,7 @@ def plan_shot_batches(
             "min_shot_duration_sec": min_shot_duration_sec,
             "face_samples": face_samples,
         },
+        "segmentation_mode": segmentation_mode,
         "shots": [
             {
                 "id": s.id,
