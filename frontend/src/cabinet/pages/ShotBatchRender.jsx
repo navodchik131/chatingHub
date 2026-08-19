@@ -285,7 +285,7 @@ export default function ShotBatchRender() {
 
                     {!!item.opening_frame_endpoint && (
                       <img
-                        src={item.opening_frame_endpoint}
+                        src={item.opening_frame_preview_url || item.opening_frame_endpoint}
                         alt={`batch-${item.batch_id}-opening`}
                         style={{
                           width: '100%',
@@ -301,7 +301,7 @@ export default function ShotBatchRender() {
 
                     {!!item.video_url && (
                       <video
-                        src={item.video_url}
+                        src={item.rendered_batch_endpoint || item.video_url}
                         controls
                         preload="metadata"
                         style={{

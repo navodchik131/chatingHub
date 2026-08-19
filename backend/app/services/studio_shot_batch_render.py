@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 import math
 import subprocess
@@ -10,6 +11,7 @@ from typing import Any
 from urllib.parse import quote
 
 import anyio
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -70,6 +72,11 @@ def _run_ffmpeg(cmd: list[str], *, timeout: float) -> None:
         encoding="utf-8",
         errors="replace",
     )
+
+
+def _jpeg_data_url(jpeg: bytes) -> str:
+    enc = base64.b64encode(jpeg).decode("ascii")
+    return f"data:image/jpeg;base64,{enc}"
 
 
 def _extract_opening_frame_jpeg(video_path: Path, *, t: float, jpeg_quality: int = 5) -> bytes:
@@ -211,6 +218,104 @@ def _stitch_video_urls_to_mp4(*, video_urls: list[str], out_path: Path) -> None:
     _run_ffmpeg(cmd, timeout=1200)
     if not out_path.is_file() or out_path.stat().st_size < 1024:
         raise RuntimeError("stitched output is empty")
+
+
+def _trim_rendered_video_to_duration(
+    *,
+    source_path: Path,
+    out_path: Path,
+    duration_sec: float,
+) -> None:
+    dur = max(0.2, float(duration_sec))
+    cmd = [
+        _ffmpeg_bin(),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        str(source_path),
+        "-t",
+        f"{dur:.3f}",
+        "-movflags",
+        "+faststart",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-an",
+        str(out_path),
+    ]
+    _run_ffmpeg(cmd, timeout=600)
+    if not out_path.is_file() or out_path.stat().st_size < 1024:
+        raise RuntimeError("trimmed rendered batch is empty")
+
+
+async def _download_url_bytes(url: str) -> bytes:
+    async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        data = r.content or b""
+        if len(data) < 64:
+            raise RuntimeError("downloaded media is empty")
+        return data
+
+
+async def _generate_synthetic_opening_frame(
+    *,
+    session: AsyncSession,
+    user: User,
+    owner_id: int,
+    model_id: int,
+    scene_brief: str,
+    output_aspect: str,
+    segment_video_path: Path,
+    opening_frame_jpeg: bytes,
+) -> dict[str, Any] | None:
+    # Reuse the existing motion_first_frame pipeline so the opening anchor is
+    # actually synthesized from the target model + local segment context.
+    from app.api import studio_routes as sr
+    from app.services import studio_jobs
+
+    params: dict[str, Any] = {
+        "existing_generation_id": "",
+        "model_id": str(model_id),
+        "description": scene_brief,
+        "output_aspect": output_aspect,
+        "wan_edit_tier": "standard",
+        "studio_wave_profile": "regular",
+        "workflow_wave_model": None,
+        "auto_motion_prompt": "1",
+        "lock_model_hairstyle": "1",
+        "use_still_as_final": "0",
+        "exif_camera": "main",
+    }
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=owner_id,
+        actor_user_id=user.id,
+        job_type="motion_first_frame",
+        params=params,
+    )
+    params["video_path"] = studio_jobs.save_studio_job_file(
+        job.id,
+        "video.bin",
+        segment_video_path.read_bytes(),
+    )
+    params["video_filename"] = "shot_batch_segment.mp4"
+    params["first_frame_path"] = studio_jobs.save_studio_job_file(
+        job.id,
+        "first_frame.bin",
+        opening_frame_jpeg,
+    )
+    params["first_frame_mime"] = "image/jpeg"
+    await studio_jobs.update_studio_job_params(session, job, params)
+    result = await sr._studio_job_execute_motion_first_frame(session, job, user)
+    return result if isinstance(result, dict) else None
 
 
 async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user: User) -> dict[str, Any]:
@@ -360,11 +465,38 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
             opening_jpeg = await anyio.to_thread.run_sync(
                 lambda vp=vpath_eff: _extract_opening_frame_jpeg(vp, t=0.0)
             )
-            opening_url = await evolink_upload_file_bytes(
-                data=opening_jpeg,
-                filename=f"opening_batch_{rb_id or len(batch_outputs) + 1}.jpg",
-                content_type="image/jpeg",
-            )
+            opening_mode = "extracted"
+            opening_url: str | None = None
+            if rb.get("requires_synthetic_opening_frame"):
+                try:
+                    synth = await _generate_synthetic_opening_frame(
+                        session=session,
+                        user=user,
+                        owner_id=oid,
+                        model_id=mid,
+                        scene_brief=prompt,
+                        output_aspect=output_aspect_key,
+                        segment_video_path=vpath_eff,
+                        opening_frame_jpeg=opening_jpeg,
+                    )
+                except Exception as e:
+                    log.warning(
+                        "shot-batch synthetic opening failed job=%s batch=%s: %s",
+                        job.id,
+                        rb_id,
+                        e,
+                    )
+                    synth = None
+                synth_url = str((synth or {}).get("generated_image_url") or "").strip()
+                if synth_url:
+                    opening_url = synth_url
+                    opening_mode = "synthetic_generated"
+            if not opening_url:
+                opening_url = await evolink_upload_file_bytes(
+                    data=opening_jpeg,
+                    filename=f"opening_batch_{rb_id or len(batch_outputs) + 1}.jpg",
+                    content_type="image/jpeg",
+                )
             opening_local_name = f"opening_batch_{int(rb_id or len(batch_outputs) + 1)}.jpg"
             (out_dir / opening_local_name).write_bytes(opening_jpeg)
 
@@ -404,6 +536,17 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                 generate_audio=generate_audio,
                 session=session,
             )
+            rendered_raw = await _download_url_bytes(video_url)
+            raw_path = out_dir / f"batch_{int(rb_id or len(batch_outputs) + 1)}_provider.mp4"
+            raw_path.write_bytes(rendered_raw)
+            trimmed_path = out_dir / f"batch_{int(rb_id or len(batch_outputs) + 1)}.mp4"
+            await anyio.to_thread.run_sync(
+                lambda sp=raw_path, op=trimmed_path, dur=eff_dur: _trim_rendered_video_to_duration(
+                    source_path=sp,
+                    out_path=op,
+                    duration_sec=dur,
+                )
+            )
 
             batch_outputs.append(
                 {
@@ -414,12 +557,15 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                     "object_risk_level": rb.get("object_risk_level"),
                     "resolution_action": rb.get("resolution_action"),
                     "video_url": video_url,
+                    "rendered_batch_endpoint": f"/api/studio/debug/shot-batch-output/{job.id}/batches/{int(rb_id or len(batch_outputs) + 1)}",
                     "opening_frame_url": opening_url,
                     "opening_frame_endpoint": f"/api/studio/debug/shot-batch-output/{job.id}/frames/{opening_local_name}",
+                    "opening_frame_preview_url": _jpeg_data_url(opening_jpeg),
+                    "opening_frame_mode": opening_mode,
                     "prompt_source": prompt_source,
                 }
             )
-            video_urls.append(video_url)
+            video_urls.append(trimmed_path.as_posix())
 
         # Stitch into local mp4 in job dir (debug endpoint serves it).
         out_path = out_dir / "shot_batch_output.mp4"

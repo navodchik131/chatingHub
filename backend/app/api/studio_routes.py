@@ -1724,6 +1724,25 @@ async def api_studio_shot_batch_output_frame(
     return FileResponse(path, media_type="image/jpeg")
 
 
+@router.get("/studio/debug/shot-batch-output/{job_id}/batches/{batch_id}")
+async def api_studio_shot_batch_output_batch_video(
+    job_id: int,
+    batch_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> FileResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
+    if not job or job.job_type != "shot_batch_render":
+        raise HTTPException(status_code=404, detail="Не найдено")
+    safe_batch = max(1, int(batch_id))
+    path = studio_jobs.studio_job_dir(job_id) / f"batch_{safe_batch}.mp4"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Видео батча ещё не готово.")
+    return FileResponse(path, media_type="video/mp4")
+
+
 async def _studio_job_execute_shot_batch_render(
     session: AsyncSession,
     job: StudioJob,
