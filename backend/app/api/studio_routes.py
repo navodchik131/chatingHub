@@ -1350,6 +1350,7 @@ async def api_studio_seedance_probe(
     aspect_ratio: str = Form("9:16"),
     generate_audio: str = Form("0"),
     ablate: str = Form("1"),
+    wait_until_done: str = Form("1"),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
     assert_permission(user, PERM_STUDIO_GENERATE)
@@ -1365,6 +1366,8 @@ async def api_studio_seedance_probe(
 
     def _truthy(raw: str | None) -> bool:
         return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    wait_done = _truthy(wait_until_done)
 
     def _probe_prompt(identity_count: int, *, include_opening: bool, include_video: bool) -> str:
         parts: list[str] = []
@@ -1445,17 +1448,39 @@ async def api_studio_seedance_probe(
             "Authorization": f"Bearer {evolink_platform_api_key()}",
             "Content-Type": "application/json",
         }
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(f"{evolink_base()}/v1/videos/generations", headers=headers, json=body)
-        try:
-            payload = resp.json()
-        except Exception:
-            payload = {"raw_text": (resp.text or "")[:4000]}
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            resp = await client.post(
+                f"{evolink_base()}/v1/videos/generations",
+                headers=headers,
+                json=body,
+            )
+            try:
+                payload = resp.json()
+            except Exception:
+                payload = {"raw_text": (resp.text or "")[:4000]}
+
+            completed_url: str | None = None
+            if wait_done and resp.status_code < 400 and isinstance(payload, dict):
+                st = (payload.get("status") or "").lower()
+                task_id = str(payload.get("id") or "").strip()
+                if task_id and st != "completed":
+                    from app.services.evolink_client import _poll_evolink_task
+
+                    # Ждем готовности видео в EvoLink и возвращаем итоговый CDN URL.
+                    completed_url = await _poll_evolink_task(
+                        client,
+                        api_key=evolink_platform_api_key(),
+                        task_id=task_id,
+                        poll_interval=float(settings.evolink_video_poll_interval_seconds),
+                        max_polls=int(settings.evolink_video_max_polls),
+                    )
+
         return {
             "case": name,
             "status_code": resp.status_code,
             "request": body,
             "response": payload,
+            "completed_url": completed_url,
         }
 
     results: list[dict[str, Any]] = [

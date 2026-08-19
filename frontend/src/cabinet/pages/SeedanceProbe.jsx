@@ -20,6 +20,7 @@ export default function SeedanceProbe() {
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [generateAudio, setGenerateAudio] = useState(false);
   const [ablate, setAblate] = useState(true);
+  const [waitUntilDone, setWaitUntilDone] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -28,14 +29,16 @@ export default function SeedanceProbe() {
     if (!result?.cases) return [];
     return result.cases.map((it) => {
       const resp = it?.response || {};
+      const completed = Boolean(it?.completed_url);
       return {
         name: it.case || 'case',
         statusCode: it.status_code,
         taskId: resp.id || '—',
-        status: resp.status || '—',
+        status: completed ? (lang === 'ru' ? 'готово' : 'done') : (resp.status || '—'),
+        completedUrl: it.completed_url || null,
       };
     });
-  }, [result]);
+  }, [result, lang]);
 
   const onRun = async () => {
     if (!canRun) return;
@@ -51,6 +54,7 @@ export default function SeedanceProbe() {
         aspectRatio,
         generateAudio,
         ablate,
+        waitUntilDone,
       });
       setResult(data);
     } catch (e) {
@@ -134,6 +138,10 @@ export default function SeedanceProbe() {
               <input type="checkbox" checked={ablate} onChange={(e) => setAblate(e.target.checked)} />
               run ablation cases
             </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5 }}>
+              <input type="checkbox" checked={waitUntilDone} onChange={(e) => setWaitUntilDone(e.target.checked)} />
+              {lang === 'ru' ? 'дождаться завершения' : 'wait until done'}
+            </label>
 
             <Hoverable style={buttonStyle} hover={{ filter: canRun ? 'brightness(1.05)' : 'none' }} onClick={onRun}>
               {busy ? (lang === 'ru' ? 'Отправляем…' : 'Submitting...') : 'Run probe'}
@@ -165,6 +173,7 @@ export default function SeedanceProbe() {
                       <div style={{ fontWeight: 700 }}>{item.name}</div>
                       <div style={{ color: color.textDim }}>
                         http {item.statusCode} · task {item.taskId} · status {item.status}
+                        {item.completedUrl ? ` · url ok` : ''}
                       </div>
                     </div>
                   ))}

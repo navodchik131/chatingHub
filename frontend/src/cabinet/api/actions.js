@@ -649,6 +649,7 @@ export async function runSeedanceProbe(params) {
   fd.append('aspect_ratio', String(params.aspectRatio || '9:16'))
   fd.append('generate_audio', params.generateAudio ? '1' : '0')
   fd.append('ablate', params.ablate === false ? '0' : '1')
+  fd.append('wait_until_done', params.waitUntilDone ? '1' : '0')
   const res = await apiFetch('/api/studio/debug/seedance-probe', {
     method: 'POST',
     body: fd,
