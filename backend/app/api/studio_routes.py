@@ -1580,15 +1580,24 @@ async def api_studio_shot_batch_plan(
 
         from app.services.studio_shot_batch_plan import plan_shot_batches
 
-        plan = await anyio.to_thread.run_sync(
-            plan_shot_batches,
-            vp,
-            scene_threshold=scene_threshold,
-            max_shots_per_batch=max_shots_per_batch,
-            max_batch_duration_sec=max_batch_duration_sec,
-            min_shot_duration_sec=min_shot_duration_sec,
-            face_samples=face_samples,
-        )
+        try:
+            plan = await anyio.to_thread.run_sync(
+                plan_shot_batches,
+                vp,
+                scene_threshold=scene_threshold,
+                max_shots_per_batch=max_shots_per_batch,
+                max_batch_duration_sec=max_batch_duration_sec,
+                min_shot_duration_sec=min_shot_duration_sec,
+                face_samples=face_samples,
+            )
+        except Exception as e:
+            # Debug endpoint: return a JSON error instead of breaking the UI with 500.
+            return JSONResponse(
+                {
+                    "error": str(e),
+                    "hint": "Ошибка в shot-batch planner. Проверь ffmpeg/cv2 доступность и попробуй уменьшить face_samples/scene_threshold.",
+                }
+            )
 
     return JSONResponse(plan)
 
