@@ -1408,13 +1408,23 @@ async def api_studio_seedance_probe(
         include_identity: bool,
         include_video: bool,
     ) -> dict[str, Any]:
+        # Важно: `seedance-2.0-text-to-video` у провайдера не принимает image/video/audio.
+        # Поэтому:
+        # - если есть хоть какие-то image refs (opening или identity) — используем fast-reference модель,
+        #   даже если motion-video в кейсе отсутствует.
+        # - если референсов нет вовсе — используем text-to-video.
+        has_any_image_refs = include_opening or include_identity
         image_urls: list[str] = []
         if include_opening:
             image_urls.append(opening_url)
         if include_identity:
             image_urls.extend(identity_urls)
         body: dict[str, Any] = {
-            "model": "seedance-2.0-fast-reference-to-video" if include_video else "seedance-2.0-text-to-video",
+            "model": (
+                "seedance-2.0-fast-reference-to-video"
+                if include_video or has_any_image_refs
+                else "seedance-2.0-text-to-video"
+            ),
             "prompt": _probe_prompt(
                 len(identity_urls) if include_identity else 0,
                 include_opening=include_opening,
@@ -1472,9 +1482,15 @@ async def api_studio_seedance_probe(
                     include_video=True,
                 ),
                 await _submit_case(
-                    name="no_motion_video",
+                    name="images_only",
                     include_opening=True,
                     include_identity=True,
+                    include_video=False,
+                ),
+                await _submit_case(
+                    name="text_only",
+                    include_opening=False,
+                    include_identity=False,
                     include_video=False,
                 ),
             ]
