@@ -28,6 +28,7 @@ STUDIO_JOB_TYPES = frozenset(
         "motion_compose_video_prompt",
         "workflow_compose_video_prompt",
         "motion_render_video",
+        "shot_batch_render",
         "video_upscale",
         "upscale",
         "carousel",

@@ -12,6 +12,7 @@ import Images, { Lightbox } from './pages/Images';
 import Video from './pages/Video';
 import SeedanceProbe from './pages/SeedanceProbe';
 import ShotBatchPlan from './pages/ShotBatchPlan';
+import ShotBatchRender from './pages/ShotBatchRender';
 import SeedanceSale from './pages/SeedanceSale';
 import Characters from './pages/Characters';
 import Donations from './pages/Donations';
@@ -32,6 +33,7 @@ const pages = {
   video: Video,
   'seedance-probe': SeedanceProbe,
   'shot-batch-plan': ShotBatchPlan,
+  'shot-batch-render': ShotBatchRender,
   'seedance-sale': SeedanceSale,
   characters: Characters,
   donations: Donations,

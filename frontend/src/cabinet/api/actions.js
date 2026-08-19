@@ -674,6 +674,39 @@ export async function runShotBatchPlan(params) {
   return data
 }
 
+export async function runShotBatchRender(params, opts = {}) {
+  const fd = new FormData()
+  fd.append('motion_video', params.motionVideo, params.motionVideo.name || 'motion.mp4')
+  fd.append('model_id', String(params.modelId || ''))
+  fd.append('scene_brief', String(params.sceneBrief || ''))
+  fd.append('prompt', String(params.prompt || params.sceneBrief || ''))
+  fd.append('negative_prompt', String(params.negativePrompt || ''))
+  fd.append('motion_timeline', String(params.motionTimeline || ''))
+  fd.append('output_aspect', String(params.outputAspect || '9:16'))
+  fd.append('seedance_variant', String(params.seedanceVariant || 'standard'))
+  fd.append('video_resolution', String(params.videoResolution || '720p'))
+  fd.append('generate_audio', params.generateAudio ? '1' : '0')
+  fd.append('scene_threshold', String(params.sceneThreshold ?? 0.35))
+  fd.append('max_shots_per_batch', String(params.maxShotsPerBatch ?? 4))
+  fd.append('max_batch_duration_sec', String(params.maxBatchDurationSec ?? 12))
+  fd.append('min_shot_duration_sec', String(params.minShotDurationSec ?? 0.4))
+  fd.append('face_samples', String(params.faceSamples ?? 6))
+  const accepted = await postStudioJobStart('/api/studio/debug/shot-batch-render', {
+    method: 'POST',
+    body: fd,
+    timeoutMs: 240_000,
+  })
+  const result = accepted?.job_id
+    ? await waitForStudioJobResult(accepted.job_id, {
+      maxWaitMs: 45 * 60 * 1000,
+      pollMs: 2500,
+      onStatus: opts.onStatus,
+      signal: opts.signal,
+    })
+    : null
+  return { accepted, result }
+}
+
 export async function createStudioModel(name) {
   const fd = new FormData()
   fd.append('name', name.trim())

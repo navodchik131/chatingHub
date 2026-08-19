@@ -1603,6 +1603,137 @@ async def api_studio_shot_batch_plan(
     return JSONResponse(plan)
 
 
+@router.post("/studio/debug/shot-batch-render")
+async def api_studio_shot_batch_render(
+    motion_video: UploadFile = File(...),
+    model_id: str = Form(...),
+    scene_brief: str = Form(""),
+    prompt: str = Form(""),
+    negative_prompt: str = Form(""),
+    motion_timeline: str = Form(""),
+    output_aspect: str = Form("9:16"),
+    seedance_variant: str = Form("standard"),
+    video_resolution: str = Form("720p"),
+    generate_audio: str = Form("0"),
+    scene_threshold: float = Form(0.35),
+    max_shots_per_batch: int = Form(4),
+    max_batch_duration_sec: float = Form(12),
+    min_shot_duration_sec: float = Form(0.4),
+    face_samples: int = Form(6),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """
+    Debug/Prototype: render shot-batch batches and stitch them to one mp4.
+
+    Returns a studio job_id; actual video is served via:
+    GET /studio/debug/shot-batch-output/{job_id}
+    """
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    if motion_video is None or not (motion_video.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Выберите motion видео файл.")
+
+    raw = await motion_video.read()
+    if not raw or len(raw) < 64:
+        raise HTTPException(status_code=400, detail="Пустой motion video.")
+
+    oid = workspace_owner_id(user)
+    suffix = Path(motion_video.filename or "").suffix or ".mp4"
+
+    params: dict[str, Any] = {
+        "model_id": (model_id or "").strip(),
+        "scene_brief": (scene_brief or "").strip(),
+        "prompt": ((scene_brief or "").strip() or (prompt or "").strip()),
+        "negative_prompt": (negative_prompt or "").strip(),
+        "motion_timeline": (motion_timeline or "").strip(),
+        "output_aspect": (output_aspect or "9:16").strip(),
+        "seedance_variant": (seedance_variant or "standard").strip(),
+        "video_resolution": (video_resolution or "720p").strip(),
+        "generate_audio": (generate_audio or "0").strip(),
+        "scene_threshold": float(scene_threshold),
+        "max_shots_per_batch": int(max_shots_per_batch),
+        "max_batch_duration_sec": float(max_batch_duration_sec),
+        "min_shot_duration_sec": float(min_shot_duration_sec),
+        "face_samples": int(face_samples),
+        # Filled after job creation.
+        "motion_video_path": "",
+        "motion_video_suffix": suffix,
+    }
+
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="shot_batch_render",
+        params=params,
+    )
+
+    params["motion_video_path"] = studio_jobs.save_studio_job_file(
+        job.id,
+        "motion_video.bin",
+        raw,
+    )
+    await studio_jobs.update_studio_job_params(session, job, params)
+
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="shot_batch_render",
+            generation_id=None,
+        ).model_dump(),
+    )
+
+
+@router.get("/studio/debug/shot-batch-output/{job_id}")
+async def api_studio_shot_batch_output(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> FileResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
+    if not job or job.job_type != "shot_batch_render":
+        raise HTTPException(status_code=404, detail="Не найдено")
+    out_path = studio_jobs.studio_job_dir(job_id) / "shot_batch_output.mp4"
+    if not out_path.is_file():
+        raise HTTPException(status_code=404, detail="Результат ещё не готов (mp4 отсутствует).")
+    return FileResponse(out_path, media_type="video/mp4")
+
+
+@router.get("/studio/debug/shot-batch-output/{job_id}/frames/{name}")
+async def api_studio_shot_batch_output_frame(
+    job_id: int,
+    name: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> FileResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    job = await studio_jobs.get_owned_studio_job(session, job_id, oid)
+    if not job or job.job_type != "shot_batch_render":
+        raise HTTPException(status_code=404, detail="Не найдено")
+    safe_name = Path(name).name
+    if safe_name != name or not safe_name.lower().startswith("opening_batch_"):
+        raise HTTPException(status_code=404, detail="Не найдено")
+    path = studio_jobs.studio_job_dir(job_id) / safe_name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Кадр ещё не готов.")
+    return FileResponse(path, media_type="image/jpeg")
+
+
+async def _studio_job_execute_shot_batch_render(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    from app.services.studio_shot_batch_render import execute_shot_batch_render
+
+    return await execute_shot_batch_render(session, job, user)
+
+
 @router.get("/studio/public-workflow-ref")
 async def public_studio_workflow_ref(t: str) -> Response:
     """Workflow reference image по JWT — для Seedance reference_images."""
