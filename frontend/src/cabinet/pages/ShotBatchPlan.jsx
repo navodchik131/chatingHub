@@ -32,6 +32,11 @@ export default function ShotBatchPlan() {
     }));
   }, [result]);
 
+  const resolved = useMemo(() => {
+    if (!result?.resolved_batches) return [];
+    return result.resolved_batches;
+  }, [result]);
+
   const onRun = async () => {
     if (!canRun) return;
     setBusy(true);
@@ -137,6 +142,33 @@ export default function ShotBatchPlan() {
                         <div style={{ color: color.textDim }}>
                           shots {b.shots} · dur {String(b.dur).slice(0, 6)}s · subject {String(b.hasSubject)} · anchor {String(b.anchorOk)} · object {b.objectRisk || '—'}
                           {b.risky ? ' · risky' : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!!resolved.length && (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {resolved.map((rb) => (
+                      <div
+                        key={`resolved-${rb.id}`}
+                        style={{
+                          border: `1px solid ${line.soft}`,
+                          borderRadius: 10,
+                          padding: '10px 12px',
+                          background: color.bgPanel,
+                          fontSize: 12,
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, marginBottom: 3 }}>
+                          Resolved batch {rb.id} → {rb.resolution_action}
+                        </div>
+                        <div style={{ color: color.textDim }}>
+                          src batch {rb.source_batch_id} · shots {String((rb.effective_shot_ids || []).join(',')) || '—'} · synth {String(rb.requires_synthetic_opening_frame)} · review {String(rb.manual_review_required)}
+                        </div>
+                        <div style={{ color: color.textMuted, marginTop: 4 }}>
+                          {rb.reason}
                         </div>
                       </div>
                     ))}

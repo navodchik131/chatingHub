@@ -41,6 +41,23 @@ class BatchPlan:
     risky_reason: str | None
 
 
+@dataclass(frozen=True)
+class ResolvedBatchPlan:
+    id: int
+    source_batch_id: int
+    shot_ids: list[int]
+    effective_shot_ids: list[int]
+    effective_t_start: float
+    effective_t_end: float
+    effective_duration: float
+    resolution_action: str  # native_first_shot|shift_boundary_forward|synthetic_opening_frame|manual_review
+    requires_synthetic_opening_frame: bool
+    manual_review_required: bool
+    reason: str
+    identity_string_policy: str
+    object_risk_level: str
+
+
 def _ffprobe_duration(path: Path) -> float | None:
     try:
         return probe_video_duration_seconds(path)
@@ -245,6 +262,73 @@ def _subject_status_from_face_and_motion(
     return "not_detected"
 
 
+def _resolve_batches(
+    batches: list[BatchPlan],
+    shots: list[ShotPlan],
+) -> list[ResolvedBatchPlan]:
+    by_id = {s.id: s for s in shots}
+    out: list[ResolvedBatchPlan] = []
+    for b in batches:
+        members = [by_id[i] for i in b.shot_ids if i in by_id]
+        if not members:
+            continue
+
+        first = members[0]
+        visible_idx: int | None = None
+        uncertain_idx: int | None = None
+        for idx, s in enumerate(members):
+            if s.subject_visibility_status == "visible":
+                visible_idx = idx
+                break
+            if uncertain_idx is None and s.subject_visibility_status == "uncertain":
+                uncertain_idx = idx
+
+        effective_members = members
+        action = "native_first_shot"
+        manual_review_required = False
+        requires_synth = False
+        reason = "first shot is a valid identity anchor"
+
+        if first.subject_visibility_status == "visible":
+            action = "native_first_shot"
+            reason = "first shot already contains a visible face anchor"
+        elif visible_idx is not None and visible_idx > 0:
+            effective_members = members[visible_idx:]
+            action = "shift_boundary_forward"
+            reason = "shift batch start to the first visible face anchor shot"
+        elif uncertain_idx is not None:
+            # We never got a robust visible face, but the batch likely contains the subject.
+            # This is the branch for synthetic opening frame from later motion/context.
+            action = "synthetic_opening_frame"
+            requires_synth = True
+            reason = "no visible face anchor; batch still appears to contain the subject"
+        else:
+            action = "manual_review"
+            manual_review_required = True
+            reason = "no usable subject anchor detected in any shot of the batch"
+
+        eff_start = effective_members[0].t_start
+        eff_end = effective_members[-1].t_end
+        out.append(
+            ResolvedBatchPlan(
+                id=len(out) + 1,
+                source_batch_id=b.id,
+                shot_ids=list(b.shot_ids),
+                effective_shot_ids=[s.id for s in effective_members],
+                effective_t_start=eff_start,
+                effective_t_end=eff_end,
+                effective_duration=eff_end - eff_start,
+                resolution_action=action,
+                requires_synthetic_opening_frame=requires_synth,
+                manual_review_required=manual_review_required,
+                reason=reason,
+                identity_string_policy="immutable_job_level_string",
+                object_risk_level=b.object_risk_level,
+            )
+        )
+    return out
+
+
 def plan_shot_batches(
     video_path: Path,
     *,
@@ -400,6 +484,7 @@ def plan_shot_batches(
             cur_dur = s.duration
 
     _flush()
+    resolved_batches = _resolve_batches(batches, shots)
 
     return {
         "video_duration_sec": duration,
@@ -439,6 +524,24 @@ def plan_shot_batches(
                 "risky_reason": b.risky_reason,
             }
             for b in batches
+        ],
+        "resolved_batches": [
+            {
+                "id": rb.id,
+                "source_batch_id": rb.source_batch_id,
+                "shot_ids": rb.shot_ids,
+                "effective_shot_ids": rb.effective_shot_ids,
+                "effective_t_start": rb.effective_t_start,
+                "effective_t_end": rb.effective_t_end,
+                "effective_duration": rb.effective_duration,
+                "resolution_action": rb.resolution_action,
+                "requires_synthetic_opening_frame": rb.requires_synthetic_opening_frame,
+                "manual_review_required": rb.manual_review_required,
+                "reason": rb.reason,
+                "identity_string_policy": rb.identity_string_policy,
+                "object_risk_level": rb.object_risk_level,
+            }
+            for rb in resolved_batches
         ],
     }
 
