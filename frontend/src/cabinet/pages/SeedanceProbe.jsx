@@ -30,11 +30,20 @@ export default function SeedanceProbe() {
     return result.cases.map((it) => {
       const resp = it?.response || {};
       const completed = Boolean(it?.completed_url);
+      const completedError = it?.completed_error ? String(it.completed_error) : '';
       return {
         name: it.case || 'case',
         statusCode: it.status_code,
         taskId: resp.id || '—',
-        status: completed ? (lang === 'ru' ? 'готово' : 'done') : (resp.status || '—'),
+        status: completed
+          ? lang === 'ru'
+            ? 'готово'
+            : 'done'
+          : completedError
+            ? lang === 'ru'
+              ? 'ошибка поллинга'
+              : 'poll error'
+            : (resp.status || '—'),
         completedUrl: it.completed_url || null,
       };
     });

@@ -1460,20 +1460,32 @@ async def api_studio_seedance_probe(
                 payload = {"raw_text": (resp.text or "")[:4000]}
 
             completed_url: str | None = None
+            completed_error: str | None = None
             if wait_done and resp.status_code < 400 and isinstance(payload, dict):
                 st = (payload.get("status") or "").lower()
                 task_id = str(payload.get("id") or "").strip()
-                if task_id and st != "completed":
+                if st == "completed":
+                    # Иногда CDN URL может быть уже в results.
+                    results = payload.get("results")
+                    if isinstance(results, list) and results:
+                        u = str(results[0] or "").strip()
+                        if u.startswith("http"):
+                            completed_url = u
+                elif task_id and st != "completed":
                     from app.services.evolink_client import _poll_evolink_task
 
                     # Ждем готовности видео в EvoLink и возвращаем итоговый CDN URL.
-                    completed_url = await _poll_evolink_task(
-                        client,
-                        api_key=evolink_platform_api_key(),
-                        task_id=task_id,
-                        poll_interval=float(settings.evolink_video_poll_interval_seconds),
-                        max_polls=int(settings.evolink_video_max_polls),
-                    )
+                    try:
+                        completed_url = await _poll_evolink_task(
+                            client,
+                            api_key=evolink_platform_api_key(),
+                            task_id=task_id,
+                            poll_interval=float(settings.evolink_video_poll_interval_seconds),
+                            max_polls=int(settings.evolink_video_max_polls),
+                        )
+                    except Exception as e:
+                        # Генерация может завершиться чуть позже, а UI не должен падать целиком.
+                        completed_error = str(e)
 
         return {
             "case": name,
@@ -1481,6 +1493,7 @@ async def api_studio_seedance_probe(
             "request": body,
             "response": payload,
             "completed_url": completed_url,
+            "completed_error": completed_error,
         }
 
     results: list[dict[str, Any]] = [
