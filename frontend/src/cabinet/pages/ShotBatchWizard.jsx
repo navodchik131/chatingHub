@@ -404,10 +404,10 @@ export default function ShotBatchWizard() {
                         Opening · {opening.status || 'pending'}
                         {opening.mode ? ` · ${opening.mode}` : ''}
                       </div>
-                      {(opening.preview_url || opening.public_url) && (
+                      {(opening.preview_url || opening.public_url || opening.evolink_url) && (
                         <AuthMedia
                           as="img"
-                          src={opening.preview_url || opening.public_url}
+                          src={opening.evolink_url || opening.preview_url || opening.public_url}
                           alt={`opening-${bid}`}
                           style={imgStyle}
                         />

@@ -400,6 +400,7 @@ async def wizard_generate_opening(
         anchor_url = _identity_anchor_evolink_url(state)
         scene = _identity_brief(prompt, batch_id=batch_id, anchor_hint=anchor_url is not None)
 
+        display_jpeg = opening_jpeg
         if rb.get("requires_synthetic_opening_frame") or batch_id > 1:
             try:
                 synth = await _generate_synthetic_opening_frame(
@@ -419,6 +420,15 @@ async def wizard_generate_opening(
             if synth_url:
                 opening_url = synth_url
                 mode = "synthetic_generated"
+                try:
+                    display_jpeg = await _download_url_bytes(synth_url)
+                except Exception as e:
+                    log.warning(
+                        "wizard opening synth download failed job=%s batch=%s: %s",
+                        job.id,
+                        batch_id,
+                        e,
+                    )
             else:
                 opening_url = await evolink_upload_file_bytes(
                     data=opening_jpeg,
@@ -433,13 +443,13 @@ async def wizard_generate_opening(
             )
 
         local_name = f"opening_batch_{batch_id}_g{gen}.jpg"
-        (out_dir / local_name).write_bytes(opening_jpeg)
+        (out_dir / local_name).write_bytes(display_jpeg)
 
         opening.update(
             {
                 "status": "ready",
                 "mode": mode,
-                "preview_url": _jpeg_data_url(opening_jpeg),
+                "preview_url": _jpeg_data_url(display_jpeg),
                 "public_url": _public_media_url(
                     pub=pub,
                     owner_id=oid,

@@ -650,7 +650,18 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                     content_type="image/jpeg",
                 )
             opening_local_name = f"opening_batch_{int(rb_id or len(batch_outputs) + 1)}.jpg"
-            (out_dir / opening_local_name).write_bytes(opening_jpeg)
+            opening_preview_jpeg = opening_jpeg
+            if opening_mode == "synthetic_generated" and opening_url:
+                try:
+                    opening_preview_jpeg = await _download_url_bytes(opening_url)
+                except Exception as e:
+                    log.warning(
+                        "shot-batch synthetic opening download failed job=%s batch=%s: %s",
+                        job.id,
+                        rb_id,
+                        e,
+                    )
+            (out_dir / opening_local_name).write_bytes(opening_preview_jpeg)
 
             # Seedance prompt.
             seed_prompt, prompt_source = await build_seedance_t2v_prompt(
