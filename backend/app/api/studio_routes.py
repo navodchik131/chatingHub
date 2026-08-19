@@ -1340,6 +1340,158 @@ async def public_studio_motion_audio(t: str) -> FileResponse:
     return FileResponse(path, media_type=mime)
 
 
+@router.post("/studio/debug/seedance-probe")
+async def api_studio_seedance_probe(
+    opening_frame: UploadFile | None = File(None),
+    identity_images: list[UploadFile] | None = File(None),
+    motion_video: UploadFile | None = File(None),
+    duration: int = Form(5),
+    quality: str = Form("720p"),
+    aspect_ratio: str = Form("9:16"),
+    generate_audio: str = Form("0"),
+    ablate: str = Form("1"),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    if opening_frame is None or not (opening_frame.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Нужен opening frame.")
+    uploads = [u for u in (identity_images or []) if u is not None and (u.filename or "").strip()]
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Нужна хотя бы одна identity image.")
+    if motion_video is None or not (motion_video.filename or "").strip():
+        raise HTTPException(status_code=400, detail="Нужно motion video.")
+
+    from app.services.evolink_client import evolink_base, evolink_platform_api_key, evolink_upload_file_bytes
+
+    def _truthy(raw: str | None) -> bool:
+        return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _probe_prompt(identity_count: int, *, include_opening: bool, include_video: bool) -> str:
+        parts: list[str] = []
+        if include_opening:
+            parts.append("@Image1 is the opening frame at t=0. Keep its scene, framing, lighting and wardrobe.")
+        if identity_count > 0:
+            first_idx = 2 if include_opening else 1
+            tags = ", ".join(f"@Image{i}" for i in range(first_idx, first_idx + identity_count))
+            parts.append(
+                f"{tags} are the same person from identity reference angles. Use them for face, "
+                "hair, body proportions and outfit continuity only."
+            )
+        if include_video:
+            parts.append(
+                "@Video1 provides camera movement, timing and motion only. Ignore the reference actor's face and identity."
+            )
+        parts.append(
+            "A woman stands in the same room, looks toward camera, makes one small hand gesture, "
+            "then shifts weight naturally. Same face and same outfit throughout. No text or watermark."
+        )
+        return "\n\n".join(parts)
+
+    async def _upload_one(up: UploadFile, fallback_name: str) -> str:
+        raw = await up.read()
+        if len(raw) < 64:
+            raise HTTPException(status_code=400, detail=f"Файл {up.filename or fallback_name} пустой.")
+        filename = (up.filename or fallback_name).strip() or fallback_name
+        content_type = (up.content_type or "").strip() or "application/octet-stream"
+        return await evolink_upload_file_bytes(data=raw, filename=filename, content_type=content_type)
+
+    opening_url = await _upload_one(opening_frame, "opening_frame.jpg")
+    identity_urls: list[str] = []
+    for i, up in enumerate(uploads, start=1):
+        identity_urls.append(await _upload_one(up, f"identity_{i}.jpg"))
+    motion_url = await _upload_one(motion_video, "motion_ref.mp4")
+
+    async def _submit_case(
+        *,
+        name: str,
+        include_opening: bool,
+        include_identity: bool,
+        include_video: bool,
+    ) -> dict[str, Any]:
+        image_urls: list[str] = []
+        if include_opening:
+            image_urls.append(opening_url)
+        if include_identity:
+            image_urls.extend(identity_urls)
+        body: dict[str, Any] = {
+            "model": "seedance-2.0-fast-reference-to-video" if include_video else "seedance-2.0-text-to-video",
+            "prompt": _probe_prompt(
+                len(identity_urls) if include_identity else 0,
+                include_opening=include_opening,
+                include_video=include_video,
+            ),
+            "duration": max(1, min(15, int(duration))),
+            "quality": (quality or "720p").strip() or "720p",
+            "aspect_ratio": "adaptive" if include_video else ((aspect_ratio or "9:16").strip() or "9:16"),
+            "generate_audio": _truthy(generate_audio),
+            "content_filter": True,
+        }
+        if image_urls:
+            body["image_urls"] = image_urls
+        if include_video:
+            body["video_urls"] = [motion_url]
+
+        headers = {
+            "Authorization": f"Bearer {evolink_platform_api_key()}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(f"{evolink_base()}/v1/videos/generations", headers=headers, json=body)
+        try:
+            payload = resp.json()
+        except Exception:
+            payload = {"raw_text": (resp.text or "")[:4000]}
+        return {
+            "case": name,
+            "status_code": resp.status_code,
+            "request": body,
+            "response": payload,
+        }
+
+    results: list[dict[str, Any]] = [
+        await _submit_case(
+            name="all_inputs",
+            include_opening=True,
+            include_identity=True,
+            include_video=True,
+        )
+    ]
+    if _truthy(ablate):
+        results.extend(
+            [
+                await _submit_case(
+                    name="no_opening_frame",
+                    include_opening=False,
+                    include_identity=True,
+                    include_video=True,
+                ),
+                await _submit_case(
+                    name="no_identity_refs",
+                    include_opening=True,
+                    include_identity=False,
+                    include_video=True,
+                ),
+                await _submit_case(
+                    name="no_motion_video",
+                    include_opening=True,
+                    include_identity=True,
+                    include_video=False,
+                ),
+            ]
+        )
+
+    return JSONResponse(
+        {
+            "uploaded": {
+                "opening_frame_url": opening_url,
+                "identity_urls": identity_urls,
+                "motion_video_url": motion_url,
+            },
+            "cases": results,
+        }
+    )
+
+
 @router.get("/studio/public-workflow-ref")
 async def public_studio_workflow_ref(t: str) -> Response:
     """Workflow reference image по JWT — для Seedance reference_images."""

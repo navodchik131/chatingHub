@@ -637,6 +637,28 @@ export async function uploadMotionDrivingVideo(file) {
   }
 }
 
+export async function runSeedanceProbe(params) {
+  const fd = new FormData()
+  fd.append('opening_frame', params.openingFrame, params.openingFrame.name || 'opening_frame.jpg')
+  for (const file of (params.identityImages || [])) {
+    fd.append('identity_images', file, file.name || 'identity.jpg')
+  }
+  fd.append('motion_video', params.motionVideo, params.motionVideo.name || 'motion.mp4')
+  fd.append('duration', String(params.duration || 5))
+  fd.append('quality', String(params.quality || '720p'))
+  fd.append('aspect_ratio', String(params.aspectRatio || '9:16'))
+  fd.append('generate_audio', params.generateAudio ? '1' : '0')
+  fd.append('ablate', params.ablate === false ? '0' : '1')
+  const res = await apiFetch('/api/studio/debug/seedance-probe', {
+    method: 'POST',
+    body: fd,
+    timeoutMs: 240_000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Seedance probe failed')
+  return data
+}
+
 export async function createStudioModel(name) {
   const fd = new FormData()
   fd.append('name', name.trim())
