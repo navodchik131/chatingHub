@@ -182,45 +182,40 @@ async def _load_model_context(
 
 
 def _opening_locks_wardrobe(opening: dict[str, Any] | None, *, batch_id: int) -> bool:
-    """Batch 2+ or prefilled/uploaded openings must keep wardrobe from @Image1."""
-    if batch_id > 1:
-        return True
-    mode = str((opening or {}).get("source_mode") or (opening or {}).get("mode") or "").strip().lower()
-    return mode in (
-        "previous_batch_tail",
-        "auto_prefilled_tail",
-        "manual_upload",
-    )
+    """Approved opening is always wardrobe/scene authority (@Image1), including batch 1."""
+    _ = opening
+    _ = batch_id
+    return True
 
 
 def _identity_brief(base: str, *, batch_id: int, wardrobe_from_opening: bool = False) -> str:
     brief = (base or "").strip()
-    if batch_id <= 1 and not wardrobe_from_opening:
-        return brief
-    lock = (
-        " CRITICAL continuity: same person as the approved previous batch. "
-        "Use THIS batch pose, camera and composition from the current segment — "
-        "do not copy the previous batch start frame."
-    )
+    lock = ""
+    if batch_id > 1:
+        lock += (
+            " CRITICAL continuity: same person as the approved previous batch. "
+            "Use THIS batch pose, camera and composition from the current segment — "
+            "do not copy the previous batch start frame."
+        )
     if wardrobe_from_opening:
         lock += (
-            " WARDROBE LOCK: clothing, shoes, accessories and hairstyle must match @Image1 "
-            "for the ENTIRE clip. Model reference images are face/identity only — "
-            "ignore any outfit shown on those model photos."
+            " WARDROBE+SCENE LOCK: clothing, shoes, accessories, hairstyle, location and background "
+            "must match @Image1 for the ENTIRE clip. Model reference images are face/identity only — "
+            "ignore any outfit shown on those model photos. Never switch into the outfit or set from @Video1."
         )
-    else:
+    elif batch_id > 1:
         lock += " Keep the same outfit and styling as the approved previous batch."
     return (brief + lock).strip()
 
 
 def _append_wardrobe_from_opening_lock(prompt: str) -> str:
     lock = (
-        "WARDROBE LOCK: Keep the exact clothing, shoes, accessories and hairstyle from @Image1 "
-        "in every frame of this clip. @Image2+ are face/identity references only — "
-        "do not copy outfits from model photos."
+        "WARDROBE+SCENE LOCK: Keep the exact clothing, shoes, accessories, hairstyle, location and "
+        "background from @Image1 in every frame. @Image2+ are face/identity only — do not copy outfits "
+        "from model photos. @Video1 is motion/choreography only — never adopt its wardrobe or location."
     )
     body = (prompt or "").strip()
-    if "WARDROBE LOCK:" in body:
+    if "WARDROBE+SCENE LOCK:" in body or "WARDROBE LOCK:" in body:
         return body
     return f"{body}\n\n{lock}".strip() if body else lock
 
@@ -536,6 +531,21 @@ async def wizard_upload_video(
     local_name = f"batch_{batch_id}_g{gen}.mp4"
     path = out_dir / local_name
     await anyio.to_thread.run_sync(lambda: _normalize_uploaded_batch_mp4(video_bytes, path))
+    rb = entry.get("resolved") or {}
+    target = float(rb.get("effective_duration") or 0.0)
+    if target > 0.2:
+        trimmed = out_dir / f"batch_{batch_id}_g{gen}_trim.mp4"
+        probed = await anyio.to_thread.run_sync(
+            lambda: _trim_rendered_video_to_duration(
+                source_path=path,
+                out_path=trimmed,
+                duration_sec=target,
+            )
+        )
+        path.write_bytes(trimmed.read_bytes())
+        trimmed.unlink(missing_ok=True)
+    else:
+        probed = None
     canonical = out_dir / f"batch_{batch_id}.mp4"
     canonical.write_bytes(path.read_bytes())
 
@@ -547,6 +557,8 @@ async def wizard_upload_video(
             "mode": "manual_upload",
             "provider_url": None,
             "local_name": local_name,
+            "target_duration_sec": target if target > 0.2 else None,
+            "trimmed_duration_sec": probed,
             "start_frame_mode": opening.get("source_mode") or opening.get("mode") or "manual_upload",
             "start_frame_label": opening.get("source_label")
             or "uploaded batch video (opening optional)",
@@ -932,11 +944,14 @@ async def wizard_render_batch(
         raw_path.write_bytes(rendered_raw)
         local_name = f"batch_{batch_id}_g{gen}.mp4"
         trimmed_path = out_dir / local_name
-        await anyio.to_thread.run_sync(
+        # Seedance may return duration_min (4s) even when the planned batch is shorter —
+        # always cut back to effective source length so stitch does not keep freeze padding.
+        trim_target = max(0.2, float(eff_dur))
+        probed_trim = await anyio.to_thread.run_sync(
             lambda: _trim_rendered_video_to_duration(
                 source_path=raw_path,
                 out_path=trimmed_path,
-                duration_sec=eff_dur,
+                duration_sec=trim_target,
             )
         )
 
@@ -948,6 +963,9 @@ async def wizard_render_batch(
                 "start_frame_public_url": opening.get("public_url"),
                 "provider_url": provider_url,
                 "local_name": local_name,
+                "provider_duration_sec": ds_effective,
+                "target_duration_sec": trim_target,
+                "trimmed_duration_sec": probed_trim,
                 "preview_public_url": _public_media_url(
                     pub=pub,
                     owner_id=oid,
@@ -1017,33 +1035,54 @@ async def wizard_stitch(
     pub = (settings.public_app_url or "").strip().rstrip("/")
 
     video_paths: list[str] = []
-    for bid in _sorted_batch_ids(state):
-        entry = (state.get("batches") or {}).get(_batch_key(bid)) or {}
-        video = entry.get("video") or {}
-        if video.get("status") != "approved":
-            raise RuntimeError(f"batch {bid} video not approved")
-        name = str(video.get("local_name") or "").strip()
-        path = out_dir / name
-        if not path.is_file():
-            raise RuntimeError(f"batch {bid} video file missing")
-        video_paths.append(path.as_posix())
+    with tempfile.TemporaryDirectory() as td_name:
+        td = Path(td_name)
+        for bid in _sorted_batch_ids(state):
+            entry = (state.get("batches") or {}).get(_batch_key(bid)) or {}
+            video = entry.get("video") or {}
+            if video.get("status") != "approved":
+                raise RuntimeError(f"batch {bid} video not approved")
+            name = str(video.get("local_name") or "").strip()
+            path = out_dir / name
+            if not path.is_file():
+                raise RuntimeError(f"batch {bid} video file missing")
+            rb = entry.get("resolved") or {}
+            target = float(
+                video.get("target_duration_sec")
+                or rb.get("effective_duration")
+                or 0.0
+            )
+            if target > 0.2:
+                # Safety net: drop Seedance min-duration pad even if an older render
+                # skipped trim or a manual upload kept the padded length.
+                stitch_clip = td / f"stitch_batch_{bid}.mp4"
+                await anyio.to_thread.run_sync(
+                    lambda src=path, dst=stitch_clip, dur=target: _trim_rendered_video_to_duration(
+                        source_path=src,
+                        out_path=dst,
+                        duration_sec=dur,
+                    )
+                )
+                video_paths.append(stitch_clip.as_posix())
+            else:
+                video_paths.append(path.as_posix())
 
-    if not video_paths:
-        raise RuntimeError("no approved batch videos")
+        if not video_paths:
+            raise RuntimeError("no approved batch videos")
 
-    crossfade_ms = int(state.get("crossfade_ms") or 0)
-    stitch_gen = int(state.get("stitch_generation") or 0) + 1
-    out_path = out_dir / "shot_batch_output.mp4"
-    # Hard cut + tiny head trim removes duplicate opening frame from previous-tail continuity.
-    seam_trim_sec = 0.08 if crossfade_ms <= 0 and len(video_paths) >= 2 else 0.0
-    await anyio.to_thread.run_sync(
-        lambda: _stitch_video_urls_to_mp4(
-            video_urls=video_paths,
-            out_path=out_path,
-            crossfade_ms=crossfade_ms,
-            seam_trim_sec=seam_trim_sec,
+        crossfade_ms = int(state.get("crossfade_ms") or 0)
+        stitch_gen = int(state.get("stitch_generation") or 0) + 1
+        out_path = out_dir / "shot_batch_output.mp4"
+        # Hard cut + tiny head trim removes duplicate opening frame from previous-tail continuity.
+        seam_trim_sec = 0.08 if crossfade_ms <= 0 and len(video_paths) >= 2 else 0.0
+        await anyio.to_thread.run_sync(
+            lambda: _stitch_video_urls_to_mp4(
+                video_urls=video_paths,
+                out_path=out_path,
+                crossfade_ms=crossfade_ms,
+                seam_trim_sec=seam_trim_sec,
+            )
         )
-    )
 
     state["stitched"] = {
         "status": "ready",

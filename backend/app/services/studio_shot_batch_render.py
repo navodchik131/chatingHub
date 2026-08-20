@@ -314,7 +314,14 @@ def _trim_rendered_video_to_duration(
     source_path: Path,
     out_path: Path,
     duration_sec: float,
-) -> None:
+) -> float:
+    """
+    Cut provider output back to the planned batch length.
+
+    Seedance min duration is 4s, so short batches are padded for generation; without this
+    trim the freeze/tail pad survives into stitch and the final film runs long.
+    Returns probed output duration seconds.
+    """
     dur = max(0.2, float(duration_sec))
     has_audio = probe_video_has_audio(source_path)
     cmd = [
@@ -323,6 +330,8 @@ def _trim_rendered_video_to_duration(
         "-loglevel",
         "error",
         "-y",
+        "-ss",
+        "0",
         "-i",
         str(source_path),
         "-t",
@@ -337,6 +346,8 @@ def _trim_rendered_video_to_duration(
         "23",
         "-pix_fmt",
         "yuv420p",
+        "-avoid_negative_ts",
+        "make_zero",
     ]
     if has_audio:
         cmd.extend(["-c:a", "aac", "-b:a", "128k"])
@@ -346,6 +357,43 @@ def _trim_rendered_video_to_duration(
     _run_ffmpeg(cmd, timeout=600)
     if not out_path.is_file() or out_path.stat().st_size < 1024:
         raise RuntimeError("trimmed rendered batch is empty")
+    probed = probe_video_duration_seconds(out_path) or 0.0
+    # Allow small mux/keyframe slack; retry once with a slightly tighter -t if still long.
+    if probed > dur + 0.35:
+        tight = max(0.2, dur - 0.05)
+        tmp = out_path.with_suffix(".retrim.mp4")
+        cmd2 = [
+            _ffmpeg_bin(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(out_path),
+            "-t",
+            f"{tight:.3f}",
+            "-movflags",
+            "+faststart",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+        if has_audio:
+            cmd2.extend(["-c:a", "aac", "-b:a", "128k"])
+        else:
+            cmd2.append("-an")
+        cmd2.append(str(tmp))
+        _run_ffmpeg(cmd2, timeout=600)
+        if tmp.is_file() and tmp.stat().st_size >= 1024:
+            out_path.write_bytes(tmp.read_bytes())
+            tmp.unlink(missing_ok=True)
+            probed = probe_video_duration_seconds(out_path) or probed
+    return float(probed or dur)
 
 
 def _trim_video_head_seconds(

@@ -25,10 +25,10 @@ SEEDANCE_MOTION_VIDEO_SWAP_PROMPT = (
     "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n\n"
     "Replace the person in @Video1 with the person from @Image1. The performer from @Video1 "
     "does not appear in the output.\n\n"
-    "@Image1 defines all appearance: face, hair, skin, body proportions, outfit, and any held object. "
-    "Locked for the entire clip, including body areas revealed later by camera movement.\n\n"
-    "@Video1 defines motion only: camera path, framing, cuts, timing, choreography, gestures, speed. "
-    "Reproduce exactly.\n\n"
+    "@Image1 defines all appearance for the ENTIRE clip: face, hair, skin, body proportions, outfit, "
+    "location, background and lighting. Do not morph wardrobe or set mid-clip.\n\n"
+    "@Video1 defines MOTION ONLY: camera path, framing, cuts, timing, choreography, gestures, speed. "
+    "Do NOT copy clothing, location or background from @Video1 — keep @Image1.\n\n"
     "No captions, watermarks or logos."
 )
 
@@ -250,15 +250,17 @@ def _motion_swap_prompt_core(
         return (
             outline_block
             + "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n"
-            "@Image1 sets opening pose, scene, environment, lighting, framing, and wardrobe for the "
-            "ENTIRE clip — keep the same clothing, shoes and accessories as @Image1 in every frame.\n\n"
+            "@Image1 is the ONLY authority for wardrobe, location, background, environment, lighting and "
+            "framing for the ENTIRE clip — keep the same clothing, shoes, accessories, room/outdoor set "
+            "and backdrop as @Image1 in every frame. Do not morph outfit or location mid-clip.\n\n"
             f"Replace the person in @Video1 with the character from {identity_tags}. "
             "The performer from @Video1 does not appear in the output.\n\n"
             f"{identity_tags} define face, hair, skin tone, and body proportions only — "
             "ignore any outfit shown on those model reference photos. "
             "Character likeness must match these references for face/identity, not wardrobe.\n\n"
-            "@Video1 defines motion only: camera path, framing, cuts, timing, choreography, gestures, speed. "
-            "Reproduce exactly.\n\n"
+            "@Video1 defines MOTION ONLY: body choreography, gestures, timing, camera path, cuts and speed. "
+            "Do NOT copy clothing, shoes, hair style, location, background, weather or set design from @Video1. "
+            "If @Video1 shows a different outfit or place, ignore that appearance and keep @Image1.\n\n"
             "No captions, watermarks or logos."
         )
 
