@@ -5,6 +5,7 @@ import Hoverable from '../components/Hoverable';
 import { color, line, font } from '../styles/tokens';
 import { useApp } from '../hooks/useApp';
 import { runShotBatchRender } from '../api/actions';
+import { FALLBACK_GEN_MODELS } from '../api/studioHelpers';
 import { apiFetch } from '../../api';
 
 function shortDur(v) {
@@ -99,6 +100,7 @@ export default function ShotBatchRender() {
   const [maxBatchDurationSec, setMaxBatchDurationSec] = useState('12');
   const [minShotDurationSec, setMinShotDurationSec] = useState('0.4');
   const [faceSamples, setFaceSamples] = useState('6');
+  const [waveModelId, setWaveModelId] = useState('nano-banana-pro');
   const [busy, setBusy] = useState(false);
   const [jobAccepted, setJobAccepted] = useState(null);
   const [jobStatus, setJobStatus] = useState(null);
@@ -140,6 +142,7 @@ export default function ShotBatchRender() {
           maxBatchDurationSec: Number(maxBatchDurationSec),
           minShotDurationSec: Number(minShotDurationSec),
           faceSamples: Number(faceSamples),
+          waveModelId,
         },
         {
           onStatus: (status) => setJobStatus(status),
@@ -252,13 +255,42 @@ export default function ShotBatchRender() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="output_aspect" value={outputAspect} onChange={(e) => setOutputAspect(e.target.value)} />
-              <Field label="seedance_variant" value={seedanceVariant} onChange={(e) => setSeedanceVariant(e.target.value)} />
-              <Field label="video_resolution" value={videoResolution} onChange={(e) => setVideoResolution(e.target.value)} />
               <Field label="scene_threshold" value={sceneThreshold} onChange={(e) => setSceneThreshold(e.target.value)} />
               <Field label="max_shots_per_batch" value={maxShotsPerBatch} onChange={(e) => setMaxShotsPerBatch(e.target.value)} />
               <Field label="max_batch_duration_sec" value={maxBatchDurationSec} onChange={(e) => setMaxBatchDurationSec(e.target.value)} />
               <Field label="min_shot_duration_sec" value={minShotDurationSec} onChange={(e) => setMinShotDurationSec(e.target.value)} />
               <Field label="face_samples" value={faceSamples} onChange={(e) => setFaceSamples(e.target.value)} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>
+                {lang === 'ru' ? 'Разрешение видео' : 'Video resolution'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {['480p', '720p'].map((res) => (
+                  <SelectPill key={res} on={videoResolution === res} onClick={() => setVideoResolution(res)}>
+                    {res}
+                  </SelectPill>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>Seedance</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <SelectPill on={seedanceVariant === 'standard'} onClick={() => setSeedanceVariant('standard')}>2.0</SelectPill>
+                <SelectPill on={seedanceVariant === 'seedance_25'} onClick={() => setSeedanceVariant('seedance_25')}>2.5</SelectPill>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>
+                {lang === 'ru' ? 'Модель картинок (opening)' : 'Image model (opening)'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {(cabinet.genModels?.length ? cabinet.genModels : FALLBACK_GEN_MODELS).map((m) => (
+                  <SelectPill key={m.id} on={waveModelId === m.id} onClick={() => setWaveModelId(m.id)}>
+                    {m.label || m.name || m.id}
+                  </SelectPill>
+                ))}
+              </div>
             </div>
 
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5 }}>

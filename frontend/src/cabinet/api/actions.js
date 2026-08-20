@@ -691,6 +691,9 @@ export async function runShotBatchRender(params, opts = {}) {
   fd.append('max_batch_duration_sec', String(params.maxBatchDurationSec ?? 12))
   fd.append('min_shot_duration_sec', String(params.minShotDurationSec ?? 0.4))
   fd.append('face_samples', String(params.faceSamples ?? 6))
+  const wave = normalizeWaveModel(params.waveModelId || params.workflowWaveModel, false)
+  fd.append('workflow_wave_model', wave.apiId)
+  fd.append('wan_edit_tier', wave.tier)
   const accepted = await postStudioJobStart('/api/studio/debug/shot-batch-render', {
     method: 'POST',
     body: fd,
@@ -724,6 +727,9 @@ function appendShotBatchWizardForm(fd, params) {
   fd.append('min_shot_duration_sec', String(params.minShotDurationSec ?? 0.4))
   fd.append('face_samples', String(params.faceSamples ?? 6))
   if (params.crossfadeMs != null) fd.append('crossfade_ms', String(params.crossfadeMs))
+  const wave = normalizeWaveModel(params.waveModelId || params.workflowWaveModel, false)
+  fd.append('workflow_wave_model', wave.apiId)
+  fd.append('wan_edit_tier', wave.tier)
 }
 
 export async function createShotBatchWizard(params) {

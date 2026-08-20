@@ -417,6 +417,30 @@ async def _download_url_bytes(url: str) -> bytes:
         return data
 
 
+def resolve_shot_batch_wave_settings(
+    raw_model: str | None,
+    wan_edit_tier: str | None = None,
+) -> tuple[str | None, str, str]:
+    """Returns (workflow_wave_model, wan_edit_tier, studio_wave_profile)."""
+    wave_model = (raw_model or "").strip().lower() or None
+    tier = (wan_edit_tier or "standard").strip().lower() or "standard"
+    if wave_model in ("nano", "nano-banana"):
+        wave_model = "nano-banana-pro"
+    if wave_model in ("wan-2.7-pro", "wan_2.7_pro"):
+        wave_model = "wan-2.7"
+        tier = "pro"
+    if wave_model in ("wan-2.7", "wan_2.7"):
+        wave_model = "wan-2.7"
+        if tier not in ("pro", "standard"):
+            tier = "standard"
+    if wave_model and (wave_model.startswith("wan") or wave_model.startswith("seedream")):
+        profile = "nsfw"
+    else:
+        profile = "regular"
+        tier = "standard"
+    return wave_model, tier, profile
+
+
 async def _generate_synthetic_opening_frame(
     *,
     session: AsyncSession,
@@ -428,12 +452,20 @@ async def _generate_synthetic_opening_frame(
     segment_video_path: Path,
     opening_frame_jpeg: bytes,
     lock_model_hairstyle: bool = False,
+    workflow_wave_model: str | None = None,
+    wan_edit_tier: str = "standard",
+    studio_wave_profile: str | None = None,
 ) -> dict[str, Any] | None:
     # Reuse motion_first_frame in model_scene mode (BoardStory-style): pose from video,
     # full model identity — not face_swap which keeps the video actor when face is hidden.
     from app.api import studio_routes as sr
     from app.services import studio_jobs
 
+    wave_model, tier, profile = resolve_shot_batch_wave_settings(
+        workflow_wave_model, wan_edit_tier
+    )
+    if (studio_wave_profile or "").strip().lower() in ("regular", "nsfw"):
+        profile = (studio_wave_profile or "").strip().lower()
     identity_note = (
         " CRITICAL: completely replace the person from the reference video with the selected "
         "studio model — keep pose, camera, and scene, but use only the model's face, hair, and body. "
@@ -444,9 +476,9 @@ async def _generate_synthetic_opening_frame(
         "model_id": str(model_id),
         "description": ((scene_brief or "").strip() + identity_note).strip(),
         "output_aspect": output_aspect,
-        "wan_edit_tier": "standard",
-        "studio_wave_profile": "regular",
-        "workflow_wave_model": None,
+        "wan_edit_tier": tier,
+        "studio_wave_profile": profile,
+        "workflow_wave_model": wave_model,
         "auto_motion_prompt": "1",
         "lock_model_hairstyle": "1" if lock_model_hairstyle else "0",
         "use_still_as_final": "0",
@@ -638,6 +670,9 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                         output_aspect=output_aspect_key,
                         segment_video_path=vpath_eff,
                         opening_frame_jpeg=opening_jpeg,
+                        workflow_wave_model=str(p.get("workflow_wave_model") or "").strip() or None,
+                        wan_edit_tier=str(p.get("wan_edit_tier") or "standard"),
+                        studio_wave_profile=str(p.get("studio_wave_profile") or "").strip() or None,
                     )
                 except Exception as e:
                     log.warning(

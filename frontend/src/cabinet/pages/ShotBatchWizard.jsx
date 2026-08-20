@@ -14,6 +14,7 @@ import {
   renderWizardBatch,
   stitchShotBatchWizard,
 } from '../api/actions';
+import { FALLBACK_GEN_MODELS } from '../api/studioHelpers';
 
 function shortDur(v) {
   const n = Number(v);
@@ -152,6 +153,7 @@ export default function ShotBatchWizard() {
   const [minShotDurationSec, setMinShotDurationSec] = useState('0.4');
   const [faceSamples, setFaceSamples] = useState('6');
   const [crossfadeMs, setCrossfadeMs] = useState('200');
+  const [waveModelId, setWaveModelId] = useState('nano-banana-pro');
 
   const [busy, setBusy] = useState(false);
   const [busyBatch, setBusyBatch] = useState(null);
@@ -177,10 +179,11 @@ export default function ShotBatchWizard() {
     minShotDurationSec: Number(minShotDurationSec),
     faceSamples: Number(faceSamples),
     crossfadeMs: Number(crossfadeMs),
+    waveModelId,
   }), [
     motionVideo, modelId, sceneBrief, negativePrompt, motionTimeline, outputAspect,
     seedanceVariant, videoResolution, generateAudio, sceneThreshold, maxShotsPerBatch,
-    maxBatchDurationSec, minShotDurationSec, faceSamples, crossfadeMs,
+    maxBatchDurationSec, minShotDurationSec, faceSamples, crossfadeMs, waveModelId,
   ]);
 
   const phase = wizard?.wizard_phase || 'created';
@@ -192,6 +195,7 @@ export default function ShotBatchWizard() {
       .sort((a, b) => Number(a.batch_id) - Number(b.batch_id));
   }, [wizard]);
 
+  const imageModels = cabinet.genModels?.length ? cabinet.genModels : FALLBACK_GEN_MODELS;
   const allOpeningsApproved = batchList.length > 0 && batchList.every((b) => b.opening?.status === 'approved');
   const allVideosApproved = batchList.length > 0 && batchList.every((b) => b.video?.status === 'approved');
 
@@ -329,6 +333,45 @@ export default function ShotBatchWizard() {
                   <Field label="output_aspect" value={outputAspect} onChange={(e) => setOutputAspect(e.target.value)} />
                   <Field label="crossfade_ms" value={crossfadeMs} onChange={(e) => setCrossfadeMs(e.target.value)} />
                 </div>
+                <div>
+                  <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>
+                    {t('Разрешение видео', 'Video resolution')}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {['480p', '720p'].map((res) => (
+                      <SelectPill key={res} on={videoResolution === res} onClick={() => setVideoResolution(res)}>
+                        {res}
+                      </SelectPill>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>Seedance</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <SelectPill on={seedanceVariant === 'standard'} onClick={() => setSeedanceVariant('standard')}>
+                      2.0
+                    </SelectPill>
+                    <SelectPill on={seedanceVariant === 'seedance_25'} onClick={() => setSeedanceVariant('seedance_25')}>
+                      2.5
+                    </SelectPill>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>
+                    {t('Модель картинок (opening)', 'Image model (opening)')}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {imageModels.map((m) => (
+                      <SelectPill
+                        key={m.id}
+                        on={waveModelId === m.id}
+                        onClick={() => setWaveModelId(m.id)}
+                      >
+                        {m.label || m.name || m.id}
+                      </SelectPill>
+                    ))}
+                  </div>
+                </div>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5 }}>
                   <input type="checkbox" checked={generateAudio} onChange={(e) => setGenerateAudio(e.target.checked)} />
                   generate_audio
@@ -343,6 +386,12 @@ export default function ShotBatchWizard() {
               <>
                 <div style={{ fontSize: 12, color: color.textDim }}>
                   job {wizard.job_id} · phase {phase}
+                  <div style={{ marginTop: 4 }}>
+                    {videoResolution} · Seedance {seedanceVariant === 'seedance_25' ? '2.5' : '2.0'} ·{' '}
+                    {imageModels.find((m) => m.id === waveModelId)?.label
+                      || imageModels.find((m) => m.id === waveModelId)?.name
+                      || waveModelId}
+                  </div>
                 </div>
                 <ActionBtn disabled={busy || phase !== 'created'} onClick={onPlan}>
                   {busy ? '…' : t('2. Build plan', '2. Build plan')}

@@ -1622,6 +1622,8 @@ async def api_studio_shot_batch_render(
     max_batch_duration_sec: float = Form(12),
     min_shot_duration_sec: float = Form(0.4),
     face_samples: int = Form(6),
+    workflow_wave_model: str = Form(""),
+    wan_edit_tier: str = Form("standard"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
@@ -1657,6 +1659,8 @@ async def api_studio_shot_batch_render(
         "max_batch_duration_sec": float(max_batch_duration_sec),
         "min_shot_duration_sec": float(min_shot_duration_sec),
         "face_samples": int(face_samples),
+        "workflow_wave_model": (workflow_wave_model or "").strip(),
+        "wan_edit_tier": (wan_edit_tier or "standard").strip(),
         # Filled after job creation.
         "motion_video_path": "",
         "motion_video_suffix": suffix,
@@ -1827,6 +1831,8 @@ async def api_studio_shot_batch_wizard_create(
     min_shot_duration_sec: float = Form(0.4),
     face_samples: int = Form(6),
     crossfade_ms: int = Form(200),
+    workflow_wave_model: str = Form(""),
+    wan_edit_tier: str = Form("standard"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
@@ -1854,6 +1860,8 @@ async def api_studio_shot_batch_wizard_create(
         "max_batch_duration_sec": float(max_batch_duration_sec),
         "min_shot_duration_sec": float(min_shot_duration_sec),
         "face_samples": int(face_samples),
+        "workflow_wave_model": (workflow_wave_model or "").strip(),
+        "wan_edit_tier": (wan_edit_tier or "standard").strip(),
     }
     from app.services.studio_shot_batch_wizard import wizard_create_job, wizard_state_for_api
 

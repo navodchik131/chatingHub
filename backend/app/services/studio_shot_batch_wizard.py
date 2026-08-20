@@ -58,6 +58,7 @@ from app.services.studio_shot_batch_render import (
     _stitch_video_urls_to_mp4,
     _trim_rendered_video_to_duration,
     _trim_segment_to_motion_root,
+    resolve_shot_batch_wave_settings,
     _truthy,
 )
 
@@ -167,16 +168,16 @@ async def _load_model_context(
     return sm, model_urls
 
 
-def _identity_brief(base: str, *, batch_id: int, anchor_hint: bool) -> str:
+def _identity_brief(base: str, *, batch_id: int) -> str:
     brief = (base or "").strip()
     if batch_id <= 1:
         return brief
     lock = (
         " CRITICAL continuity: same person, same outfit, same hairstyle and accessories "
-        "as the approved previous batch — do not change clothing or styling."
+        "as the approved previous batch — do not change clothing or styling. "
+        "Use THIS batch pose, camera and composition from the current segment — "
+        "do not copy the previous batch start frame."
     )
-    if anchor_hint:
-        lock += " Match the approved identity anchor opening frame exactly."
     return (brief + lock).strip()
 
 
@@ -190,12 +191,24 @@ async def wizard_create_job(
     crossfade_ms: int = 200,
 ) -> tuple[StudioJob, dict[str, Any]]:
     oid = workspace_owner_id(user)
+    wave_model, wan_tier, wave_profile = resolve_shot_batch_wave_settings(
+        params.get("workflow_wave_model"),
+        params.get("wan_edit_tier"),
+    )
+    stored = {
+        **params,
+        "motion_video_path": "",
+        "motion_video_suffix": motion_suffix,
+        "workflow_wave_model": wave_model or "",
+        "wan_edit_tier": wan_tier,
+        "studio_wave_profile": wave_profile,
+    }
     job = await create_studio_job(
         session,
         owner_id=oid,
         actor_user_id=user.id,
         job_type="shot_batch_wizard",
-        params={**params, "motion_video_path": "", "motion_video_suffix": motion_suffix},
+        params=stored,
     )
     rel = save_studio_job_file(job.id, "motion_video.bin", motion_bytes)
     p = job_params(job)
@@ -312,18 +325,6 @@ def _prev_approved_video_path(state: dict[str, Any], batch_id: int, out_dir: Pat
     return None
 
 
-def _identity_anchor_evolink_url(state: dict[str, Any]) -> str | None:
-    anchor_id = state.get("identity_anchor_batch_id")
-    if anchor_id is None:
-        return None
-    entry = (state.get("batches") or {}).get(_batch_key(anchor_id)) or {}
-    opening = entry.get("opening") or {}
-    if opening.get("status") != "approved":
-        return None
-    url = str(opening.get("evolink_url") or opening.get("public_url") or "").strip()
-    return url or None
-
-
 async def wizard_generate_opening(
     session: AsyncSession,
     job: StudioJob,
@@ -401,8 +402,7 @@ async def wizard_generate_opening(
             )
             mode = "extracted"
 
-        anchor_url = _identity_anchor_evolink_url(state)
-        scene = _identity_brief(prompt, batch_id=batch_id, anchor_hint=anchor_url is not None)
+        scene = _identity_brief(prompt, batch_id=batch_id)
 
         display_jpeg = opening_jpeg
         if rb.get("requires_synthetic_opening_frame") or batch_id > 1:
@@ -417,6 +417,9 @@ async def wizard_generate_opening(
                     segment_video_path=vpath_eff,
                     opening_frame_jpeg=opening_jpeg,
                     lock_model_hairstyle=batch_id > 1,
+                    workflow_wave_model=str(p.get("workflow_wave_model") or "").strip() or None,
+                    wan_edit_tier=str(p.get("wan_edit_tier") or "standard"),
+                    studio_wave_profile=str(p.get("studio_wave_profile") or "").strip() or None,
                 )
             except Exception as e:
                 log.warning("wizard opening synth failed job=%s batch=%s: %s", job.id, batch_id, e)
@@ -573,11 +576,7 @@ async def wizard_render_batch(
         if not opening_url:
             raise RuntimeError("approved opening has no evolink_url")
 
-        scene = _identity_brief(
-            prompt,
-            batch_id=batch_id,
-            anchor_hint=_identity_anchor_evolink_url(state) is not None,
-        )
+        scene = _identity_brief(prompt, batch_id=batch_id)
         seed_prompt, _prompt_source = await build_seedance_t2v_prompt(
             user_brief=scene,
             n_start_frame=1,
@@ -597,10 +596,9 @@ async def wizard_render_batch(
         if motion_aud_url:
             seed_prompt = append_motion_original_audio_prompt(seed_prompt)
 
+        # First image is THIS batch opening / start frame. Do not append previous
+        # batch openings — Seedance treats extra stills as competing start frames.
         evolink_images = [opening_url] + list(model_urls)
-        anchor = _identity_anchor_evolink_url(state)
-        if anchor and anchor not in evolink_images:
-            evolink_images.append(anchor)
         evolink_images = evolink_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
 
         provider_url = await seedance_evolink_video_url(
@@ -733,9 +731,18 @@ async def wizard_stitch(
 
 def wizard_state_for_api(job: StudioJob) -> dict[str, Any]:
     state = _wizard_state(job)
+    p = job_params(job)
     return {
         "job_id": job.id,
         "job_type": job.job_type,
         "status": job.status,
+        "params": {
+            "seedance_variant": p.get("seedance_variant"),
+            "video_resolution": p.get("video_resolution"),
+            "workflow_wave_model": p.get("workflow_wave_model"),
+            "wan_edit_tier": p.get("wan_edit_tier"),
+            "studio_wave_profile": p.get("studio_wave_profile"),
+            "output_aspect": p.get("output_aspect"),
+        },
         **state,
     }
