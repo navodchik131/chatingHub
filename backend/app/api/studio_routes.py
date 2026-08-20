@@ -1735,9 +1735,9 @@ async def public_studio_shot_batch_output(
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Файл ещё не готов.")
     if kind == "frame":
-        return FileResponse(path, media_type="image/jpeg")
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
     mime = mimetypes.guess_type(path.name)[0] or "video/mp4"
-    return FileResponse(path, media_type=mime)
+    return FileResponse(path, media_type=mime, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/studio/debug/shot-batch-output/{job_id}")

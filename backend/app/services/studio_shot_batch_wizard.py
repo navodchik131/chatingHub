@@ -90,6 +90,7 @@ def _public_media_url(
     kind: str,
     batch_id: int | None = None,
     frame_name: str | None = None,
+    cache_version: int | str | None = None,
 ) -> str:
     tok = create_shot_batch_output_access_token(
         user_id=owner_id,
@@ -98,7 +99,10 @@ def _public_media_url(
         batch_id=batch_id,
         frame_name=frame_name,
     )
-    return f"{pub}/api/studio/public-shot-batch-output?t={quote(tok, safe='')}"
+    url = f"{pub}/api/studio/public-shot-batch-output?t={quote(tok, safe='')}"
+    if cache_version is not None:
+        url = f"{url}&v={quote(str(cache_version), safe='')}"
+    return url
 
 
 async def _save_state(session: AsyncSession, job: StudioJob, state: dict[str, Any]) -> dict[str, Any]:
@@ -636,6 +640,7 @@ async def wizard_render_batch(
                     job_id=int(job.id),
                     kind="batch",
                     batch_id=batch_id,
+                    cache_version=gen,
                 ),
             }
         )
@@ -697,6 +702,7 @@ async def wizard_stitch(
         raise RuntimeError("no approved batch videos")
 
     crossfade_ms = int(state.get("crossfade_ms") or 0)
+    stitch_gen = int(state.get("stitch_generation") or 0) + 1
     out_path = out_dir / "shot_batch_output.mp4"
     await anyio.to_thread.run_sync(
         lambda: _stitch_video_urls_to_mp4(
@@ -706,18 +712,21 @@ async def wizard_stitch(
         )
     )
 
-    stitched_tok = create_shot_batch_output_access_token(
-        user_id=oid,
-        job_id=int(job.id),
-        kind="stitched",
-    )
     state["stitched"] = {
         "status": "ready",
         "local_path": out_path.as_posix(),
-        "public_url": f"{pub}/api/studio/public-shot-batch-output?t={quote(stitched_tok, safe='')}",
+        "public_url": _public_media_url(
+            pub=pub,
+            owner_id=oid,
+            job_id=int(job.id),
+            kind="stitched",
+            cache_version=stitch_gen,
+        ),
         "endpoint": f"/api/studio/debug/shot-batch-output/{job.id}",
         "crossfade_ms": crossfade_ms,
+        "generation": stitch_gen,
     }
+    state["stitch_generation"] = stitch_gen
     state["wizard_phase"] = "stitched"
     return await _save_state(session, job, state)
 

@@ -21,6 +21,13 @@ function shortDur(v) {
   return n.toFixed(2).replace(/\.00$/, '');
 }
 
+function mediaUrlWithCacheBust(src, version) {
+  const value = String(src || '').trim();
+  if (!value || version == null || value.includes('&v=') || value.includes('?v=')) return value;
+  const sep = value.includes('?') ? '&' : '?';
+  return `${value}${sep}v=${encodeURIComponent(String(version))}`;
+}
+
 function isDirectMediaUrl(src) {
   const value = String(src || '').trim();
   if (!value) return false;
@@ -434,7 +441,12 @@ export default function ShotBatchWizard() {
                         Video · {video.status || 'pending'}
                       </div>
                       {video.preview_public_url && (
-                        <AuthMedia as="video" src={video.preview_public_url} style={vidStyle} />
+                        <AuthMedia
+                          key={`batch-video-${bid}-${video.generation || 0}`}
+                          as="video"
+                          src={mediaUrlWithCacheBust(video.preview_public_url, video.generation)}
+                          style={vidStyle}
+                        />
                       )}
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                         <ActionBtn
@@ -460,7 +472,12 @@ export default function ShotBatchWizard() {
             {wizard?.stitched?.status === 'ready' && (
               <div style={{ display: 'grid', gap: 8 }}>
                 <div style={{ fontSize: 11, color: color.textMuted }}>{t('ИТОГОВАЯ СКЛЕЙКА', 'STITCHED OUTPUT')}</div>
-                <AuthMedia as="video" src={wizard.stitched.public_url} style={{ ...vidStyle, maxWidth: 420 }} />
+                <AuthMedia
+                  key={`stitched-${wizard.stitched.generation || 0}`}
+                  as="video"
+                  src={mediaUrlWithCacheBust(wizard.stitched.public_url, wizard.stitched.generation)}
+                  style={{ ...vidStyle, maxWidth: 420 }}
+                />
               </div>
             )}
 
