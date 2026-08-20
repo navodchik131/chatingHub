@@ -1926,6 +1926,36 @@ async def api_studio_shot_batch_wizard_opening_generate(
     return JSONResponse(wizard_state_for_api(job))
 
 
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/opening-frame/upload")
+async def api_studio_shot_batch_wizard_opening_upload(
+    job_id: int,
+    batch_id: int,
+    opening_image: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_state_for_api, wizard_upload_opening
+
+    raw = await opening_image.read()
+    if not raw or len(raw) < 64:
+        return JSONResponse({"error": "Пустой opening image."}, status_code=400)
+    try:
+        await wizard_upload_opening(
+            session,
+            job,
+            user,
+            batch_id=batch_id,
+            image_bytes=raw,
+            filename=(opening_image.filename or "").strip() or None,
+        )
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
+
+
 @router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/opening-frame/approve")
 async def api_studio_shot_batch_wizard_opening_approve(
     job_id: int,

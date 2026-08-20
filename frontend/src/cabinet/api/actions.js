@@ -773,6 +773,18 @@ export async function generateWizardOpening(jobId, batchId) {
   return data
 }
 
+export async function uploadWizardOpening(jobId, batchId, file) {
+  const fd = new FormData()
+  fd.append('opening_image', file, file?.name || 'opening.jpg')
+  const res = await apiFetch(
+    `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/opening-frame/upload`,
+    { method: 'POST', body: fd, timeoutMs: 240_000 },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Opening upload failed')
+  return data
+}
+
 export async function approveWizardOpening(jobId, batchId) {
   const res = await apiFetch(
     `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/opening-frame/approve`,

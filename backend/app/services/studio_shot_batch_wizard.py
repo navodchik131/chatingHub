@@ -274,6 +274,8 @@ async def wizard_run_plan(session: AsyncSession, job: StudioJob, user: User) -> 
                     "status": "pending",
                     "generation": 0,
                     "mode": None,
+                    "source_mode": None,
+                    "source_label": None,
                     "preview_url": None,
                     "public_url": None,
                     "evolink_url": None,
@@ -282,6 +284,9 @@ async def wizard_run_plan(session: AsyncSession, job: StudioJob, user: User) -> 
                 "video": {
                     "status": "pending",
                     "generation": 0,
+                    "start_frame_mode": None,
+                    "start_frame_label": None,
+                    "start_frame_public_url": None,
                     "preview_public_url": None,
                     "provider_url": None,
                     "local_name": None,
@@ -323,6 +328,76 @@ def _prev_approved_video_path(state: dict[str, Any], batch_id: int, out_dir: Pat
         if path.is_file():
             return path
     return None
+
+
+def _opening_source_label(mode: str | None) -> str:
+    m = str(mode or "").strip().lower()
+    if m == "previous_batch_tail":
+        return "last frame of previous approved batch video"
+    if m == "manual_upload":
+        return "uploaded opening image"
+    return "first frame of current segment"
+
+
+async def wizard_upload_opening(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+    *,
+    batch_id: int,
+    image_bytes: bytes,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    p = job_params(job)
+    state = _wizard_state(job)
+    if state.get("wizard_phase") not in ("planned", "openings", "videos", "stitched"):
+        raise RuntimeError("run plan first")
+    if batch_id != 1:
+        raise RuntimeError("manual upload is supported only for batch 1")
+    if not image_bytes or len(image_bytes) < 64:
+        raise RuntimeError("uploaded opening image is empty")
+
+    key = _batch_key(batch_id)
+    entry = (state.get("batches") or {}).get(key)
+    if not entry:
+        raise RuntimeError(f"unknown batch {batch_id}")
+
+    oid = workspace_owner_id(user)
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    opening = dict(entry.get("opening") or {})
+    gen = int(opening.get("generation") or 0) + 1
+    local_name = f"opening_batch_{batch_id}_g{gen}.jpg"
+    out_dir = studio_job_dir(int(job.id))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / local_name).write_bytes(image_bytes)
+    opening_url = await evolink_upload_file_bytes(
+        data=image_bytes,
+        filename=filename or local_name,
+        content_type="image/jpeg",
+    )
+    opening.update(
+        {
+            "status": "ready",
+            "generation": gen,
+            "mode": "manual_upload",
+            "source_mode": "manual_upload",
+            "source_label": _opening_source_label("manual_upload"),
+            "preview_url": _jpeg_data_url(image_bytes),
+            "public_url": _public_media_url(
+                pub=pub,
+                owner_id=oid,
+                job_id=int(job.id),
+                kind="frame",
+                frame_name=local_name,
+            ),
+            "evolink_url": opening_url,
+            "local_name": local_name,
+        }
+    )
+    entry["opening"] = opening
+    state["batches"][key] = entry
+    state["wizard_phase"] = "openings"
+    return await _save_state(session, job, state)
 
 
 async def wizard_generate_opening(
@@ -402,6 +477,7 @@ async def wizard_generate_opening(
             )
             mode = "extracted"
 
+        source_mode = mode
         scene = _identity_brief(prompt, batch_id=batch_id)
 
         display_jpeg = opening_jpeg
@@ -457,6 +533,8 @@ async def wizard_generate_opening(
             {
                 "status": "ready",
                 "mode": mode,
+                "source_mode": source_mode,
+                "source_label": _opening_source_label(source_mode),
                 "preview_url": _jpeg_data_url(display_jpeg),
                 "public_url": _public_media_url(
                     pub=pub,
@@ -630,6 +708,9 @@ async def wizard_render_batch(
         video.update(
             {
                 "status": "ready",
+                "start_frame_mode": opening.get("source_mode") or opening.get("mode"),
+                "start_frame_label": opening.get("source_label") or _opening_source_label(opening.get("source_mode")),
+                "start_frame_public_url": opening.get("public_url"),
                 "provider_url": provider_url,
                 "local_name": local_name,
                 "preview_public_url": _public_media_url(

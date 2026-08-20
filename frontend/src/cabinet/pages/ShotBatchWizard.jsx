@@ -13,6 +13,7 @@ import {
   planShotBatchWizard,
   renderWizardBatch,
   stitchShotBatchWizard,
+  uploadWizardOpening,
 } from '../api/actions';
 import { FALLBACK_GEN_MODELS } from '../api/studioHelpers';
 
@@ -158,6 +159,7 @@ export default function ShotBatchWizard() {
   const [busy, setBusy] = useState(false);
   const [busyBatch, setBusyBatch] = useState(null);
   const [wizard, setWizard] = useState(null);
+  const [openingUploads, setOpeningUploads] = useState({});
 
   useEffect(() => {
     if (!modelId && models[0]?.id) setModelId(models[0].id);
@@ -230,6 +232,15 @@ export default function ShotBatchWizard() {
     const data = approve
       ? await approveWizardOpening(wizard.job_id, batchId)
       : await generateWizardOpening(wizard.job_id, batchId);
+    setWizard(data);
+  });
+
+  const onUploadOpening = (batchId) => run(async () => {
+    if (!wizard?.job_id) return;
+    const file = openingUploads[batchId];
+    if (!file) return;
+    setBusyBatch(`opening-upload-${batchId}`);
+    const data = await uploadWizardOpening(wizard.job_id, batchId, file);
     setWizard(data);
   });
 
@@ -421,7 +432,9 @@ export default function ShotBatchWizard() {
               const video = item.video || {};
               const bid = item.batch_id;
               const openingBusy = busyBatch === `opening-${bid}`;
+              const openingUploadBusy = busyBatch === `opening-upload-${bid}`;
               const videoBusy = busyBatch === `video-${bid}`;
+              const openingUploadFile = openingUploads[bid] || null;
 
               return (
                 <div
@@ -460,6 +473,11 @@ export default function ShotBatchWizard() {
                         Opening · {opening.status || 'pending'}
                         {opening.mode ? ` · ${opening.mode}` : ''}
                       </div>
+                      {!!opening.source_label && (
+                        <div style={{ fontSize: 11, color: color.textDim, marginBottom: 6 }}>
+                          {t('Источник opening:', 'Opening source:')} {opening.source_label}
+                        </div>
+                      )}
                       {(opening.preview_url || opening.public_url || opening.evolink_url) && (
                         <AuthMedia
                           as="img"
@@ -476,6 +494,26 @@ export default function ShotBatchWizard() {
                         >
                           {openingBusy ? '…' : t('Сгенерировать', 'Generate')}
                         </ActionBtn>
+                        {bid === 1 && (
+                          <>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                setOpeningUploads((prev) => ({ ...prev, [bid]: file }));
+                              }}
+                              style={{ maxWidth: 180, fontSize: 12 }}
+                            />
+                            <ActionBtn
+                              tone="panel"
+                              disabled={busy || !openingUploadFile}
+                              onClick={() => onUploadOpening(bid)}
+                            >
+                              {openingUploadBusy ? '…' : t('Загрузить opening', 'Upload opening')}
+                            </ActionBtn>
+                          </>
+                        )}
                         <ActionBtn
                           disabled={busy || opening.status !== 'ready'}
                           onClick={() => onOpening(bid, true)}
@@ -489,6 +527,19 @@ export default function ShotBatchWizard() {
                       <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>
                         Video · {video.status || 'pending'}
                       </div>
+                      {!!video.start_frame_label && (
+                        <div style={{ fontSize: 11, color: color.textDim, marginBottom: 6 }}>
+                          {t('Стартовый кадр видео:', 'Video start frame:')} {video.start_frame_label}
+                        </div>
+                      )}
+                      {video.start_frame_public_url && (
+                        <AuthMedia
+                          as="img"
+                          src={video.start_frame_public_url}
+                          alt={`video-start-${bid}`}
+                          style={imgStyle}
+                        />
+                      )}
                       {video.preview_public_url && (
                         <AuthMedia
                           key={`batch-video-${bid}-${video.generation || 0}`}
