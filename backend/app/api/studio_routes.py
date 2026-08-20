@@ -1830,7 +1830,7 @@ async def api_studio_shot_batch_wizard_create(
     max_batch_duration_sec: float = Form(12),
     min_shot_duration_sec: float = Form(0.4),
     face_samples: int = Form(6),
-    crossfade_ms: int = Form(200),
+    crossfade_ms: int = Form(0),
     workflow_wave_model: str = Form(""),
     wan_edit_tier: str = Form("standard"),
     session: AsyncSession = Depends(get_session),

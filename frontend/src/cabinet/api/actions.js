@@ -735,7 +735,7 @@ function appendShotBatchWizardForm(fd, params) {
 export async function createShotBatchWizard(params) {
   const fd = new FormData()
   appendShotBatchWizardForm(fd, params)
-  fd.append('crossfade_ms', String(params.crossfadeMs ?? 200))
+  fd.append('crossfade_ms', String(params.crossfadeMs ?? 0))
   const res = await apiFetch('/api/studio/debug/shot-batch-wizard', {
     method: 'POST',
     body: fd,

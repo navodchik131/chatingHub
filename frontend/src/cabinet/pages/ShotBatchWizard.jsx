@@ -153,7 +153,7 @@ export default function ShotBatchWizard() {
   const [maxBatchDurationSec, setMaxBatchDurationSec] = useState('12');
   const [minShotDurationSec, setMinShotDurationSec] = useState('0.4');
   const [faceSamples, setFaceSamples] = useState('6');
-  const [crossfadeMs, setCrossfadeMs] = useState('200');
+  const [crossfadeMs, setCrossfadeMs] = useState('0');
   const [waveModelId, setWaveModelId] = useState('nano-banana-pro');
 
   const [busy, setBusy] = useState(false);
@@ -287,8 +287,8 @@ export default function ShotBatchWizard() {
           <PageTitle style={{ marginBottom: 6 }}>Shot-batch wizard</PageTitle>
           <div style={{ fontSize: 12.5, color: color.textDim }}>
             {t(
-              'Пошаговый контроль: план → opening frame на batch → видео batch → склейка с crossfade.',
-              'Step-by-step: plan → opening frames → batch videos → crossfade stitch.',
+              'Пошаговый контроль: план → opening frame на batch → видео batch → склейка (hard cut).',
+              'Step-by-step: plan → opening frames → batch videos → hard-cut stitch.',
             )}
           </div>
         </div>
@@ -342,7 +342,11 @@ export default function ShotBatchWizard() {
                 <Field label="motion_timeline" value={motionTimeline} onChange={(e) => setMotionTimeline(e.target.value)} area rows={2} />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <Field label="output_aspect" value={outputAspect} onChange={(e) => setOutputAspect(e.target.value)} />
-                  <Field label="crossfade_ms" value={crossfadeMs} onChange={(e) => setCrossfadeMs(e.target.value)} />
+                  <Field
+                    label={t('crossfade_ms (0 = без ghosting)', 'crossfade_ms (0 = no ghosting)')}
+                    value={crossfadeMs}
+                    onChange={(e) => setCrossfadeMs(e.target.value)}
+                  />
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>
@@ -411,7 +415,7 @@ export default function ShotBatchWizard() {
                   disabled={busy || !allVideosApproved}
                   onClick={onStitch}
                 >
-                  {busy ? '…' : t('5. Stitch (crossfade)', '5. Stitch (crossfade)')}
+                  {busy ? '…' : t('5. Stitch (hard cut)', '5. Stitch (hard cut)')}
                 </ActionBtn>
               </>
             )}

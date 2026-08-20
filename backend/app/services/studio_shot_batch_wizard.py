@@ -68,7 +68,7 @@ log = logging.getLogger(__name__)
 WIZARD_JOB_TYPES = frozenset({"shot_batch_render", "shot_batch_wizard"})
 
 
-def _empty_wizard_state(*, crossfade_ms: int = 200) -> dict[str, Any]:
+def _empty_wizard_state(*, crossfade_ms: int = 0) -> dict[str, Any]:
     return {
         "wizard_phase": "created",
         "crossfade_ms": int(crossfade_ms),
@@ -227,7 +227,7 @@ async def wizard_create_job(
     motion_bytes: bytes,
     motion_suffix: str,
     params: dict[str, Any],
-    crossfade_ms: int = 200,
+    crossfade_ms: int = 0,
 ) -> tuple[StudioJob, dict[str, Any]]:
     oid = workspace_owner_id(user)
     wave_model, wan_tier, wave_profile = resolve_shot_batch_wave_settings(
@@ -921,11 +921,14 @@ async def wizard_stitch(
     crossfade_ms = int(state.get("crossfade_ms") or 0)
     stitch_gen = int(state.get("stitch_generation") or 0) + 1
     out_path = out_dir / "shot_batch_output.mp4"
+    # Hard cut + tiny head trim removes duplicate opening frame from previous-tail continuity.
+    seam_trim_sec = 0.08 if crossfade_ms <= 0 and len(video_paths) >= 2 else 0.0
     await anyio.to_thread.run_sync(
         lambda: _stitch_video_urls_to_mp4(
             video_urls=video_paths,
             out_path=out_path,
             crossfade_ms=crossfade_ms,
+            seam_trim_sec=seam_trim_sec,
         )
     )
 
@@ -941,6 +944,7 @@ async def wizard_stitch(
         ),
         "endpoint": f"/api/studio/debug/shot-batch-output/{job.id}",
         "crossfade_ms": crossfade_ms,
+        "seam_trim_sec": seam_trim_sec,
         "generation": stitch_gen,
     }
     state["stitch_generation"] = stitch_gen

@@ -293,38 +293,170 @@ def _trim_rendered_video_to_duration(
         raise RuntimeError("trimmed rendered batch is empty")
 
 
+def _trim_video_head_seconds(
+    *,
+    source_path: Path,
+    out_path: Path,
+    skip_sec: float,
+) -> None:
+    """Drop the first skip_sec of a clip (avoid duplicate seam frames on hard cut)."""
+    skip = max(0.0, float(skip_sec))
+    if skip <= 0.001:
+        out_path.write_bytes(source_path.read_bytes())
+        return
+    has_audio = probe_video_has_audio(source_path)
+    cmd = [
+        _ffmpeg_bin(),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-ss",
+        f"{skip:.3f}",
+        "-i",
+        str(source_path),
+        "-map",
+        "0:v:0",
+    ]
+    if has_audio:
+        cmd.extend(["-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k"])
+    else:
+        cmd.append("-an")
+    cmd.extend(
+        [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(out_path),
+        ]
+    )
+    _run_ffmpeg(cmd, timeout=600)
+    if not out_path.is_file() or out_path.stat().st_size < 1024:
+        raise RuntimeError("seam trim produced empty video")
+
+
 def _stitch_video_urls_to_mp4(
     *,
     video_urls: list[str],
     out_path: Path,
     crossfade_ms: int = 0,
+    seam_trim_sec: float = 0.0,
 ) -> None:
     paths = [Path(u) for u in video_urls]
     cf_sec = max(0.0, float(crossfade_ms) / 1000.0)
+    # Crossfade on people creates ghosting / double-exposure — prefer hard cut (0ms).
     if cf_sec > 0 and len(paths) >= 2 and all(p.is_file() for p in paths):
         _stitch_with_crossfade(paths=paths, out_path=out_path, crossfade_sec=cf_sec)
         return
 
-    keep_audio = bool(paths) and all(p.is_file() and probe_video_has_audio(p) for p in paths)
+    trim_sec = max(0.0, float(seam_trim_sec or 0.0))
+    work_urls = [str(p) for p in paths]
+    tmp_dir: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        if trim_sec > 0.001 and len(paths) >= 2:
+            tmp_dir = tempfile.TemporaryDirectory()
+            td = Path(tmp_dir.name)
+            trimmed: list[str] = [str(paths[0])]
+            for i, src in enumerate(paths[1:], start=2):
+                outp = td / f"seam_trim_{i}.mp4"
+                _trim_video_head_seconds(source_path=src, out_path=outp, skip_sec=trim_sec)
+                trimmed.append(str(outp))
+            work_urls = trimmed
 
-    if len(video_urls) == 1:
-        cmd = [
-            _ffmpeg_bin(),
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            video_urls[0],
-            "-map",
-            "0:v:0",
-        ]
+        keep_audio = bool(work_urls) and all(
+            Path(u).is_file() and probe_video_has_audio(Path(u)) for u in work_urls
+        )
+
+        if len(work_urls) == 1:
+            cmd = [
+                _ffmpeg_bin(),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                work_urls[0],
+                "-map",
+                "0:v:0",
+            ]
+            if keep_audio:
+                cmd.extend(["-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k"])
+            else:
+                cmd.append("-an")
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "veryfast",
+                    "-crf",
+                    "23",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
+                    str(out_path),
+                ]
+            )
+            _run_ffmpeg(cmd, timeout=600)
+            return
+
+        n = len(work_urls)
+        inputs: list[str] = []
+        for u in work_urls:
+            inputs.extend(["-i", u])
         if keep_audio:
-            cmd.extend(["-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k"])
+            refs = "".join(f"[{i}:v:0][{i}:a:0]" for i in range(n))
+            filter_complex = f"{refs}concat=n={n}:v=1:a=1[v][a]"
+            cmd = [
+                _ffmpeg_bin(),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                *inputs,
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                "[v]",
+                "-map",
+                "[a]",
+                "-c:v",
+                "libx264",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                str(out_path),
+            ]
         else:
-            cmd.append("-an")
-        cmd.extend(
-            [
+            refs = "".join(f"[{i}:v:0]" for i in range(n))
+            cmd = [
+                _ffmpeg_bin(),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                *inputs,
+                "-filter_complex",
+                f"{refs}concat=n={n}:v=1:a=0[v]",
+                "-map",
+                "[v]",
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -337,74 +469,12 @@ def _stitch_video_urls_to_mp4(
                 "+faststart",
                 str(out_path),
             ]
-        )
-        _run_ffmpeg(cmd, timeout=600)
-        return
-
-    n = len(video_urls)
-    inputs: list[str] = []
-    for u in video_urls:
-        inputs.extend(["-i", u])
-    if keep_audio:
-        refs = "".join(f"[{i}:v:0][{i}:a:0]" for i in range(n))
-        filter_complex = f"{refs}concat=n={n}:v=1:a=1[v][a]"
-        cmd = [
-            _ffmpeg_bin(),
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            *inputs,
-            "-filter_complex",
-            filter_complex,
-            "-map",
-            "[v]",
-            "-map",
-            "[a]",
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "+faststart",
-            str(out_path),
-        ]
-    else:
-        refs = "".join(f"[{i}:v:0]" for i in range(n))
-        cmd = [
-            _ffmpeg_bin(),
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            *inputs,
-            "-filter_complex",
-            f"{refs}concat=n={n}:v=1:a=0[v]",
-            "-map",
-            "[v]",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "+faststart",
-            str(out_path),
-        ]
-    _run_ffmpeg(cmd, timeout=1200)
-    if not out_path.is_file() or out_path.stat().st_size < 1024:
-        raise RuntimeError("stitched output is empty")
+        _run_ffmpeg(cmd, timeout=1200)
+        if not out_path.is_file() or out_path.stat().st_size < 1024:
+            raise RuntimeError("stitched output is empty")
+    finally:
+        if tmp_dir is not None:
+            tmp_dir.cleanup()
 
 
 async def _download_url_bytes(url: str) -> bytes:
