@@ -543,6 +543,11 @@ export default function ShotBatchWizard() {
                         Video · {video.status || 'pending'}
                         {video.mode ? ` · ${video.mode}` : ''}
                       </div>
+                      {!!video.prefill_next_error && (
+                        <div style={{ fontSize: 11, color: '#c45c5c', marginBottom: 6 }}>
+                          {t('Prefill следующего opening:', 'Next opening prefill:')} {video.prefill_next_error}
+                        </div>
+                      )}
                       {!!video.start_frame_label && (
                         <div style={{ fontSize: 11, color: color.textDim, marginBottom: 6 }}>
                           {t('Стартовый кадр видео:', 'Video start frame:')} {video.start_frame_label}

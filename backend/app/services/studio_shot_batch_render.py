@@ -65,15 +65,19 @@ def _owner_motion_dir(owner_id: int) -> Path:
 
 
 def _run_ffmpeg(cmd: list[str], *, timeout: float) -> None:
-    subprocess.run(
-        cmd,
-        check=True,
-        timeout=timeout,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            timeout=timeout,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except subprocess.CalledProcessError as e:
+        err = ((e.stderr or "") or (e.stdout or "")).strip()
+        raise RuntimeError(f"ffmpeg failed: {err[:800] or e.returncode}") from e
 
 
 def _jpeg_data_url(jpeg: bytes) -> str:
@@ -108,14 +112,32 @@ def _extract_opening_frame_jpeg(video_path: Path, *, t: float, jpeg_quality: int
 
 
 def _extract_last_frame_jpeg(video_path: Path, *, jpeg_quality: int = 5) -> bytes:
-    with tempfile.TemporaryDirectory() as td:
-        out = Path(td) / "last.jpg"
-        cmd = [
-            _ffmpeg_bin(),
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
+    """Best-effort last frame; some uploads fail with -sseof alone."""
+    errors: list[str] = []
+
+    def _try(cmd: list[str], label: str) -> bytes | None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "last.jpg"
+            try:
+                _run_ffmpeg([*cmd, str(out)], timeout=180)
+            except Exception as e:  # noqa: BLE001 - collect and try next strategy
+                errors.append(f"{label}: {e}")
+                return None
+            if not out.is_file() or out.stat().st_size < 64:
+                errors.append(f"{label}: empty output")
+                return None
+            return out.read_bytes()
+
+    base = [
+        _ffmpeg_bin(),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+    ]
+    jpeg = _try(
+        [
+            *base,
             "-sseof",
             "-0.08",
             "-i",
@@ -124,13 +146,46 @@ def _extract_last_frame_jpeg(video_path: Path, *, jpeg_quality: int = 5) -> byte
             "1",
             "-q:v",
             str(jpeg_quality),
-            str(out),
-        ]
-        _run_ffmpeg(cmd, timeout=120)
-        if not out.is_file() or out.stat().st_size < 64:
-            raise RuntimeError("ffmpeg did not extract last frame")
-        return out.read_bytes()
+        ],
+        "sseof",
+    )
+    if jpeg:
+        return jpeg
 
+    dur = probe_video_duration_seconds(video_path) or 0.0
+    if dur > 0:
+        t = max(0.0, dur - 0.05)
+        try:
+            return _extract_opening_frame_jpeg(video_path, t=t, jpeg_quality=jpeg_quality)
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"seek_end: {e}")
+
+    jpeg = _try(
+        [
+            *base,
+            "-i",
+            str(video_path),
+            "-vf",
+            "reverse",
+            "-frames:v",
+            "1",
+            "-q:v",
+            str(jpeg_quality),
+        ],
+        "reverse",
+    )
+    if jpeg:
+        return jpeg
+
+    # Last resort: any frame near the start (still better than hard-failing Approve).
+    try:
+        return _extract_opening_frame_jpeg(video_path, t=0.0, jpeg_quality=jpeg_quality)
+    except Exception as e:  # noqa: BLE001
+        errors.append(f"first_frame: {e}")
+
+    raise RuntimeError(
+        "ffmpeg did not extract last frame: " + "; ".join(errors[:4])
+    )
 
 def _stitch_with_crossfade(
     *,

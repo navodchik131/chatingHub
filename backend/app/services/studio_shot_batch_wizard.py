@@ -39,7 +39,11 @@ from app.services.studio_jobs import (
     update_studio_job_params,
     update_studio_job_result,
 )
-from app.services.studio_motion_video import prepare_motion_video_file_for_duration, resolve_motion_audio_file
+from app.services.studio_motion_video import (
+    _ffmpeg_bin,
+    prepare_motion_video_file_for_duration,
+    resolve_motion_audio_file,
+)
 from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
     build_seedance_t2v_prompt,
@@ -56,6 +60,7 @@ from app.services.studio_shot_batch_render import (
     _extract_opening_frame_jpeg,
     _generate_synthetic_opening_frame,
     _jpeg_data_url,
+    _run_ffmpeg,
     _stitch_video_urls_to_mp4,
     _trim_rendered_video_to_duration,
     _trim_segment_to_motion_root,
@@ -467,6 +472,39 @@ async def _prefill_next_batch_opening_from_previous_video(
     return state
 
 
+def _normalize_uploaded_batch_mp4(video_bytes: bytes, dest: Path) -> None:
+    """Remux/re-encode uploads so last-frame extract and stitch stay reliable."""
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "upload.bin"
+        out = Path(td) / "normalized.mp4"
+        src.write_bytes(video_bytes)
+        base = [_ffmpeg_bin(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(src)]
+        try:
+            _run_ffmpeg(
+                [*base, "-c", "copy", "-movflags", "+faststart", str(out)],
+                timeout=180,
+            )
+        except Exception:
+            _run_ffmpeg(
+                [
+                    *base,
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-movflags",
+                    "+faststart",
+                    str(out),
+                ],
+                timeout=600,
+            )
+        if not out.is_file() or out.stat().st_size < 1024:
+            raise RuntimeError("не удалось нормализовать загруженный клип (ffmpeg)")
+        dest.write_bytes(out.read_bytes())
+
+
 async def wizard_upload_video(
     session: AsyncSession,
     job: StudioJob,
@@ -497,9 +535,9 @@ async def wizard_upload_video(
     gen = int(video.get("generation") or 0) + 1
     local_name = f"batch_{batch_id}_g{gen}.mp4"
     path = out_dir / local_name
-    path.write_bytes(video_bytes)
+    await anyio.to_thread.run_sync(lambda: _normalize_uploaded_batch_mp4(video_bytes, path))
     canonical = out_dir / f"batch_{batch_id}.mp4"
-    canonical.write_bytes(video_bytes)
+    canonical.write_bytes(path.read_bytes())
 
     opening = entry.get("opening") or {}
     video.update(
@@ -943,20 +981,28 @@ async def wizard_approve_video(
     entry = (state.get("batches") or {}).get(key)
     if not entry:
         raise RuntimeError(f"unknown batch {batch_id}")
-    video = entry.get("video") or {}
+    video = dict(entry.get("video") or {})
     if video.get("status") not in ("ready", "approved"):
         raise RuntimeError("render batch video first")
     video["status"] = "approved"
+    video.pop("prefill_next_error", None)
     entry["video"] = video
     state["batches"][key] = entry
     state["wizard_phase"] = "videos"
-    state = await _prefill_next_batch_opening_from_previous_video(
-        session,
-        job,
-        user,
-        approved_batch_id=batch_id,
-        state=state,
-    )
+    try:
+        state = await _prefill_next_batch_opening_from_previous_video(
+            session,
+            job,
+            user,
+            approved_batch_id=batch_id,
+            state=state,
+        )
+    except Exception as e:  # noqa: BLE001 - keep approve; user can upload/generate next opening
+        entry = (state.get("batches") or {}).get(key) or entry
+        video = dict(entry.get("video") or {})
+        video["prefill_next_error"] = str(e)
+        entry["video"] = video
+        state["batches"][key] = entry
     return await _save_state(session, job, state)
 
 

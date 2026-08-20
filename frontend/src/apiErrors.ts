@@ -14,8 +14,12 @@ export function formatApiErrorDetail(data: unknown): string {
     }
     return m
   }
-  if (typeof o.error === 'string' && /insufficient scopes/i.test(o.error)) {
-    return i18n.t('errors.fanvueInsufficientScopes', { ns: COMMON_NS })
+  if (typeof o.error === 'string' && o.error.trim()) {
+    const err = o.error.trim()
+    if (/insufficient scopes/i.test(err)) {
+      return i18n.t('errors.fanvueInsufficientScopes', { ns: COMMON_NS })
+    }
+    return err
   }
   const d = o.detail
   if (d && typeof d === 'object' && !Array.isArray(d)) {
