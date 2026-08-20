@@ -250,13 +250,13 @@ def _motion_swap_prompt_core(
         return (
             outline_block
             + "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n"
-            "@Image1 sets opening pose, scene, environment, lighting, wardrobe, and framing at t=0 only — "
-            "not character identity.\n\n"
+            "@Image1 sets opening pose, scene, environment, lighting, framing, and wardrobe for the "
+            "ENTIRE clip — keep the same clothing, shoes and accessories as @Image1 in every frame.\n\n"
             f"Replace the person in @Video1 with the character from {identity_tags}. "
             "The performer from @Video1 does not appear in the output.\n\n"
-            f"{identity_tags} define face, hair, skin tone, and body proportions for the entire clip — "
-            "locked even when the camera reveals new body areas. "
-            "Character likeness must match these references, not @Image1.\n\n"
+            f"{identity_tags} define face, hair, skin tone, and body proportions only — "
+            "ignore any outfit shown on those model reference photos. "
+            "Character likeness must match these references for face/identity, not wardrobe.\n\n"
             "@Video1 defines motion only: camera path, framing, cuts, timing, choreography, gestures, speed. "
             "Reproduce exactly.\n\n"
             "No captions, watermarks or logos."

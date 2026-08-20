@@ -2006,7 +2006,7 @@ async def api_studio_shot_batch_wizard_batch_approve(
     from app.services.studio_shot_batch_wizard import wizard_approve_video, wizard_state_for_api
 
     try:
-        await wizard_approve_video(session, job, batch_id=batch_id)
+        await wizard_approve_video(session, job, user, batch_id=batch_id)
         await session.refresh(job)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)

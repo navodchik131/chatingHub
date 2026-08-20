@@ -44,6 +44,7 @@ from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
     build_seedance_t2v_prompt,
     filter_model_images_for_seedance_motion_swap,
+    filter_model_images_for_seedance_video_face_only,
     model_reference_public_urls,
 )
 from app.services.studio_aspect import aspect_ratio_for_seedance_i2v
@@ -145,6 +146,7 @@ async def _load_model_context(
     owner_id: int,
     model_id: int,
     pub: str,
+    face_only: bool = False,
 ) -> tuple[UserStudioModel, list[str]]:
     stmt = (
         select(UserStudioModel)
@@ -154,7 +156,13 @@ async def _load_model_context(
     sm = (await session.execute(stmt)).scalar_one_or_none()
     if not sm:
         raise RuntimeError("studio model not found")
-    model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
+    imgs = list(sm.images)
+    if face_only:
+        model_imgs = filter_model_images_for_seedance_video_face_only(imgs)
+        if not model_imgs:
+            model_imgs = filter_model_images_for_seedance_motion_swap(imgs)[:1]
+    else:
+        model_imgs = filter_model_images_for_seedance_motion_swap(imgs)
     if not model_imgs:
         raise RuntimeError("model has no face refs for motion")
     model_urls = model_reference_public_urls(
@@ -168,17 +176,48 @@ async def _load_model_context(
     return sm, model_urls
 
 
-def _identity_brief(base: str, *, batch_id: int) -> str:
+def _opening_locks_wardrobe(opening: dict[str, Any] | None, *, batch_id: int) -> bool:
+    """Batch 2+ or prefilled/uploaded openings must keep wardrobe from @Image1."""
+    if batch_id > 1:
+        return True
+    mode = str((opening or {}).get("source_mode") or (opening or {}).get("mode") or "").strip().lower()
+    return mode in (
+        "previous_batch_tail",
+        "auto_prefilled_tail",
+        "manual_upload",
+    )
+
+
+def _identity_brief(base: str, *, batch_id: int, wardrobe_from_opening: bool = False) -> str:
     brief = (base or "").strip()
-    if batch_id <= 1:
+    if batch_id <= 1 and not wardrobe_from_opening:
         return brief
     lock = (
-        " CRITICAL continuity: same person, same outfit, same hairstyle and accessories "
-        "as the approved previous batch — do not change clothing or styling. "
+        " CRITICAL continuity: same person as the approved previous batch. "
         "Use THIS batch pose, camera and composition from the current segment — "
         "do not copy the previous batch start frame."
     )
+    if wardrobe_from_opening:
+        lock += (
+            " WARDROBE LOCK: clothing, shoes, accessories and hairstyle must match @Image1 "
+            "for the ENTIRE clip. Model reference images are face/identity only — "
+            "ignore any outfit shown on those model photos."
+        )
+    else:
+        lock += " Keep the same outfit and styling as the approved previous batch."
     return (brief + lock).strip()
+
+
+def _append_wardrobe_from_opening_lock(prompt: str) -> str:
+    lock = (
+        "WARDROBE LOCK: Keep the exact clothing, shoes, accessories and hairstyle from @Image1 "
+        "in every frame of this clip. @Image2+ are face/identity references only — "
+        "do not copy outfits from model photos."
+    )
+    body = (prompt or "").strip()
+    if "WARDROBE LOCK:" in body:
+        return body
+    return f"{body}\n\n{lock}".strip() if body else lock
 
 
 async def wizard_create_job(
@@ -339,6 +378,89 @@ def _opening_source_label(mode: str | None) -> str:
     return "first frame of current segment"
 
 
+def _set_opening_ready(
+    *,
+    opening: dict[str, Any],
+    status: str,
+    generation: int,
+    mode: str,
+    source_mode: str,
+    preview_url: str,
+    public_url: str,
+    evolink_url: str,
+    local_name: str,
+) -> dict[str, Any]:
+    opening.update(
+        {
+            "status": status,
+            "generation": generation,
+            "mode": mode,
+            "source_mode": source_mode,
+            "source_label": _opening_source_label(source_mode),
+            "preview_url": preview_url,
+            "public_url": public_url,
+            "evolink_url": evolink_url,
+            "local_name": local_name,
+        }
+    )
+    return opening
+
+
+async def _prefill_next_batch_opening_from_previous_video(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+    *,
+    approved_batch_id: int,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    next_batch_id = int(approved_batch_id) + 1
+    key = _batch_key(next_batch_id)
+    entry = (state.get("batches") or {}).get(key)
+    if not entry:
+        return state
+    opening = dict(entry.get("opening") or {})
+    if opening.get("status") not in (None, "", "pending") or int(opening.get("generation") or 0) > 0:
+        return state
+
+    out_dir = studio_job_dir(int(job.id))
+    prev_path = _prev_approved_video_path(state, next_batch_id, out_dir)
+    if prev_path is None:
+        return state
+
+    oid = workspace_owner_id(user)
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    jpeg = await anyio.to_thread.run_sync(lambda pp=prev_path: _extract_last_frame_jpeg(pp))
+    local_name = f"opening_batch_{next_batch_id}_g1.jpg"
+    (out_dir / local_name).write_bytes(jpeg)
+    opening_url = await evolink_upload_file_bytes(
+        data=jpeg,
+        filename=local_name,
+        content_type="image/jpeg",
+    )
+    entry["opening"] = _set_opening_ready(
+        opening=opening,
+        status="ready",
+        generation=1,
+        mode="auto_prefilled_tail",
+        source_mode="previous_batch_tail",
+        preview_url=_jpeg_data_url(jpeg),
+        public_url=_public_media_url(
+            pub=pub,
+            owner_id=oid,
+            job_id=int(job.id),
+            kind="frame",
+            frame_name=local_name,
+        ),
+        evolink_url=opening_url,
+        local_name=local_name,
+    )
+    state["batches"][key] = entry
+    if state.get("wizard_phase") == "planned":
+        state["wizard_phase"] = "openings"
+    return state
+
+
 async def wizard_upload_opening(
     session: AsyncSession,
     job: StudioJob,
@@ -375,26 +497,23 @@ async def wizard_upload_opening(
         filename=filename or local_name,
         content_type="image/jpeg",
     )
-    opening.update(
-        {
-            "status": "ready",
-            "generation": gen,
-            "mode": "manual_upload",
-            "source_mode": "manual_upload",
-            "source_label": _opening_source_label("manual_upload"),
-            "preview_url": _jpeg_data_url(image_bytes),
-            "public_url": _public_media_url(
-                pub=pub,
-                owner_id=oid,
-                job_id=int(job.id),
-                kind="frame",
-                frame_name=local_name,
-            ),
-            "evolink_url": opening_url,
-            "local_name": local_name,
-        }
+    entry["opening"] = _set_opening_ready(
+        opening=opening,
+        status="ready",
+        generation=gen,
+        mode="manual_upload",
+        source_mode="manual_upload",
+        preview_url=_jpeg_data_url(image_bytes),
+        public_url=_public_media_url(
+            pub=pub,
+            owner_id=oid,
+            job_id=int(job.id),
+            kind="frame",
+            frame_name=local_name,
+        ),
+        evolink_url=opening_url,
+        local_name=local_name,
     )
-    entry["opening"] = opening
     state["batches"][key] = entry
     state["wizard_phase"] = "openings"
     return await _save_state(session, job, state)
@@ -529,28 +648,26 @@ async def wizard_generate_opening(
         local_name = f"opening_batch_{batch_id}_g{gen}.jpg"
         (out_dir / local_name).write_bytes(display_jpeg)
 
-        opening.update(
-            {
-                "status": "ready",
-                "mode": mode,
-                "source_mode": source_mode,
-                "source_label": _opening_source_label(source_mode),
-                "preview_url": _jpeg_data_url(display_jpeg),
-                "public_url": _public_media_url(
-                    pub=pub,
-                    owner_id=oid,
-                    job_id=int(job.id),
-                    kind="frame",
-                    frame_name=local_name,
-                ),
-                "evolink_url": opening_url,
-                "local_name": local_name,
-            }
+        entry["opening"] = _set_opening_ready(
+            opening=opening,
+            status="ready",
+            generation=gen,
+            mode=mode,
+            source_mode=source_mode,
+            preview_url=_jpeg_data_url(display_jpeg),
+            public_url=_public_media_url(
+                pub=pub,
+                owner_id=oid,
+                job_id=int(job.id),
+                kind="frame",
+                frame_name=local_name,
+            ),
+            evolink_url=opening_url,
+            local_name=local_name,
         )
     finally:
         td.cleanup()
 
-    entry["opening"] = opening
     state["batches"][key] = entry
     state["wizard_phase"] = "openings"
     return await _save_state(session, job, state)
@@ -609,7 +726,14 @@ async def wizard_render_batch(
     video_resolution = str(p.get("video_resolution") or settings.evolink_video_default_resolution)
     seedance_variant = normalize_evolink_seedance_variant(str(p.get("seedance_variant") or "standard"))
 
-    _sm, model_urls = await _load_model_context(session, owner_id=oid, model_id=mid, pub=pub)
+    wardrobe_from_opening = _opening_locks_wardrobe(opening, batch_id=batch_id)
+    _sm, model_urls = await _load_model_context(
+        session,
+        owner_id=oid,
+        model_id=mid,
+        pub=pub,
+        face_only=wardrobe_from_opening,
+    )
     _ = evolink_platform_api_key()
 
     video = dict(entry.get("video") or {})
@@ -654,7 +778,11 @@ async def wizard_render_batch(
         if not opening_url:
             raise RuntimeError("approved opening has no evolink_url")
 
-        scene = _identity_brief(prompt, batch_id=batch_id)
+        scene = _identity_brief(
+            prompt,
+            batch_id=batch_id,
+            wardrobe_from_opening=wardrobe_from_opening,
+        )
         seed_prompt, _prompt_source = await build_seedance_t2v_prompt(
             user_brief=scene,
             n_start_frame=1,
@@ -669,8 +797,10 @@ async def wizard_render_batch(
             force_template=False,
             reference_only=False,
             remove_face_grid=False,
-            soft_identity=False,
+            soft_identity=wardrobe_from_opening,
         )
+        if wardrobe_from_opening:
+            seed_prompt = _append_wardrobe_from_opening_lock(seed_prompt)
         if motion_aud_url:
             seed_prompt = append_motion_original_audio_prompt(seed_prompt)
 
@@ -737,6 +867,7 @@ async def wizard_render_batch(
 async def wizard_approve_video(
     session: AsyncSession,
     job: StudioJob,
+    user: User,
     *,
     batch_id: int,
 ) -> dict[str, Any]:
@@ -752,6 +883,13 @@ async def wizard_approve_video(
     entry["video"] = video
     state["batches"][key] = entry
     state["wizard_phase"] = "videos"
+    state = await _prefill_next_batch_opening_from_previous_video(
+        session,
+        job,
+        user,
+        approved_batch_id=batch_id,
+        state=state,
+    )
     return await _save_state(session, job, state)
 
 
