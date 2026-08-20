@@ -228,22 +228,45 @@ def _difficulty_from_heuristics(
 ) -> str:
     if subject_visibility_status == "not_detected":
         return "low"
-    if object_risk_level == "high":
+    # Absolute motion alone is NOT enough for "high": continuous body/camera
+    # rotation has high MAD everywhere and must not explode into 1-shot batches.
+    if object_risk_level == "high" and motion_score >= 28.0:
         return "high"
-    # Rough heuristic: longer + more motion => high.
-    if shot_dur >= 2.2 or motion_score >= 14.0:
+    if shot_dur >= 3.5 and motion_score >= 22.0:
         return "high"
+    if shot_dur >= 2.2 or motion_score >= 14.0 or object_risk_level == "high":
+        return "medium"
     if shot_dur >= 1.2 or motion_score >= 8.0:
         return "medium"
     return "low"
 
 
 def _object_risk_from_motion(motion_score: float) -> str:
-    if motion_score >= 18.0:
+    # Raised thresholds: ordinary turn-in-place / pan often sits ~20–30 MAD.
+    # Reserve "high" for abrupt local spikes that deserve isolation.
+    if motion_score >= 34.0:
         return "high"
-    if motion_score >= 12.0:
+    if motion_score >= 22.0:
         return "medium"
     return "low"
+
+
+def _should_start_new_batch_for_difficulty(cur: list[ShotPlan], nxt: ShotPlan) -> bool:
+    """
+    Isolate difficulty *transitions*, not continuous high-motion runs.
+
+    A 9s rotate with no scene cuts used to become six ~1.5s high shots, each
+    flushed alone → Seedance min 4s × 6 = 24s billed for ~9s of source.
+    """
+    if not cur:
+        return False
+    cur_all_high = all(x.difficulty == "high" for x in cur)
+    cur_has_non_high = any(x.difficulty != "high" for x in cur)
+    if nxt.difficulty == "high" and cur_has_non_high:
+        return True
+    if nxt.difficulty != "high" and cur_all_high:
+        return True
+    return False
 
 
 def _subject_status_from_face_and_motion(
@@ -357,21 +380,26 @@ def plan_shot_batches(
     if not shots_raw:
         shots_raw = [(0.0, duration)]
     elif len(shots_raw) < 2:
-        # Fallback: if scene-detect doesn't find meaningful cuts, split uniformly
-        # so we still can isolate problematic mid-shots by heuristics.
-        # (Your real cases often have low/ambiguous visual scene changes.)
-        segmentation_mode = "scene_detect+uniform_fallback"
-        target_len = 1.7  # seconds
-        n = max(2, int(math.ceil(duration / target_len)))
-        n = min(n, 10)  # hard limit for debug speed
-        step = duration / n
-        shots_raw = []
-        for i in range(n):
-            t0 = i * step
-            t1 = duration if i == n - 1 else (i + 1) * step
-            if t1 - t0 >= min_shot_duration_sec:
-                shots_raw.append((t0, t1))
-        if not shots_raw:
+        # No real scene cuts. Do NOT slice into ~1.5s micro-shots: Seedance
+        # rounds each batch up to duration_min (4s), so a 9s rotate became 6×4s.
+        # Keep one shot when it fits a single batch window; only chunk by
+        # max_batch_duration_sec when the clip is longer than one generation.
+        if duration > float(max_batch_duration_sec) + 1e-6:
+            segmentation_mode = "scene_detect+duration_chunks"
+            target_len = max(4.0, float(max_batch_duration_sec))
+            n = max(2, int(math.ceil(duration / target_len)))
+            n = min(n, 12)
+            step = duration / n
+            shots_raw = []
+            for i in range(n):
+                t0 = i * step
+                t1 = duration if i == n - 1 else (i + 1) * step
+                if t1 - t0 >= min_shot_duration_sec:
+                    shots_raw.append((t0, t1))
+            if not shots_raw:
+                shots_raw = [(0.0, duration)]
+        else:
+            segmentation_mode = "scene_detect_single"
             shots_raw = [(0.0, duration)]
 
     shots: list[ShotPlan] = []
@@ -464,8 +492,7 @@ def plan_shot_batches(
             cur_dur = s.duration
             continue
 
-        # high difficulty shots start their own batch
-        if s.difficulty == "high" and cur:
+        if _should_start_new_batch_for_difficulty(cur, s):
             _flush()
             cur = [s]
             cur_dur = s.duration
