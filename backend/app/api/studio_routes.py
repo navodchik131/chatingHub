@@ -1994,6 +1994,36 @@ async def api_studio_shot_batch_wizard_batch_render(
     return JSONResponse(wizard_state_for_api(job))
 
 
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/render/upload")
+async def api_studio_shot_batch_wizard_video_upload(
+    job_id: int,
+    batch_id: int,
+    batch_video: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_state_for_api, wizard_upload_video
+
+    raw = await batch_video.read()
+    if not raw or len(raw) < 1024:
+        return JSONResponse({"error": "Пустой batch video."}, status_code=400)
+    try:
+        await wizard_upload_video(
+            session,
+            job,
+            user,
+            batch_id=batch_id,
+            video_bytes=raw,
+            filename=(batch_video.filename or "").strip() or None,
+        )
+        await session.refresh(job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(wizard_state_for_api(job))
+
+
 @router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/render/approve")
 async def api_studio_shot_batch_wizard_batch_approve(
     job_id: int,

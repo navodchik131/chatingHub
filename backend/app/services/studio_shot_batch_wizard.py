@@ -420,7 +420,12 @@ async def _prefill_next_batch_opening_from_previous_video(
     if not entry:
         return state
     opening = dict(entry.get("opening") or {})
-    if opening.get("status") not in (None, "", "pending") or int(opening.get("generation") or 0) > 0:
+    # Never overwrite an already approved next opening.
+    if opening.get("status") == "approved":
+        return state
+    # Keep a user-made ready opening (generate/upload) unless it was auto-prefilled.
+    mode = str(opening.get("mode") or "").strip().lower()
+    if opening.get("status") == "ready" and mode not in ("", "auto_prefilled_tail", "pending"):
         return state
 
     out_dir = studio_job_dir(int(job.id))
@@ -431,7 +436,8 @@ async def _prefill_next_batch_opening_from_previous_video(
     oid = workspace_owner_id(user)
     pub = (settings.public_app_url or "").strip().rstrip("/")
     jpeg = await anyio.to_thread.run_sync(lambda pp=prev_path: _extract_last_frame_jpeg(pp))
-    local_name = f"opening_batch_{next_batch_id}_g1.jpg"
+    gen = max(1, int(opening.get("generation") or 0) + 1)
+    local_name = f"opening_batch_{next_batch_id}_g{gen}.jpg"
     (out_dir / local_name).write_bytes(jpeg)
     opening_url = await evolink_upload_file_bytes(
         data=jpeg,
@@ -441,7 +447,7 @@ async def _prefill_next_batch_opening_from_previous_video(
     entry["opening"] = _set_opening_ready(
         opening=opening,
         status="ready",
-        generation=1,
+        generation=gen,
         mode="auto_prefilled_tail",
         source_mode="previous_batch_tail",
         preview_url=_jpeg_data_url(jpeg),
@@ -461,6 +467,69 @@ async def _prefill_next_batch_opening_from_previous_video(
     return state
 
 
+async def wizard_upload_video(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+    *,
+    batch_id: int,
+    video_bytes: bytes,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    """Attach an already-rendered batch clip (skip Seedance render)."""
+    state = _wizard_state(job)
+    if state.get("wizard_phase") not in ("planned", "openings", "videos", "stitched"):
+        raise RuntimeError("run plan first")
+    if not video_bytes or len(video_bytes) < 1024:
+        raise RuntimeError("uploaded batch video is empty")
+
+    key = _batch_key(batch_id)
+    entry = (state.get("batches") or {}).get(key)
+    if not entry:
+        raise RuntimeError(f"unknown batch {batch_id}")
+
+    oid = workspace_owner_id(user)
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    out_dir = studio_job_dir(int(job.id))
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    video = dict(entry.get("video") or {})
+    gen = int(video.get("generation") or 0) + 1
+    local_name = f"batch_{batch_id}_g{gen}.mp4"
+    path = out_dir / local_name
+    path.write_bytes(video_bytes)
+    canonical = out_dir / f"batch_{batch_id}.mp4"
+    canonical.write_bytes(video_bytes)
+
+    opening = entry.get("opening") or {}
+    video.update(
+        {
+            "status": "ready",
+            "generation": gen,
+            "mode": "manual_upload",
+            "provider_url": None,
+            "local_name": local_name,
+            "start_frame_mode": opening.get("source_mode") or opening.get("mode") or "manual_upload",
+            "start_frame_label": opening.get("source_label")
+            or "uploaded batch video (opening optional)",
+            "start_frame_public_url": opening.get("public_url"),
+            "preview_public_url": _public_media_url(
+                pub=pub,
+                owner_id=oid,
+                job_id=int(job.id),
+                kind="batch",
+                batch_id=batch_id,
+                cache_version=gen,
+            ),
+            "uploaded_filename": (filename or "").strip() or None,
+        }
+    )
+    entry["video"] = video
+    state["batches"][key] = entry
+    state["wizard_phase"] = "videos"
+    return await _save_state(session, job, state)
+
+
 async def wizard_upload_opening(
     session: AsyncSession,
     job: StudioJob,
@@ -474,8 +543,6 @@ async def wizard_upload_opening(
     state = _wizard_state(job)
     if state.get("wizard_phase") not in ("planned", "openings", "videos", "stitched"):
         raise RuntimeError("run plan first")
-    if batch_id != 1:
-        raise RuntimeError("manual upload is supported only for batch 1")
     if not image_bytes or len(image_bytes) < 64:
         raise RuntimeError("uploaded opening image is empty")
 

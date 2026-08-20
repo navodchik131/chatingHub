@@ -13,6 +13,7 @@ import {
   planShotBatchWizard,
   renderWizardBatch,
   stitchShotBatchWizard,
+  uploadWizardBatchVideo,
   uploadWizardOpening,
 } from '../api/actions';
 import { FALLBACK_GEN_MODELS } from '../api/studioHelpers';
@@ -160,6 +161,7 @@ export default function ShotBatchWizard() {
   const [busyBatch, setBusyBatch] = useState(null);
   const [wizard, setWizard] = useState(null);
   const [openingUploads, setOpeningUploads] = useState({});
+  const [videoUploads, setVideoUploads] = useState({});
 
   useEffect(() => {
     if (!modelId && models[0]?.id) setModelId(models[0].id);
@@ -242,6 +244,17 @@ export default function ShotBatchWizard() {
     setBusyBatch(`opening-upload-${batchId}`);
     const data = await uploadWizardOpening(wizard.job_id, batchId, file);
     setWizard(data);
+    setOpeningUploads((prev) => ({ ...prev, [batchId]: null }));
+  });
+
+  const onUploadVideo = (batchId) => run(async () => {
+    if (!wizard?.job_id) return;
+    const file = videoUploads[batchId];
+    if (!file) return;
+    setBusyBatch(`video-upload-${batchId}`);
+    const data = await uploadWizardBatchVideo(wizard.job_id, batchId, file);
+    setWizard(data);
+    setVideoUploads((prev) => ({ ...prev, [batchId]: null }));
   });
 
   const onRender = (batchId, approve = false) => run(async () => {
@@ -287,8 +300,8 @@ export default function ShotBatchWizard() {
           <PageTitle style={{ marginBottom: 6 }}>Shot-batch wizard</PageTitle>
           <div style={{ fontSize: 12.5, color: color.textDim }}>
             {t(
-              'Пошаговый контроль: план → opening frame на batch → видео batch → склейка (hard cut).',
-              'Step-by-step: plan → opening frames → batch videos → hard-cut stitch.',
+              'План → opening (генерация или загрузка) → видео batch (рендер или готовый клип) → Approve хвоста для следующего opening → склейка.',
+              'Plan → opening (generate or upload) → batch video (render or upload clip) → Approve tail for next opening → stitch.',
             )}
           </div>
         </div>
@@ -438,7 +451,9 @@ export default function ShotBatchWizard() {
               const openingBusy = busyBatch === `opening-${bid}`;
               const openingUploadBusy = busyBatch === `opening-upload-${bid}`;
               const videoBusy = busyBatch === `video-${bid}`;
+              const videoUploadBusy = busyBatch === `video-upload-${bid}`;
               const openingUploadFile = openingUploads[bid] || null;
+              const videoUploadFile = videoUploads[bid] || null;
 
               return (
                 <div
@@ -498,26 +513,22 @@ export default function ShotBatchWizard() {
                         >
                           {openingBusy ? '…' : t('Сгенерировать', 'Generate')}
                         </ActionBtn>
-                        {bid === 1 && (
-                          <>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0] || null;
-                                setOpeningUploads((prev) => ({ ...prev, [bid]: file }));
-                              }}
-                              style={{ maxWidth: 180, fontSize: 12 }}
-                            />
-                            <ActionBtn
-                              tone="panel"
-                              disabled={busy || !openingUploadFile}
-                              onClick={() => onUploadOpening(bid)}
-                            >
-                              {openingUploadBusy ? '…' : t('Загрузить opening', 'Upload opening')}
-                            </ActionBtn>
-                          </>
-                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            setOpeningUploads((prev) => ({ ...prev, [bid]: file }));
+                          }}
+                          style={{ maxWidth: 180, fontSize: 12 }}
+                        />
+                        <ActionBtn
+                          tone="panel"
+                          disabled={busy || phase === 'created' || !openingUploadFile}
+                          onClick={() => onUploadOpening(bid)}
+                        >
+                          {openingUploadBusy ? '…' : t('Загрузить opening', 'Upload opening')}
+                        </ActionBtn>
                         <ActionBtn
                           disabled={busy || opening.status !== 'ready'}
                           onClick={() => onOpening(bid, true)}
@@ -530,6 +541,7 @@ export default function ShotBatchWizard() {
                     <div>
                       <div style={{ fontSize: 11, color: color.textMuted, marginBottom: 6 }}>
                         Video · {video.status || 'pending'}
+                        {video.mode ? ` · ${video.mode}` : ''}
                       </div>
                       {!!video.start_frame_label && (
                         <div style={{ fontSize: 11, color: color.textDim, marginBottom: 6 }}>
@@ -560,6 +572,22 @@ export default function ShotBatchWizard() {
                         >
                           {videoBusy ? '…' : t('Render batch', 'Render batch')}
                         </ActionBtn>
+                        <input
+                          type="file"
+                          accept="video/*,.mp4,.mov,.webm"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            setVideoUploads((prev) => ({ ...prev, [bid]: file }));
+                          }}
+                          style={{ maxWidth: 180, fontSize: 12 }}
+                        />
+                        <ActionBtn
+                          tone="panel"
+                          disabled={busy || phase === 'created' || !videoUploadFile}
+                          onClick={() => onUploadVideo(bid)}
+                        >
+                          {videoUploadBusy ? '…' : t('Загрузить клип', 'Upload clip')}
+                        </ActionBtn>
                         <ActionBtn
                           disabled={busy || video.status !== 'ready'}
                           onClick={() => onRender(bid, true)}
@@ -567,6 +595,14 @@ export default function ShotBatchWizard() {
                           {t('Approve', 'Approve')}
                         </ActionBtn>
                       </div>
+                      {bid >= 1 && (
+                        <div style={{ fontSize: 11, color: color.textDim, marginTop: 6 }}>
+                          {t(
+                            'Готовый клип: Upload → Approve. Opening следующего batch подтянется с последнего кадра.',
+                            'Ready clip: Upload → Approve. Next batch opening is taken from the last frame.',
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

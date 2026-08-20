@@ -785,6 +785,18 @@ export async function uploadWizardOpening(jobId, batchId, file) {
   return data
 }
 
+export async function uploadWizardBatchVideo(jobId, batchId, file) {
+  const fd = new FormData()
+  fd.append('batch_video', file, file?.name || 'batch.mp4')
+  const res = await apiFetch(
+    `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/render/upload`,
+    { method: 'POST', body: fd, timeoutMs: 240_000 },
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Batch video upload failed')
+  return data
+}
+
 export async function approveWizardOpening(jobId, batchId) {
   const res = await apiFetch(
     `/api/studio/debug/shot-batch-wizard/${jobId}/batches/${batchId}/opening-frame/approve`,
