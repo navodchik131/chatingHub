@@ -42,12 +42,21 @@ def validate_instagram_media_url(url: str) -> None:
         raise ValueError("Нужна ссылка на instagram.com")
     if not is_single_media_url(url):
         raise ValueError(
-            "Поддерживаются только ссылки на пост или Reels: "
+            "Поддерживаются только ссылки на пост, фото или Reels: "
             "/p/…, /reel/… или /reels/…"
         )
 
 
-def suggested_filename(url: str) -> str:
+def suggested_filename(
+    url: str,
+    *,
+    kind: str = "video",
+    ext: str | None = None,
+) -> str:
     m = re.search(r"/(?:reel|reels|p)/([A-Za-z0-9_-]+)", url, re.I)
-    code = m.group(1) if m else "video"
-    return f"instagram_{code}.mp4"
+    code = m.group(1) if m else ("photo" if kind == "image" else "video")
+    if ext:
+        suffix = ext if ext.startswith(".") else f".{ext}"
+    else:
+        suffix = ".jpg" if kind == "image" else ".mp4"
+    return f"instagram_{code}{suffix}"

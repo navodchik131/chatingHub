@@ -8,7 +8,7 @@ import shutil
 import anyio
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, FSInputFile, Message
+from aiogram.types import CallbackQuery, FSInputFile, InputMediaPhoto, InputMediaVideo, Message
 
 from app.config import settings
 from app.connectors.telegram.ig_bot.keyboards import (
@@ -24,7 +24,7 @@ from app.connectors.telegram.ig_bot.keyboards import (
     reply_menu_kb,
 )
 from app.db.session import SessionLocal
-from app.services.ig_bot.download import download_instagram_video
+from app.services.ig_bot.download import download_instagram_media
 from app.services.ig_bot.limits import (
     IgBotDailyLimitExceeded,
     ensure_can_download,
@@ -41,18 +41,19 @@ log = logging.getLogger(__name__)
 router = Router(name="ig_bot")
 
 _WELCOME = (
-    "Привет! Я скачиваю **видео из Instagram** по ссылке.\n\n"
-    "Просто отправьте ссылку на Reels или пост с видео:\n"
-    "`https://www.instagram.com/reel/…`\n\n"
+    "Привет! Я скачиваю **видео и фото из Instagram** по ссылке.\n\n"
+    "Просто отправьте ссылку на Reels, пост или фото:\n"
+    "`https://www.instagram.com/reel/…`\n"
+    "`https://www.instagram.com/p/…`\n\n"
     + limits_hint_short()
 )
 
 _HELP = (
     "**Как пользоваться**\n\n"
     "1. Нажмите /start\n"
-    "2. Отправьте ссылку на Reels или пост (`/p/`, `/reel/`, `/reels/`)\n"
-    "3. Получите видео файлом в чат\n\n"
-    "Поддерживаются только **одиночные** ссылки на видео.\n"
+    "2. Отправьте ссылку на Reels, пост или фото (`/p/`, `/reel/`, `/reels/`)\n"
+    "3. Получите файл(ы) в чат\n\n"
+    "Поддерживаются **одиночные** ссылки: видео, фото и **карусели** (все слайды).\n"
     "Пачки и профили — в веб-приложении.\n\n"
     + limits_hint_short()
     + "\n\n"
@@ -60,11 +61,11 @@ _HELP = (
 )
 
 _DOWNLOAD_HINT = (
-    "Отправьте **ссылку** на Reels или пост с видео.\n\n"
+    "Отправьте **ссылку** на Reels, пост, фото или карусель.\n\n"
     "Примеры:\n"
     "• `https://www.instagram.com/reel/ABC123/`\n"
     "• `https://www.instagram.com/p/XYZ789/`\n\n"
-    "Поддерживаются только одиночные ссылки — не профили и не пачки."
+    "Карусель придёт альбомом со всеми фото/видео."
 )
 
 
@@ -207,14 +208,14 @@ async def on_text(message: Message, bot: Bot) -> None:
         if text.startswith("/"):
             return
         await message.answer(
-            "Отправьте ссылку на Instagram Reels или пост с видео.\n"
+            "Отправьте ссылку на Instagram Reels, пост или фото.\n"
             "Пример: https://www.instagram.com/reel/ABC123/\n\n"
-            "Или нажмите «📥 Скачать видео» в меню.",
+            "Или нажмите «📥 Скачать» в меню.",
             reply_markup=reply_menu_kb(),
         )
         return
 
-    status_msg = await message.answer("⏳ Скачиваю видео…")
+    status_msg = await message.answer("⏳ Скачиваю…")
 
     try:
         async with SessionLocal() as session:
@@ -233,23 +234,34 @@ async def on_text(message: Message, bot: Bot) -> None:
             user_id = user.id
             await session.commit()
 
-        file_path, tmp_dir, filename = await anyio.to_thread.run_sync(
-            download_instagram_video, url
-        )
+        media = await anyio.to_thread.run_sync(download_instagram_media, url)
+        tmp_dir = media.temp_dir
         try:
-            size = file_path.stat().st_size
             max_bytes = int(settings.ig_bot_max_video_bytes)
-            if size > max_bytes:
+            oversized = [it for it in media.items if it.path.stat().st_size > max_bytes]
+            if oversized and len(media.items) == 1:
+                size = oversized[0].path.stat().st_size
                 mb = size / (1024 * 1024)
                 cap = max_bytes / (1024 * 1024)
                 await status_msg.edit_text(
-                    f"Видео слишком большое для Telegram ({mb:.1f} МБ, лимит {cap:.0f} МБ).\n"
-                    "Попробуйте другой ролик или скачайте через веб-приложение."
+                    f"Файл слишком большой для Telegram ({mb:.1f} МБ, лимит {cap:.0f} МБ).\n"
+                    "Попробуйте другой пост или скачайте через веб-приложение."
                 )
                 return
 
-            await status_msg.edit_text("📤 Отправляю видео…")
-            video = FSInputFile(str(file_path), filename=filename)
+            sendable = [it for it in media.items if it.path.stat().st_size <= max_bytes]
+            if not sendable:
+                await status_msg.edit_text(
+                    "Все файлы в посте слишком большие для Telegram."
+                )
+                return
+
+            n = len(sendable)
+            if n == 1:
+                label = "фото" if sendable[0].kind == "image" else "видео"
+            else:
+                label = f"карусель ({n})"
+            await status_msg.edit_text(f"📤 Отправляю {label}…")
             usage_note = ""
             try:
                 async with SessionLocal() as session:
@@ -265,7 +277,30 @@ async def on_text(message: Message, bot: Bot) -> None:
                     message.from_user.id,
                 )
 
-            await message.answer_video(video, caption=f"{url}{usage_note}")
+            caption = f"{url}{usage_note}"
+            if len(sendable) == 1:
+                it = sendable[0]
+                file = FSInputFile(str(it.path), filename=it.filename)
+                if it.kind == "image":
+                    try:
+                        await message.answer_photo(file, caption=caption)
+                    except Exception:
+                        await message.answer_document(file, caption=caption)
+                else:
+                    await message.answer_video(file, caption=caption)
+            else:
+                # Telegram media group: максимум 10 за раз.
+                for chunk_i in range(0, len(sendable), 10):
+                    chunk = sendable[chunk_i : chunk_i + 10]
+                    group = []
+                    for j, it in enumerate(chunk):
+                        file = FSInputFile(str(it.path), filename=it.filename)
+                        cap = caption if chunk_i == 0 and j == 0 else None
+                        if it.kind == "image":
+                            group.append(InputMediaPhoto(media=file, caption=cap))
+                        else:
+                            group.append(InputMediaVideo(media=file, caption=cap))
+                    await message.answer_media_group(group)
 
             await status_msg.delete()
         finally:
@@ -276,4 +311,4 @@ async def on_text(message: Message, bot: Bot) -> None:
         await status_msg.edit_text(str(e))
     except Exception:
         log.exception("ig bot unexpected error user=%s", message.from_user.id)
-        await status_msg.edit_text("Не удалось скачать видео. Попробуйте позже.")
+        await status_msg.edit_text("Не удалось скачать. Попробуйте позже.")

@@ -136,11 +136,11 @@ def _html_channel_link(label: str, url: str) -> str:
 def format_usage_message(status: IgBotUsageStatus) -> str:
     sub_line = (
         f"✅ Подписка на {html.escape(status.channel_label, quote=False)} — "
-        f"лимит <b>{status.limit}</b> видео/сутки."
+        f"лимит <b>{status.limit}</b> скачиваний/сутки."
         if status.subscribed
         else (
             f"Подпишитесь на {_html_channel_link(status.channel_label, status.channel_url)} — "
-            f"<b>{settings.ig_bot_daily_limit_subscribed}</b> видео/сутки "
+            f"<b>{settings.ig_bot_daily_limit_subscribed}</b> скачиваний/сутки "
             f"(сейчас <b>{settings.ig_bot_daily_limit_default}</b>)."
         )
     )
@@ -149,7 +149,7 @@ def format_usage_message(status: IgBotUsageStatus) -> str:
         f"Сегодня: <b>{status.used}</b> / <b>{status.limit}</b> "
         f"(осталось <b>{status.remaining}</b>)\n\n"
         f"{sub_line}\n\n"
-        "Считается каждое успешно отправленное видео."
+        "Считается каждое успешно отправленное видео или фото."
     )
 
 
@@ -162,7 +162,7 @@ def format_limit_exceeded_message(status: IgBotUsageStatus) -> str:
     return (
         f"Дневной лимит исчерпан: <b>{status.used}</b> / <b>{status.limit}</b>.\n\n"
         f"Подпишитесь на {_html_channel_link(status.channel_label, status.channel_url)} — "
-        f"получите <b>{settings.ig_bot_daily_limit_subscribed}</b> видео в сутки.\n\n"
+        f"получите <b>{settings.ig_bot_daily_limit_subscribed}</b> скачиваний в сутки.\n\n"
         "После подписки нажмите «Проверить подписку»."
     )
 

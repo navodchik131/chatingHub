@@ -11,7 +11,7 @@ from aiogram.types import (
 
 from app.config import settings
 
-BTN_DOWNLOAD = "📥 Скачать видео"
+BTN_DOWNLOAD = "📥 Скачать"
 BTN_LIMITS = "📊 Лимит"
 BTN_HELP = "❓ Помощь"
 BTN_MENU = "🏠 Меню"
@@ -31,7 +31,7 @@ def reply_menu_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=BTN_MENU)],
         ],
         resize_keyboard=True,
-        input_field_placeholder="Ссылка на Reels или пост Instagram…",
+        input_field_placeholder="Ссылка на Reels / пост / фото Instagram…",
     )
 
 
@@ -77,7 +77,7 @@ def limits_hint_short() -> str:
     channel = (settings.ig_bot_subscribe_channel_label or settings.ig_bot_subscribe_channel or "").strip()
     channel_part = f" на {channel}" if channel else ""
     return (
-        f"Лимит: **{settings.ig_bot_daily_limit_default}** видео/сутки, "
+        f"Лимит: **{settings.ig_bot_daily_limit_default}** скачиваний/сутки, "
         f"с подпиской{channel_part} — **{settings.ig_bot_daily_limit_subscribed}** "
         f"(UTC, сброс в полночь)."
     )
