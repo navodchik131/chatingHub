@@ -37,6 +37,7 @@ from app.services.studio_motion_video import (
     probe_video_duration_seconds,
     probe_video_has_audio,
     resolve_motion_audio_file,
+    resolve_motion_video_file,
 )
 from app.services.studio_seedance_t2v import (
     MAX_SEEDANCE_REFERENCE_IMAGES,
@@ -307,6 +308,76 @@ def _trim_segment_to_motion_root(
     if not out_path.is_file() or out_path.stat().st_size < 1024:
         raise RuntimeError("trimmed segment video is empty")
     return fid, out_path
+
+
+async def prepare_shot_batch_motion_ref(
+    *,
+    owner_id: int,
+    src_video_path: Path,
+    t_start: float,
+    t_end: float,
+    target_sec: int,
+    apply_outline: bool | None = None,
+) -> tuple[str, Path, Path, bool]:
+    """
+    Trim batch segment, optionally edge-outline like motion control, fit duration.
+
+    Returns (motion_file_id, path_for_seedance, raw_color_path, outlined).
+
+    Opening frames / synthetic first-frame must use raw_color_path — outline has no face.
+    Seedance @Video1 should use the outlined clip so identity comes from @Image1+.
+    """
+    import shutil
+
+    from app.config import settings
+    from app.services.motion_video_outline import ensure_motion_outline_ready
+
+    seg_file_id, seg_path = await anyio.to_thread.run_sync(
+        lambda: _trim_segment_to_motion_root(
+            owner_id=owner_id,
+            src_video_path=src_video_path,
+            t_start=t_start,
+            t_end=t_end,
+        )
+    )
+    raw_color = seg_path
+    use_outline = (
+        bool(settings.motion_outline_enabled)
+        if apply_outline is None
+        else bool(apply_outline)
+    )
+    motion_src = seg_path
+    outlined = False
+
+    if use_outline:
+        source_path = seg_path.parent / f"{seg_file_id}.source.mp4"
+
+        def _promote_to_source() -> Path:
+            # ensure_motion_outline_ready treats existing .mp4 as already outlined —
+            # move the color trim to .source first so outline can replace .mp4.
+            if source_path.exists() and source_path.resolve() != seg_path.resolve():
+                source_path.unlink(missing_ok=True)
+            if seg_path.exists():
+                shutil.move(str(seg_path), str(source_path))
+            return source_path
+
+        raw_color = await anyio.to_thread.run_sync(_promote_to_source)
+        await ensure_motion_outline_ready(owner_id, seg_file_id)
+        published = resolve_motion_video_file(owner_id, seg_file_id)
+        if published is None or not published.is_file():
+            raise RuntimeError("не удалось подготовить outline motion-референс для батча")
+        motion_src = published
+        outlined = True
+
+    mv_id_eff, vpath_eff, _ = await anyio.to_thread.run_sync(
+        lambda: prepare_motion_video_file_for_duration(
+            owner_id=owner_id,
+            file_id=seg_file_id,
+            source_path=motion_src,
+            target_sec=int(target_sec),
+        )
+    )
+    return mv_id_eff, vpath_eff, raw_color, outlined
 
 
 def _trim_rendered_video_to_duration(
@@ -801,24 +872,14 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
             )
             video_res = normalize_evolink_resolution(video_resolution, variant=seedance_variant)
 
-            # Trim segment for motion reference (so each batch starts at its own t=0).
-            seg_file_id, seg_path = await anyio.to_thread.run_sync(
-                lambda: _trim_segment_to_motion_root(
-                    owner_id=oid,
-                    src_video_path=src_path,
-                    t_start=eff_start,
-                    t_end=eff_end,
-                )
-            )
-
-            # Fit reference to exact provider duration.
-            mv_id_eff, vpath_eff, _ref_video_duration = await anyio.to_thread.run_sync(
-                lambda: prepare_motion_video_file_for_duration(
-                    owner_id=oid,
-                    file_id=seg_file_id,
-                    source_path=seg_path,
-                    target_sec=ds_effective,
-                )
+            # Trim + edge-outline (motion control style) for Seedance @Video1.
+            # Opening stills must come from the raw color segment, not the outline.
+            mv_id_eff, vpath_eff, raw_color_path, motion_outlined = await prepare_shot_batch_motion_ref(
+                owner_id=oid,
+                src_video_path=src_path,
+                t_start=eff_start,
+                t_end=eff_end,
+                target_sec=ds_effective,
             )
 
             vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
@@ -828,9 +889,9 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
             if generate_audio and resolve_motion_audio_file(oid, mv_id_eff) is not None:
                 motion_aud_url = f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
 
-            # Opening frame at batch start.
+            # Opening frame at batch start (color segment, before outline).
             opening_jpeg = await anyio.to_thread.run_sync(
-                lambda vp=vpath_eff: _extract_opening_frame_jpeg(vp, t=0.0)
+                lambda vp=raw_color_path: _extract_opening_frame_jpeg(vp, t=0.0)
             )
             opening_mode = "extracted"
             opening_url: str | None = None
@@ -843,7 +904,7 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                         model_id=mid,
                         scene_brief=prompt,
                         output_aspect=output_aspect_key,
-                        segment_video_path=vpath_eff,
+                        segment_video_path=raw_color_path,
                         opening_frame_jpeg=opening_jpeg,
                         workflow_wave_model=str(p.get("workflow_wave_model") or "").strip() or None,
                         wan_edit_tier=str(p.get("wan_edit_tier") or "standard"),

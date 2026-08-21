@@ -64,6 +64,7 @@ from app.services.studio_shot_batch_render import (
     _stitch_video_urls_to_mp4,
     _trim_rendered_video_to_duration,
     _trim_segment_to_motion_root,
+    prepare_shot_batch_motion_ref,
     resolve_shot_batch_wave_settings,
     _truthy,
 )
@@ -884,21 +885,14 @@ async def wizard_render_batch(
     src_path, td = _load_source_video_path(p)
     out_dir = studio_job_dir(int(job.id))
     try:
-        seg_file_id, seg_path = await anyio.to_thread.run_sync(
-            lambda sp=src_path: _trim_segment_to_motion_root(
-                owner_id=oid,
-                src_video_path=sp,
-                t_start=eff_start,
-                t_end=eff_end,
-            )
-        )
-        mv_id_eff, _vpath_eff, _ = await anyio.to_thread.run_sync(
-            lambda: prepare_motion_video_file_for_duration(
-                owner_id=oid,
-                file_id=seg_file_id,
-                source_path=seg_path,
-                target_sec=ds_effective,
-            )
+        # Edge-outline like motion control: @Video1 carries silhouette/motion only,
+        # so Seedance cannot keep the reference actor (opening stays @Image1 identity).
+        mv_id_eff, _vpath_eff, _raw_color, motion_outlined = await prepare_shot_batch_motion_ref(
+            owner_id=oid,
+            src_video_path=src_path,
+            t_start=eff_start,
+            t_end=eff_end,
+            target_sec=ds_effective,
         )
         vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
         motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
@@ -982,6 +976,7 @@ async def wizard_render_batch(
                 "provider_duration_sec": ds_effective,
                 "target_duration_sec": trim_target,
                 "trimmed_duration_sec": probed_trim,
+                "motion_outline": bool(motion_outlined),
                 "preview_public_url": _public_media_url(
                     pub=pub,
                     owner_id=oid,
