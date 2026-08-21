@@ -16,6 +16,27 @@ log = logging.getLogger(__name__)
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
 
+def prefer_json_fill_model(raw: str) -> str:
+    """
+    Большой JSON-шаблон профиля плохо заполняют *-reasoning модели:
+    токены уходят в reasoning, в ответе остаются десятки <FILL>.
+    Для profile gen предпочитаем non-reasoning (как в переводах / .env.example).
+    """
+    m = (raw or "").strip()
+    if not m:
+        return m
+    low = m.lower()
+    if "non-reasoning" in low:
+        return m
+    if low.endswith("-reasoning") or "-reasoning-" in low:
+        fixed = re.sub(r"-reasoning(?=-|$)", "-non-reasoning", m, count=1, flags=re.I)
+        if fixed.lower() != low:
+            return fixed
+    if low in ("grok-4-1-fast", "grok-4.1-fast"):
+        return "grok-4-1-fast-non-reasoning"
+    return m
+
+
 @dataclass(frozen=True)
 class StudioOpenAiCredentials:
     api_key: str
@@ -2141,21 +2162,51 @@ async def generate_model_profile_json_from_images(
             timeout_seconds=180.0,
         )
 
+    def _prefer_json_fill_model(raw: str) -> str:
+        fixed = prefer_json_fill_model(raw)
+        if fixed != (raw or "").strip():
+            log.info(
+                "model_profile_gen: swap reasoning model %s → %s for JSON fill",
+                raw,
+                fixed,
+            )
+        return fixed
+
     def _resolve_vision_model_and_creds() -> tuple[str, StudioOpenAiCredentials | None]:
         if grok_scene_compose_configured():
-            return _grok_scene_compose_model(), grok_motion_studio_credentials()
+            return (
+                _prefer_json_fill_model(_grok_scene_compose_model()),
+                grok_motion_studio_credentials(),
+            )
         if not credentials:
             raise RuntimeError("LLM credentials не настроены")
         fallback_model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
-        return fallback_model, credentials
+        return _prefer_json_fill_model(fallback_model), credentials
 
     vision_model, vision_creds = _resolve_vision_model_and_creds()
     fallback_model = ""
     fallback_creds = credentials
     if credentials:
-        fallback_model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+        fallback_model = _prefer_json_fill_model(
+            (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+        )
     elif grok_scene_compose_configured():
-        fallback_model = _grok_fps_stills_model()
+        fallback_model = _prefer_json_fill_model(_grok_fps_stills_model())
+
+    # Если primary и fallback совпали после swap — второй шанс: явный non-reasoning.
+    if fallback_model == vision_model and "x.ai" in (
+        (vision_creds.base_url if vision_creds else "") or settings.openai_base_url or ""
+    ).lower():
+        alt = "grok-4-1-fast-non-reasoning"
+        if vision_model != alt:
+            fallback_model = alt
+            fallback_creds = vision_creds or credentials
+
+    log.info(
+        "model_profile_gen: using vision model %s (fallback %s)",
+        vision_model,
+        fallback_model or "—",
+    )
 
     max_attempts = 3
     last_unfilled: list[str] = []

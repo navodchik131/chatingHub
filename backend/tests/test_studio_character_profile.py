@@ -262,3 +262,18 @@ def test_figure_lock_enforcement_tail_curvy_profile():
     out = append_figure_lock_enforcement_tail("Scene.", model_profile_text=profile)
     assert "NOT lean athletic" in out
     assert "NOT small bust" in out
+
+
+def test_prefer_json_fill_model_swaps_reasoning():
+    from app.services.studio_openai import prefer_json_fill_model
+
+    assert (
+        prefer_json_fill_model("grok-4-1-fast-reasoning")
+        == "grok-4-1-fast-non-reasoning"
+    )
+    assert (
+        prefer_json_fill_model("grok-4-1-fast-non-reasoning")
+        == "grok-4-1-fast-non-reasoning"
+    )
+    assert prefer_json_fill_model("grok-4") == "grok-4"
+    assert prefer_json_fill_model("gpt-4o-mini") == "gpt-4o-mini"
