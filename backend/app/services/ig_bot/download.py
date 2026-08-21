@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import random
 import re
 import shutil
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 import yt_dlp
@@ -17,6 +20,26 @@ log = logging.getLogger(__name__)
 
 APP_DIR = Path(__file__).resolve().parents[3]
 WRITABLE_COOKIES = APP_DIR / "data" / "ig_bot_cookies.active.txt"
+
+# Instagram часто отдаёт empty media на один запрос и нормальный ответ на следующий.
+# Сериализуем скачивания: один cookie-файл + параллельные yt-dlp портят сессию.
+_DOWNLOAD_LOCK = threading.Lock()
+_MAX_ATTEMPTS = 3
+_RETRYABLE_MARKERS = (
+    "empty media response",
+    "login required",
+    "rate-limit",
+    "rate limit",
+    "please wait",
+    "challenge_required",
+    "checkpoint_required",
+    "http error 429",
+    "http error 5",
+    "timed out",
+    "timeout",
+    "temporarily unavailable",
+    "unable to extract",
+)
 
 
 def resolve_cookies_path() -> Path | None:
@@ -60,6 +83,74 @@ def _extract_media_id(url: str) -> str:
     return m.group(1) if m else ""
 
 
+def _is_retryable_error(exc: BaseException | None) -> bool:
+    if exc is None:
+        return False
+    text = str(exc).lower()
+    return any(marker in text for marker in _RETRYABLE_MARKERS)
+
+
+def _friendly_error(exc: BaseException | None) -> str:
+    text = str(exc or "").strip()
+    low = text.lower()
+    if "empty media response" in low:
+        return (
+            "Instagram временно не отдал видео (пустой ответ). "
+            "Это бывает даже на рабочих cookies — попробуйте ещё раз через несколько секунд."
+        )
+    if "login required" in low or "cookies" in low:
+        return (
+            "Instagram требует авторизацию. Cookies на сервере, скорее всего, устарели — "
+            "обратитесь к администратору."
+        )
+    if "rate-limit" in low or "rate limit" in low or "429" in low:
+        return "Instagram ограничил частоту скачиваний. Подождите минуту и попробуйте снова."
+    return text or "Не удалось скачать видео — проверьте ссылку и cookies"
+
+
+def _candidate_urls(url: str) -> list[str]:
+    """Небольшие варианты URL — IG иногда отвечает пусто на один формат и ок на другой."""
+    base = url.strip().rstrip("/")
+    out: list[str] = [base + "/"]
+    alt = base
+    if "/reels/" in alt:
+        alt = alt.replace("/reels/", "/reel/", 1)
+    elif "/reel/" in alt:
+        alt = alt.replace("/reel/", "/reels/", 1)
+    if alt != base:
+        out.append(alt + "/")
+    # unique preserve order
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for u in out:
+        if u not in seen:
+            seen.add(u)
+            uniq.append(u)
+    return uniq
+
+
+def _download_once(url: str, cookies_src: Path, output_dir: Path) -> Path | None:
+    """
+    Одна попытка yt-dlp. Cookies копируются во временный файл, чтобы параллельные
+    (или повторные) запуски не дрались за один Netscape-файл.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cookie_copy = output_dir / "cookies.txt"
+    shutil.copy2(cookies_src, cookie_copy)
+    opts = _build_ydl_opts(cookie_copy, output_dir)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([url])
+
+    media_id = _extract_media_id(url)
+    expected = output_dir / f"{media_id}.mp4" if media_id else None
+    if expected and expected.is_file() and expected.stat().st_size > 0:
+        return expected
+    mp4_files = sorted(output_dir.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if mp4_files and mp4_files[0].stat().st_size > 0:
+        return mp4_files[0]
+    return None
+
+
 def download_instagram_video(url: str) -> tuple[Path, Path, str]:
     """
     Скачивает одно видеo во временную папку.
@@ -75,22 +166,41 @@ def download_instagram_video(url: str) -> tuple[Path, Path, str]:
         )
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="ig-bot-"))
-    opts = _build_ydl_opts(cookies, tmp_dir)
-    error: Exception | None = None
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([target])
-    except Exception as exc:
-        error = exc
+    last_error: Exception | None = None
+    candidates = _candidate_urls(target)
 
-    media_id = _extract_media_id(target)
-    expected = tmp_dir / f"{media_id}.mp4" if media_id else None
-    if expected and expected.is_file() and expected.stat().st_size > 0:
-        return expected, tmp_dir, suggested_filename(target)
-
-    mp4_files = sorted(tmp_dir.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if mp4_files and mp4_files[0].stat().st_size > 0:
-        return mp4_files[0], tmp_dir, suggested_filename(target)
+    with _DOWNLOAD_LOCK:
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            attempt_url = candidates[(attempt - 1) % len(candidates)]
+            attempt_dir = tmp_dir / f"try_{attempt}"
+            try:
+                found = _download_once(attempt_url, cookies, attempt_dir)
+                if found is not None:
+                    if attempt > 1:
+                        log.info(
+                            "ig bot download ok on retry attempt=%s url=%s",
+                            attempt,
+                            attempt_url,
+                        )
+                    return found, tmp_dir, suggested_filename(target)
+                last_error = RuntimeError("yt-dlp завершился без mp4")
+            except Exception as exc:
+                last_error = exc
+                log.warning(
+                    "ig bot download attempt=%s failed url=%s: %s",
+                    attempt,
+                    attempt_url,
+                    exc,
+                )
+                if attempt < _MAX_ATTEMPTS and _is_retryable_error(exc):
+                    # 0.8–2.2s jitter: IG empty media часто проходит со второй попытки.
+                    time.sleep(0.8 + random.random() * 1.4)
+                    continue
+                if attempt < _MAX_ATTEMPTS and not _is_retryable_error(exc):
+                    # неизвестная ошибка — одна короткая повторка всё равно полезна
+                    time.sleep(0.5)
+                    continue
+                break
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
-    raise RuntimeError(str(error or "Не удалось скачать видео — проверьте ссылку и cookies"))
+    raise RuntimeError(_friendly_error(last_error))
