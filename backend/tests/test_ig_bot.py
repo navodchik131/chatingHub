@@ -21,8 +21,47 @@ def test_extract_instagram_post_url():
     assert url == "https://instagram.com/p/XYZ789/"
 
 
+def test_extract_instagram_share_url():
+    url = extract_instagram_url("https://www.instagram.com/share/reel/AbC123/")
+    assert url == "https://www.instagram.com/reel/AbC123/"
+
+
 def test_extract_rejects_profile():
     assert extract_instagram_url("https://www.instagram.com/someuser/") is None
+
+
+def test_shortcode_to_pk_and_api_payload_images():
+    from app.services.ig_bot.download import _remotes_from_media_payload, shortcode_to_pk
+
+    # Known shortcode/pk pair used widely in IG tooling examples
+    assert shortcode_to_pk("B1LBfVAAAAA") > 0
+
+    payload = {
+        "items": [
+            {
+                "carousel_media": [
+                    {
+                        "image_versions2": {
+                            "candidates": [
+                                {"url": "https://cdn.example/a.jpg", "width": 100, "height": 100},
+                                {"url": "https://cdn.example/b.jpg", "width": 1080, "height": 1350},
+                            ]
+                        }
+                    },
+                    {
+                        "video_versions": [
+                            {"url": "https://cdn.example/c.mp4", "width": 720, "height": 1280},
+                        ]
+                    },
+                ]
+            }
+        ]
+    }
+    remotes = _remotes_from_media_payload(payload)
+    assert len(remotes) == 2
+    assert remotes[0].kind == "image"
+    assert remotes[0].url.endswith("b.jpg")
+    assert remotes[1].kind == "video"
 
 
 def test_validate_single_media():

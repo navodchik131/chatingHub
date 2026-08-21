@@ -1,15 +1,22 @@
-"""Разбор и нормализация ссылок Instagram (одиночное видеo/reel)."""
+"""Разбор и нормализация ссылок Instagram (пост / reel / share)."""
 
 from __future__ import annotations
 
 import re
 
-INSTAGRAM_HOST = re.compile(r"^https?://(www\.)?instagram\.com/", re.I)
-_URL_IN_TEXT = re.compile(
-    r"https?://(?:www\.)?instagram\.com/(?:p|reel|reels)/[A-Za-z0-9_-]+/?",
+INSTAGRAM_HOST = re.compile(
+    r"^https?://((www|m)\.)?(instagram\.com|instagr\.am)/",
     re.I,
 )
-_SINGLE_MEDIA = re.compile(r"/(p|reel|reels)/[A-Za-z0-9_-]+", re.I)
+_URL_IN_TEXT = re.compile(
+    r"https?://(?:(?:www|m)\.)?(?:instagram\.com|instagr\.am)/"
+    r"(?:p|reel|reels|tv|share/(?:p|reel|reels)?)/[A-Za-z0-9_-]+/?",
+    re.I,
+)
+_SINGLE_MEDIA = re.compile(
+    r"/(p|reel|reels|tv|share/(?:p|reel|reels)?)/[A-Za-z0-9_-]+",
+    re.I,
+)
 
 
 def extract_instagram_url(text: str) -> str | None:
@@ -29,7 +36,22 @@ def normalize_single_url(raw: str) -> str:
     url = raw.strip()
     if not url.startswith("http"):
         url = f"https://{url.lstrip('/')}"
+    # instagr.am → instagram.com
+    url = re.sub(r"^https?://(www\.)?instagr\.am/", "https://www.instagram.com/", url, flags=re.I)
+    url = re.sub(r"^https?://m\.instagram\.com/", "https://www.instagram.com/", url, flags=re.I)
     url = url.split("?")[0].rstrip("/") + "/"
+    # share/reel/CODE → reel/CODE; share/p/CODE → p/CODE; share/CODE → p/CODE
+    m = re.search(r"/share/(reel|reels|p)/([A-Za-z0-9_-]+)/?$", url, re.I)
+    if m:
+        kind = m.group(1).lower()
+        code = m.group(2)
+        if kind == "reels":
+            kind = "reel"
+        url = f"https://www.instagram.com/{kind}/{code}/"
+    else:
+        m2 = re.search(r"/share/([A-Za-z0-9_-]+)/?$", url, re.I)
+        if m2:
+            url = f"https://www.instagram.com/p/{m2.group(1)}/"
     return url
 
 
@@ -38,7 +60,7 @@ def is_single_media_url(url: str) -> bool:
 
 
 def validate_instagram_media_url(url: str) -> None:
-    if not INSTAGRAM_HOST.match(url):
+    if not INSTAGRAM_HOST.match(url) and "instagram.com/" not in url.lower():
         raise ValueError("Нужна ссылка на instagram.com")
     if not is_single_media_url(url):
         raise ValueError(
@@ -53,7 +75,7 @@ def suggested_filename(
     kind: str = "video",
     ext: str | None = None,
 ) -> str:
-    m = re.search(r"/(?:reel|reels|p)/([A-Za-z0-9_-]+)", url, re.I)
+    m = re.search(r"/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)", url, re.I)
     code = m.group(1) if m else ("photo" if kind == "image" else "video")
     if ext:
         suffix = ext if ext.startswith(".") else f".{ext}"
