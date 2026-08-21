@@ -249,18 +249,19 @@ def _motion_swap_prompt_core(
     if n_start_frame > 0 and n_model_images > 0 and identity_tags:
         return (
             outline_block
-            + "@Image1 is frame 0 of this video. The video starts exactly on @Image1 and continues from it.\n"
+            + "CHARACTER SWAP (mandatory):\n"
+            "@Image1 is frame 0 of this video and already shows the correct lead character. "
+            "The video starts exactly on @Image1 and continues with THAT same person in every frame.\n"
+            f"Reinforce face/body likeness with {identity_tags}. "
+            "Completely replace the performer from @Video1 — their face, body, hair and identity "
+            "must NEVER appear in the output.\n\n"
             "@Image1 is the ONLY authority for wardrobe, location, background, environment, lighting and "
             "framing for the ENTIRE clip — keep the same clothing, shoes, accessories, room/outdoor set "
             "and backdrop as @Image1 in every frame. Do not morph outfit or location mid-clip.\n\n"
-            f"Replace the person in @Video1 with the character from {identity_tags}. "
-            "The performer from @Video1 does not appear in the output.\n\n"
             f"{identity_tags} define face, hair, skin tone, and body proportions only — "
-            "ignore any outfit shown on those model reference photos. "
-            "Character likeness must match these references for face/identity, not wardrobe.\n\n"
+            "ignore any outfit shown on those model reference photos.\n\n"
             "@Video1 defines MOTION ONLY: body choreography, gestures, timing, camera path, cuts and speed. "
-            "Do NOT copy clothing, shoes, hair style, location, background, weather or set design from @Video1. "
-            "If @Video1 shows a different outfit or place, ignore that appearance and keep @Image1.\n\n"
+            "Do NOT copy the @Video1 actor's face/body, clothing, location or background.\n\n"
             "No captions, watermarks or logos."
         )
 
@@ -412,7 +413,8 @@ _IDENTITY_NEGATIVE_DEFAULTS = (
 )
 
 _IDENTITY_NEGATIVE_SOFT = (
-    "morphing face, character swap mid-clip, inconsistent look, flickering features"
+    "morphing face, character swap mid-clip, inconsistent look, flickering features, "
+    "reference video actor face, actor from reference video, wrong person"
 )
 
 _WORKFLOW_FACE_GRID_REMOVAL_EN = (

@@ -1553,9 +1553,10 @@ async def api_studio_shot_batch_plan(
     motion_video: UploadFile = File(...),
     scene_threshold: float = Form(0.35),
     max_shots_per_batch: int = Form(4),
-    max_batch_duration_sec: float = Form(12),
+    max_batch_duration_sec: float = Form(4),
     min_shot_duration_sec: float = Form(0.4),
     face_samples: int = Form(6),
+    target_batch_duration_sec: float = Form(4),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
     """
@@ -1564,6 +1565,7 @@ async def api_studio_shot_batch_plan(
     Returns JSON with:
     - shots[]: subject_visible+difficulty heuristics
     - batches[]: grouped by 1..4 shots and <= max_batch_duration_sec
+      (long continuous clips are force-split near target_batch_duration_sec)
     """
     assert_permission(user, PERM_STUDIO_GENERATE)
     if motion_video is None or not (motion_video.filename or "").strip():
@@ -1591,6 +1593,7 @@ async def api_studio_shot_batch_plan(
                     max_batch_duration_sec=max_batch_duration_sec,
                     min_shot_duration_sec=min_shot_duration_sec,
                     face_samples=face_samples,
+                    target_batch_duration_sec=target_batch_duration_sec,
                 )
             )
         except Exception as e:
@@ -1619,9 +1622,10 @@ async def api_studio_shot_batch_render(
     generate_audio: str = Form("0"),
     scene_threshold: float = Form(0.35),
     max_shots_per_batch: int = Form(4),
-    max_batch_duration_sec: float = Form(12),
+    max_batch_duration_sec: float = Form(4),
     min_shot_duration_sec: float = Form(0.4),
     face_samples: int = Form(6),
+    target_batch_duration_sec: float = Form(4),
     workflow_wave_model: str = Form(""),
     wan_edit_tier: str = Form("standard"),
     session: AsyncSession = Depends(get_session),
@@ -1657,6 +1661,7 @@ async def api_studio_shot_batch_render(
         "scene_threshold": float(scene_threshold),
         "max_shots_per_batch": int(max_shots_per_batch),
         "max_batch_duration_sec": float(max_batch_duration_sec),
+        "target_batch_duration_sec": float(target_batch_duration_sec),
         "min_shot_duration_sec": float(min_shot_duration_sec),
         "face_samples": int(face_samples),
         "workflow_wave_model": (workflow_wave_model or "").strip(),
@@ -1827,9 +1832,10 @@ async def api_studio_shot_batch_wizard_create(
     generate_audio: str = Form("0"),
     scene_threshold: float = Form(0.35),
     max_shots_per_batch: int = Form(4),
-    max_batch_duration_sec: float = Form(12),
+    max_batch_duration_sec: float = Form(4),
     min_shot_duration_sec: float = Form(0.4),
     face_samples: int = Form(6),
+    target_batch_duration_sec: float = Form(4),
     crossfade_ms: int = Form(0),
     workflow_wave_model: str = Form(""),
     wan_edit_tier: str = Form("standard"),
@@ -1858,6 +1864,7 @@ async def api_studio_shot_batch_wizard_create(
         "scene_threshold": float(scene_threshold),
         "max_shots_per_batch": int(max_shots_per_batch),
         "max_batch_duration_sec": float(max_batch_duration_sec),
+        "target_batch_duration_sec": float(target_batch_duration_sec),
         "min_shot_duration_sec": float(min_shot_duration_sec),
         "face_samples": int(face_samples),
         "workflow_wave_model": (workflow_wave_model or "").strip(),

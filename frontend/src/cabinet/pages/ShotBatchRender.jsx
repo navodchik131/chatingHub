@@ -97,7 +97,7 @@ export default function ShotBatchRender() {
   const [generateAudio, setGenerateAudio] = useState(false);
   const [sceneThreshold, setSceneThreshold] = useState('0.35');
   const [maxShotsPerBatch, setMaxShotsPerBatch] = useState('4');
-  const [maxBatchDurationSec, setMaxBatchDurationSec] = useState('12');
+  const [maxBatchDurationSec, setMaxBatchDurationSec] = useState('4');
   const [minShotDurationSec, setMinShotDurationSec] = useState('0.4');
   const [faceSamples, setFaceSamples] = useState('6');
   const [waveModelId, setWaveModelId] = useState('nano-banana-pro');

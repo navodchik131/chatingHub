@@ -352,55 +352,113 @@ def _resolve_batches(
     return out
 
 
+def _chunk_time_span(
+    t0: float,
+    t1: float,
+    *,
+    target_len: float,
+    min_shot_duration_sec: float,
+    min_keep_alone_sec: float = 2.0,
+) -> list[tuple[float, float]]:
+    """
+    Split a continuous span into regenerable chunks near target_len.
+
+    Example: 8s + target 4 → [(0,4), (4,8)]. Short leftovers stay one chunk
+    when span is only slightly above target (avoids 5s → two ~2.5s pads).
+    """
+    start = float(t0)
+    end = float(t1)
+    span = end - start
+    if span < float(min_shot_duration_sec):
+        return []
+    # Align with Seedance duration_min so each batch maps ~1:1 to billed seconds.
+    target = max(4.0, float(target_len))
+    # Only force-split when we can make at least ~2 full regenerable units
+    # (e.g. 8s → 2×4). A 5–7s clip stays one batch to avoid 2×4 billing.
+    if span < (2.0 * target) - 0.25:
+        return [(start, end)]
+
+    n = max(2, int(round(span / target)))
+    while n > 1 and (span / n) < float(min_keep_alone_sec):
+        n -= 1
+    if n <= 1:
+        return [(start, end)]
+
+    step = span / n
+    out: list[tuple[float, float]] = []
+    for i in range(n):
+        a = start + i * step
+        b = end if i == n - 1 else start + (i + 1) * step
+        if b - a >= float(min_shot_duration_sec):
+            out.append((a, b))
+    return out or [(start, end)]
+
+
 def plan_shot_batches(
     video_path: Path,
     *,
     scene_threshold: float = 0.35,
     max_shots_per_batch: int = 4,
-    max_batch_duration_sec: float = 12.0,
+    max_batch_duration_sec: float = 4.0,
     min_shot_duration_sec: float = 0.4,
     face_samples: int = 6,
+    target_batch_duration_sec: float | None = None,
 ) -> dict[str, Any]:
     duration = _ffprobe_duration(video_path)
     if duration is None or duration <= 0.1:
         raise RuntimeError("Не удалось определить длительность видео для shot-batch plan.")
+
+    # Preferred regenerable unit (default = Seedance min / max_batch).
+    target_batch = float(
+        target_batch_duration_sec
+        if target_batch_duration_sec is not None
+        else max_batch_duration_sec
+    )
+    if not math.isfinite(target_batch) or target_batch <= 0:
+        target_batch = 4.0
+    target_batch = max(4.0, target_batch)
+    # Do not merge neighboring chunks past the regenerable unit.
+    batch_dur_cap = min(float(max_batch_duration_sec), target_batch)
+    if batch_dur_cap <= 0:
+        batch_dur_cap = target_batch
 
     cut_times = _probe_scene_cut_times(video_path, scene_threshold=scene_threshold)
     # Build raw shots from 0 -> duration with cuts in between.
     all_points = [0.0] + [t for t in cut_times if 0 < t < duration] + [duration]
     all_points = sorted(all_points)
 
-    shots_raw: list[tuple[float, float]] = []
+    scene_spans: list[tuple[float, float]] = []
     for a, b in zip(all_points, all_points[1:]):
         t0, t1 = float(a), float(b)
         if t1 - t0 < min_shot_duration_sec:
             continue
-        shots_raw.append((t0, t1))
-    segmentation_mode = "scene_detect"
+        scene_spans.append((t0, t1))
+    if not scene_spans:
+        scene_spans = [(0.0, duration)]
+
+    shots_raw: list[tuple[float, float]] = []
+    forced_chunks = False
+    # Forced ~4s chunks only when scene-detect found nothing useful (one continuous
+    # clip). If it already split into real scene parts, keep those as-is.
+    if len(scene_spans) <= 1:
+        t0, t1 = scene_spans[0]
+        parts = _chunk_time_span(
+            t0,
+            t1,
+            target_len=target_batch,
+            min_shot_duration_sec=min_shot_duration_sec,
+        )
+        if len(parts) > 1:
+            forced_chunks = True
+        shots_raw = parts
+        segmentation_mode = "duration_chunks" if forced_chunks else "scene_detect_single"
+    else:
+        shots_raw = list(scene_spans)
+        segmentation_mode = "scene_detect"
+
     if not shots_raw:
         shots_raw = [(0.0, duration)]
-    elif len(shots_raw) < 2:
-        # No real scene cuts. Do NOT slice into ~1.5s micro-shots: Seedance
-        # rounds each batch up to duration_min (4s), so a 9s rotate became 6×4s.
-        # Keep one shot when it fits a single batch window; only chunk by
-        # max_batch_duration_sec when the clip is longer than one generation.
-        if duration > float(max_batch_duration_sec) + 1e-6:
-            segmentation_mode = "scene_detect+duration_chunks"
-            target_len = max(4.0, float(max_batch_duration_sec))
-            n = max(2, int(math.ceil(duration / target_len)))
-            n = min(n, 12)
-            step = duration / n
-            shots_raw = []
-            for i in range(n):
-                t0 = i * step
-                t1 = duration if i == n - 1 else (i + 1) * step
-                if t1 - t0 >= min_shot_duration_sec:
-                    shots_raw.append((t0, t1))
-            if not shots_raw:
-                shots_raw = [(0.0, duration)]
-        else:
-            segmentation_mode = "scene_detect_single"
-            shots_raw = [(0.0, duration)]
+        segmentation_mode = "scene_detect_single"
 
     shots: list[ShotPlan] = []
     for idx, (t0, t1) in enumerate(shots_raw, start=1):
@@ -500,7 +558,7 @@ def plan_shot_batches(
 
         can_add = (
             len(cur) < max_shots_per_batch
-            and (cur_dur + s.duration) <= max_batch_duration_sec
+            and (cur_dur + s.duration) <= batch_dur_cap + 1e-6
         )
         if can_add:
             cur.append(s)
@@ -519,6 +577,8 @@ def plan_shot_batches(
             "scene_threshold": scene_threshold,
             "max_shots_per_batch": max_shots_per_batch,
             "max_batch_duration_sec": max_batch_duration_sec,
+            "target_batch_duration_sec": target_batch,
+            "batch_duration_cap_sec": batch_dur_cap,
             "min_shot_duration_sec": min_shot_duration_sec,
             "face_samples": face_samples,
         },

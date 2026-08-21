@@ -199,8 +199,8 @@ def _identity_brief(base: str, *, batch_id: int, wardrobe_from_opening: bool = F
         )
     if wardrobe_from_opening:
         lock += (
-            " WARDROBE+SCENE LOCK: clothing, shoes, accessories, hairstyle, location and background "
-            "must match @Image1 for the ENTIRE clip. Model reference images are face/identity only — "
+            " WARDROBE+SCENE LOCK: clothing, shoes, accessories, location and background "
+            "must match @Image1 for the ENTIRE clip. Model reference images confirm identity — "
             "ignore any outfit shown on those model photos. Never switch into the outfit or set from @Video1."
         )
     elif batch_id > 1:
@@ -210,12 +210,24 @@ def _identity_brief(base: str, *, batch_id: int, wardrobe_from_opening: bool = F
 
 def _append_wardrobe_from_opening_lock(prompt: str) -> str:
     lock = (
-        "WARDROBE+SCENE LOCK: Keep the exact clothing, shoes, accessories, hairstyle, location and "
-        "background from @Image1 in every frame. @Image2+ are face/identity only — do not copy outfits "
+        "WARDROBE+SCENE LOCK: Keep the exact clothing, shoes, accessories, location and "
+        "background from @Image1 in every frame. @Image2+ are identity references — do not copy outfits "
         "from model photos. @Video1 is motion/choreography only — never adopt its wardrobe or location."
     )
     body = (prompt or "").strip()
     if "WARDROBE+SCENE LOCK:" in body or "WARDROBE LOCK:" in body:
+        return body
+    return f"{body}\n\n{lock}".strip() if body else lock
+
+
+def _append_character_swap_lock(prompt: str) -> str:
+    lock = (
+        "CHARACTER SWAP LOCK: The person in every frame must be the same as @Image1 "
+        "(identity confirmed by @Image2+). Completely remove the @Video1 performer — "
+        "never show their face or body. Keep only motion/camera from @Video1."
+    )
+    body = (prompt or "").strip()
+    if "CHARACTER SWAP LOCK:" in body:
         return body
     return f"{body}\n\n{lock}".strip() if body else lock
 
@@ -268,9 +280,10 @@ async def wizard_run_plan(session: AsyncSession, job: StudioJob, user: User) -> 
                 src_path,
                 scene_threshold=float(p.get("scene_threshold") or 0.35),
                 max_shots_per_batch=int(p.get("max_shots_per_batch") or 4),
-                max_batch_duration_sec=float(p.get("max_batch_duration_sec") or 12),
+                max_batch_duration_sec=float(p.get("max_batch_duration_sec") or 4),
                 min_shot_duration_sec=float(p.get("min_shot_duration_sec") or 0.4),
                 face_samples=int(p.get("face_samples") or 6),
+                target_batch_duration_sec=float(p.get("target_batch_duration_sec") or p.get("max_batch_duration_sec") or 4),
             )
         )
     finally:
@@ -844,12 +857,14 @@ async def wizard_render_batch(
     seedance_variant = normalize_evolink_seedance_variant(str(p.get("seedance_variant") or "standard"))
 
     wardrobe_from_opening = _opening_locks_wardrobe(opening, batch_id=batch_id)
+    # Use full motion-swap identity refs (face+turnaround/body). Face-only was too weak
+    # vs @Video1 and Seedance kept the reference actor. Wardrobe still locked to @Image1.
     _sm, model_urls = await _load_model_context(
         session,
         owner_id=oid,
         model_id=mid,
         pub=pub,
-        face_only=wardrobe_from_opening,
+        face_only=False,
     )
     _ = evolink_platform_api_key()
 
@@ -914,8 +929,9 @@ async def wizard_render_batch(
             force_template=False,
             reference_only=False,
             remove_face_grid=False,
-            soft_identity=wardrobe_from_opening,
+            soft_identity=False,
         )
+        seed_prompt = _append_character_swap_lock(seed_prompt)
         if wardrobe_from_opening:
             seed_prompt = _append_wardrobe_from_opening_lock(seed_prompt)
         if motion_aud_url:

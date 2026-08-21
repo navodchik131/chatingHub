@@ -151,7 +151,7 @@ export default function ShotBatchWizard() {
   const [generateAudio, setGenerateAudio] = useState(true);
   const [sceneThreshold, setSceneThreshold] = useState('0.35');
   const [maxShotsPerBatch, setMaxShotsPerBatch] = useState('4');
-  const [maxBatchDurationSec, setMaxBatchDurationSec] = useState('12');
+  const [maxBatchDurationSec, setMaxBatchDurationSec] = useState('4');
   const [minShotDurationSec, setMinShotDurationSec] = useState('0.4');
   const [faceSamples, setFaceSamples] = useState('6');
   const [crossfadeMs, setCrossfadeMs] = useState('0');
@@ -329,8 +329,8 @@ export default function ShotBatchWizard() {
           <Panel style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <NoteBlock>
               {t(
-                'Сначала создай wizard job. Затем Build plan — увидишь разбивку. Для каждого batch: сгенерируй opening → approve → render video → approve. В конце Stitch.',
-                'Create wizard job, build plan, then per-batch opening/video with approve gates.',
+                'Сначала создай wizard job. Затем Build plan — увидишь разбивку (~4с батчи, чтобы проблемный кусок можно было перегенерировать). Для каждого batch: opening → approve → render → approve. В конце Stitch.',
+                'Create wizard job, build plan (~4s regenerable batches for long clips), then per-batch opening/video with approve gates.',
               )}
             </NoteBlock>
 

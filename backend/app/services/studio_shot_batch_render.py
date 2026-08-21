@@ -707,9 +707,10 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
 
     scene_threshold = float(p.get("scene_threshold") or 0.35)
     max_shots_per_batch = int(p.get("max_shots_per_batch") or 4)
-    max_batch_duration_sec = float(p.get("max_batch_duration_sec") or 12)
+    max_batch_duration_sec = float(p.get("max_batch_duration_sec") or 4)
     min_shot_duration_sec = float(p.get("min_shot_duration_sec") or 0.4)
     face_samples = int(p.get("face_samples") or 6)
+    target_batch_duration_sec = float(p.get("target_batch_duration_sec") or max_batch_duration_sec or 4)
 
     # Load uploaded video bytes from job dir.
     from app.services.studio_jobs import load_studio_job_file
@@ -735,6 +736,7 @@ async def execute_shot_batch_render(session: AsyncSession, job: StudioJob, user:
                 max_batch_duration_sec=max_batch_duration_sec,
                 min_shot_duration_sec=min_shot_duration_sec,
                 face_samples=face_samples,
+                target_batch_duration_sec=target_batch_duration_sec,
             )
         )
 
