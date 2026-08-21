@@ -632,3 +632,199 @@ def plan_shot_batches(
         ],
     }
 
+
+def _normalize_manual_cut_times(
+    cut_times: list[float] | None,
+    *,
+    duration: float,
+    min_batch_duration_sec: float,
+) -> list[float]:
+    """Interior cut points only (excluding 0 and duration), sorted and deduped."""
+    min_dur = float(min_batch_duration_sec)
+    if not math.isfinite(min_dur) or min_dur <= 0:
+        min_dur = 0.4
+    eps = max(0.05, min_dur * 0.25)
+    raw = [float(t) for t in (cut_times or []) if math.isfinite(float(t))]
+    interior = sorted({round(t, 3) for t in raw if eps < t < (duration - eps)})
+    # Drop cuts that would create a segment shorter than min_dur.
+    points = [0.0]
+    for t in interior:
+        if (t - points[-1]) >= min_dur - 1e-6:
+            points.append(t)
+    if (duration - points[-1]) < min_dur - 1e-6 and len(points) > 1:
+        points.pop()
+    return points[1:]
+
+
+def plan_shot_batches_from_cuts(
+    video_path: Path,
+    cut_times: list[float] | None = None,
+    *,
+    min_batch_duration_sec: float = 0.4,
+    max_batch_duration_sec: float | None = None,
+) -> dict[str, Any]:
+    """
+    Build a shot-batch plan from manual timeline cut points.
+
+    Each segment between cuts becomes one shot and one resolved batch.
+    Face heuristics are skipped — openings/continuity stay under wizard control.
+    """
+    duration = _ffprobe_duration(video_path)
+    if duration is None or duration <= 0.1:
+        raise RuntimeError("Не удалось определить длительность видео для manual shot-batch plan.")
+
+    min_dur = float(min_batch_duration_sec)
+    if not math.isfinite(min_dur) or min_dur <= 0:
+        min_dur = 0.4
+    max_dur = float(max_batch_duration_sec) if max_batch_duration_sec is not None else 0.0
+    if not math.isfinite(max_dur) or max_dur <= 0:
+        max_dur = 0.0
+
+    interior = _normalize_manual_cut_times(
+        cut_times,
+        duration=duration,
+        min_batch_duration_sec=min_dur,
+    )
+    points = [0.0] + interior + [duration]
+    spans: list[tuple[float, float]] = []
+    for a, b in zip(points, points[1:]):
+        t0, t1 = float(a), float(b)
+        if t1 - t0 < min_dur - 1e-6:
+            raise RuntimeError(
+                f"Слишком короткий батч {t0:.2f}–{t1:.2f}s "
+                f"(минимум {min_dur:.2f}s). Сдвинь точки нарезки."
+            )
+        spans.append((t0, t1))
+    if not spans:
+        spans = [(0.0, duration)]
+
+    shots: list[ShotPlan] = []
+    batches: list[BatchPlan] = []
+    for idx, (t0, t1) in enumerate(spans, start=1):
+        dur = t1 - t0
+        shot = ShotPlan(
+            id=idx,
+            t_start=t0,
+            t_end=t1,
+            duration=dur,
+            subject_visibility_status="uncertain",
+            difficulty="medium",
+            face_hits=0,
+            object_risk_level="medium",
+            motion_score=0.0,
+        )
+        shots.append(shot)
+        batches.append(
+            BatchPlan(
+                id=idx,
+                shot_ids=[idx],
+                t_start=t0,
+                t_end=t1,
+                duration=dur,
+                has_subject=True,
+                identity_anchor_visible=True,
+                object_risk_level="medium",
+                risky=bool(max_dur > 0 and dur > max_dur + 1e-6),
+                risky_reason=(
+                    f"batch longer than max_batch_duration_sec={max_dur:.2f}"
+                    if max_dur > 0 and dur > max_dur + 1e-6
+                    else None
+                ),
+            )
+        )
+
+    resolved_batches = [
+        ResolvedBatchPlan(
+            id=b.id,
+            source_batch_id=b.id,
+            shot_ids=list(b.shot_ids),
+            effective_shot_ids=list(b.shot_ids),
+            effective_t_start=b.t_start,
+            effective_t_end=b.t_end,
+            effective_duration=b.duration,
+            resolution_action="manual_cuts",
+            requires_synthetic_opening_frame=False,
+            manual_review_required=False,
+            reason="manual timeline cuts",
+            identity_string_policy="immutable_job_level_string",
+            object_risk_level=b.object_risk_level,
+        )
+        for b in batches
+    ]
+
+    return {
+        "video_duration_sec": duration,
+        "params": {
+            "min_batch_duration_sec": min_dur,
+            "max_batch_duration_sec": max_dur or None,
+            "cut_times": interior,
+        },
+        "segmentation_mode": "manual_cuts",
+        "shots": [
+            {
+                "id": s.id,
+                "t_start": s.t_start,
+                "t_end": s.t_end,
+                "duration": s.duration,
+                "subject_visibility_status": s.subject_visibility_status,
+                "difficulty": s.difficulty,
+                "face_hits": s.face_hits,
+                "object_risk_level": s.object_risk_level,
+                "motion_score": s.motion_score,
+            }
+            for s in shots
+        ],
+        "batches": [
+            {
+                "id": b.id,
+                "shot_ids": b.shot_ids,
+                "t_start": b.t_start,
+                "t_end": b.t_end,
+                "duration": b.duration,
+                "has_subject": b.has_subject,
+                "identity_anchor_visible": b.identity_anchor_visible,
+                "object_risk_level": b.object_risk_level,
+                "risky": b.risky,
+                "risky_reason": b.risky_reason,
+            }
+            for b in batches
+        ],
+        "resolved_batches": [
+            {
+                "id": rb.id,
+                "source_batch_id": rb.source_batch_id,
+                "shot_ids": rb.shot_ids,
+                "effective_shot_ids": rb.effective_shot_ids,
+                "effective_t_start": rb.effective_t_start,
+                "effective_t_end": rb.effective_t_end,
+                "effective_duration": rb.effective_duration,
+                "resolution_action": rb.resolution_action,
+                "requires_synthetic_opening_frame": rb.requires_synthetic_opening_frame,
+                "manual_review_required": rb.manual_review_required,
+                "reason": rb.reason,
+                "identity_string_policy": rb.identity_string_policy,
+                "object_risk_level": rb.object_risk_level,
+            }
+            for rb in resolved_batches
+        ],
+    }
+
+
+def cut_times_from_plan(plan: dict[str, Any]) -> list[float]:
+    """Interior cut points derived from resolved batches (or raw batches)."""
+    resolved = plan.get("resolved_batches") or []
+    if isinstance(resolved, list) and len(resolved) >= 2:
+        return [
+            round(float(rb.get("effective_t_end") or 0.0), 3)
+            for rb in resolved[:-1]
+            if float(rb.get("effective_t_end") or 0.0) > 0
+        ]
+    batches = plan.get("batches") or []
+    if isinstance(batches, list) and len(batches) >= 2:
+        return [
+            round(float(b.get("t_end") or 0.0), 3)
+            for b in batches[:-1]
+            if float(b.get("t_end") or 0.0) > 0
+        ]
+    return []
+

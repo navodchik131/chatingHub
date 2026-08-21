@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { Fade, Field, NoteBlock, PageTitle, Panel, BackLink, SelectPill } from '../components/ui';
 import Hoverable from '../components/Hoverable';
+import BatchCutTimeline from '../components/BatchCutTimeline';
 import { color, line, font } from '../styles/tokens';
 import { useApp } from '../hooks/useApp';
 import { apiFetch } from '../../api';
@@ -13,6 +14,7 @@ import {
   planShotBatchWizard,
   renderWizardBatch,
   stitchShotBatchWizard,
+  suggestShotBatchWizardCuts,
   uploadWizardBatchVideo,
   uploadWizardOpening,
 } from '../api/actions';
@@ -162,10 +164,22 @@ export default function ShotBatchWizard() {
   const [wizard, setWizard] = useState(null);
   const [openingUploads, setOpeningUploads] = useState({});
   const [videoUploads, setVideoUploads] = useState({});
+  const [manualCuts, setManualCuts] = useState([]);
+  const [localVideoUrl, setLocalVideoUrl] = useState(null);
 
   useEffect(() => {
     if (!modelId && models[0]?.id) setModelId(models[0].id);
   }, [modelId, models]);
+
+  useEffect(() => {
+    if (!motionVideo) {
+      setLocalVideoUrl(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(motionVideo);
+    setLocalVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [motionVideo]);
 
   const formParams = useMemo(() => ({
     motionVideo,
@@ -199,6 +213,11 @@ export default function ShotBatchWizard() {
       .sort((a, b) => Number(a.batch_id) - Number(b.batch_id));
   }, [wizard]);
 
+  const timelineVideoSrc = localVideoUrl || wizard?.motion_video_url || null;
+  const canEditCuts = !!wizard?.job_id && phase === 'created';
+  const softMaxBatch = Number(wizard?.params?.max_batch_duration_sec || maxBatchDurationSec || 4);
+  const minBatch = Number(wizard?.params?.min_shot_duration_sec || minShotDurationSec || 0.4);
+
   const imageModels = cabinet.genModels?.length ? cabinet.genModels : FALLBACK_GEN_MODELS;
   const allOpeningsApproved = batchList.length > 0 && batchList.every((b) => b.opening?.status === 'approved');
   const allVideosApproved = batchList.length > 0 && batchList.every((b) => b.video?.status === 'approved');
@@ -220,12 +239,32 @@ export default function ShotBatchWizard() {
     if (!motionVideo || !modelId) return;
     const data = await createShotBatchWizard(formParams);
     setWizard(data);
+    setManualCuts([]);
   });
 
-  const onPlan = () => run(async () => {
+  const onPlanManual = () => run(async () => {
     if (!wizard?.job_id) return;
-    const data = await planShotBatchWizard(wizard.job_id);
+    const data = await planShotBatchWizard(wizard.job_id, {
+      cutTimes: manualCuts,
+      planMode: 'manual',
+    });
     setWizard(data);
+  });
+
+  const onSuggestCuts = () => run(async () => {
+    if (!wizard?.job_id) return;
+    const data = await suggestShotBatchWizardCuts(wizard.job_id);
+    setManualCuts(Array.isArray(data.cut_times) ? data.cut_times : []);
+    if (data.video_duration_sec) {
+      setWizard((prev) => (prev ? { ...prev, motion_duration_sec: data.video_duration_sec } : prev));
+    }
+  });
+
+  const onPlanAuto = () => run(async () => {
+    if (!wizard?.job_id) return;
+    const data = await planShotBatchWizard(wizard.job_id, { planMode: 'auto' });
+    setWizard(data);
+    if (Array.isArray(data.manual_cut_times)) setManualCuts(data.manual_cut_times);
   });
 
   const onOpening = (batchId, approve = false) => run(async () => {
@@ -329,8 +368,8 @@ export default function ShotBatchWizard() {
           <Panel style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <NoteBlock>
               {t(
-                'Сначала создай wizard job. Затем Build plan — увидишь разбивку (~4с батчи, чтобы проблемный кусок можно было перегенерировать). Для каждого batch: opening → approve → render → approve. В конце Stitch.',
-                'Create wizard job, build plan (~4s regenerable batches for long clips), then per-batch opening/video with approve gates.',
+                'Создай job → нарежь видео на таймлайне (или «Автопредложение») → Применить план → opening → video → Stitch. Куски короче 4с Seedance дотягивает до 4с.',
+                'Create job → cut on the timeline (or Auto-suggest) → Apply plan → opening → video → Stitch. Clips under 4s are padded by Seedance.',
               )}
             </NoteBlock>
 
@@ -421,8 +460,14 @@ export default function ShotBatchWizard() {
                       || waveModelId}
                   </div>
                 </div>
-                <ActionBtn disabled={busy || phase !== 'created'} onClick={onPlan}>
-                  {busy ? '…' : t('2. Build plan', '2. Build plan')}
+                <ActionBtn disabled={busy || !canEditCuts} onClick={onSuggestCuts}>
+                  {busy ? '…' : t('2a. Автопредложение точек', '2a. Auto-suggest cuts')}
+                </ActionBtn>
+                <ActionBtn disabled={busy || !canEditCuts} onClick={onPlanManual}>
+                  {busy ? '…' : t('2. Применить план с таймлайна', '2. Apply timeline plan')}
+                </ActionBtn>
+                <ActionBtn disabled={busy || !canEditCuts} tone="panel" onClick={onPlanAuto}>
+                  {busy ? '…' : t('2b. Автоплан сразу', '2b. Auto-plan now')}
                 </ActionBtn>
                 <ActionBtn
                   disabled={busy || !allVideosApproved}
@@ -440,7 +485,37 @@ export default function ShotBatchWizard() {
             )}
 
             {!!wizard?.job_id && phase === 'created' && (
-              <NoteBlock>{t('Нажми Build plan.', 'Click Build plan.')}</NoteBlock>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <NoteBlock>
+                  {t(
+                    'Поставь точки нарезки на таймлайне, затем «Применить план». Или сначала «Автопредложение», потом поправь руками.',
+                    'Place cut markers on the timeline, then Apply plan. Or Auto-suggest first and tweak.',
+                  )}
+                </NoteBlock>
+                {timelineVideoSrc ? (
+                  <BatchCutTimeline
+                    videoSrc={timelineVideoSrc}
+                    durationHint={Number(wizard.motion_duration_sec) || 0}
+                    cuts={manualCuts}
+                    onCutsChange={setManualCuts}
+                    minBatchSec={minBatch}
+                    softMaxBatchSec={softMaxBatch}
+                    lang={lang}
+                    disabled={busy}
+                  />
+                ) : (
+                  <NoteBlock>{t('Нет источника видео для таймлайна.', 'No video source for timeline.')}</NoteBlock>
+                )}
+              </div>
+            )}
+
+            {!!wizard?.job_id && phase !== 'created' && Array.isArray(wizard.manual_cut_times) && (
+              <div style={{ fontSize: 12, color: color.textDim }}>
+                {t('Режим плана:', 'Plan mode:')} {wizard.plan_mode || '—'}
+                {wizard.manual_cut_times.length
+                  ? ` · cuts: ${wizard.manual_cut_times.map((x) => Number(x).toFixed(2)).join(', ')}s`
+                  : ` · ${t('один батч на всё видео', 'single full-video batch')}`}
+              </div>
             )}
 
             {batchList.map((item) => {

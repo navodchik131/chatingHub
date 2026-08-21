@@ -756,13 +756,30 @@ export async function fetchShotBatchWizard(jobId) {
   return data
 }
 
-export async function planShotBatchWizard(jobId) {
+export async function planShotBatchWizard(jobId, { cutTimes, planMode } = {}) {
+  const fd = new FormData()
+  const mode = planMode || (cutTimes != null ? 'manual' : 'auto')
+  fd.append('plan_mode', mode)
+  if (cutTimes != null) {
+    fd.append('cut_times', JSON.stringify(cutTimes))
+  }
   const res = await apiFetch(`/api/studio/debug/shot-batch-wizard/${jobId}/plan`, {
     method: 'POST',
+    body: fd,
     timeoutMs: 240_000,
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Wizard plan failed')
+  return data
+}
+
+export async function suggestShotBatchWizardCuts(jobId) {
+  const res = await apiFetch(`/api/studio/debug/shot-batch-wizard/${jobId}/suggest-cuts`, {
+    method: 'POST',
+    timeoutMs: 240_000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Suggest cuts failed')
   return data
 }
 

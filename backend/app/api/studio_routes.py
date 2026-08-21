@@ -1899,19 +1899,74 @@ async def api_studio_shot_batch_wizard_get(
 @router.post("/studio/debug/shot-batch-wizard/{job_id}/plan")
 async def api_studio_shot_batch_wizard_plan(
     job_id: int,
+    cut_times: str = Form(""),
+    plan_mode: str = Form("auto"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
     assert_permission(user, PERM_STUDIO_GENERATE)
     job = await _wizard_job_or_404(session, job_id, user)
-    from app.services.studio_shot_batch_wizard import wizard_run_plan, wizard_state_for_api
+    from app.services.studio_shot_batch_wizard import (
+        _parse_cut_times_payload,
+        wizard_run_plan,
+        wizard_state_for_api,
+    )
 
+    mode = (plan_mode or "auto").strip().lower()
+    cuts_raw = (cut_times or "").strip()
     try:
-        await wizard_run_plan(session, job, user)
+        parsed_cuts = _parse_cut_times_payload(cuts_raw) if cuts_raw else None
+        # Explicit plan_mode=manual with empty cut_times → single full-video batch.
+        if mode == "manual" and parsed_cuts is None:
+            parsed_cuts = []
+        await wizard_run_plan(
+            session,
+            job,
+            user,
+            cut_times=parsed_cuts,
+            plan_mode=mode,
+        )
         await session.refresh(job)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse(wizard_state_for_api(job))
+
+
+@router.post("/studio/debug/shot-batch-wizard/{job_id}/suggest-cuts")
+async def api_studio_shot_batch_wizard_suggest_cuts(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_suggest_cuts
+
+    try:
+        data = await wizard_suggest_cuts(session, job)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(data)
+
+
+@router.get("/studio/debug/shot-batch-wizard/{job_id}/motion-video")
+async def api_studio_shot_batch_wizard_motion_video(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> FileResponse:
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    job = await _wizard_job_or_404(session, job_id, user)
+    from app.services.studio_shot_batch_wizard import wizard_motion_video_path
+    from app.services.studio_jobs import job_params as _job_params
+
+    try:
+        path = wizard_motion_video_path(job)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    suffix = str((_job_params(job).get("motion_video_suffix") or ".mp4")).lower()
+    mime = "video/webm" if suffix.endswith(".webm") else "video/mp4"
+    return FileResponse(path, media_type=mime, filename=f"wizard_{job_id}_motion{suffix}")
 
 
 @router.post("/studio/debug/shot-batch-wizard/{job_id}/batches/{batch_id}/opening-frame")

@@ -42,6 +42,7 @@ from app.services.studio_jobs import (
 from app.services.studio_motion_video import (
     _ffmpeg_bin,
     prepare_motion_video_file_for_duration,
+    probe_video_duration_seconds,
     resolve_motion_audio_file,
 )
 from app.services.studio_seedance_t2v import (
@@ -53,7 +54,11 @@ from app.services.studio_seedance_t2v import (
 )
 from app.services.studio_aspect import aspect_ratio_for_seedance_i2v
 from app.services.workspace import workspace_owner_id
-from app.services.studio_shot_batch_plan import plan_shot_batches
+from app.services.studio_shot_batch_plan import (
+    cut_times_from_plan,
+    plan_shot_batches,
+    plan_shot_batches_from_cuts,
+)
 from app.services.studio_shot_batch_render import (
     _download_url_bytes,
     _extract_last_frame_jpeg,
@@ -267,13 +272,58 @@ async def wizard_create_job(
     p["motion_video_path"] = rel
     await update_studio_job_params(session, job, p)
     state = _empty_wizard_state(crossfade_ms=crossfade_ms)
+    src_path, td = _load_source_video_path(p)
+    try:
+        dur = await anyio.to_thread.run_sync(lambda: probe_video_duration_seconds(src_path))
+        if dur and dur > 0:
+            state["motion_duration_sec"] = float(dur)
+    finally:
+        td.cleanup()
     await _save_state(session, job, state)
     return job, state
 
 
-async def wizard_run_plan(session: AsyncSession, job: StudioJob, user: User) -> dict[str, Any]:
+def _parse_cut_times_payload(raw: Any) -> list[float] | None:
+    """Parse cut times from JSON list/string or comma-separated string. None = auto."""
+    if raw is None:
+        return None
+    if isinstance(raw, (list, tuple)):
+        out: list[float] = []
+        for x in raw:
+            try:
+                out.append(float(x))
+            except (TypeError, ValueError):
+                continue
+        return out
+    s = str(raw).strip()
+    if not s:
+        return None
+    if s.lower() in ("auto", "null", "none"):
+        return None
+    if s.startswith("["):
+        import json
+
+        try:
+            data = json.loads(s)
+        except Exception as e:
+            raise RuntimeError(f"invalid cut_times JSON: {e}") from e
+        return _parse_cut_times_payload(data)
+    out = []
+    for part in s.replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.append(float(part))
+        except ValueError as e:
+            raise RuntimeError(f"invalid cut time '{part}'") from e
+    return out
+
+
+async def wizard_suggest_cuts(session: AsyncSession, job: StudioJob) -> dict[str, Any]:
+    """Run auto planner and return suggested interior cut times (does not mutate plan)."""
+    _ = session
     p = job_params(job)
-    state = _wizard_state(job)
     src_path, td = _load_source_video_path(p)
     try:
         plan: dict[str, Any] = await anyio.to_thread.run_sync(
@@ -284,9 +334,72 @@ async def wizard_run_plan(session: AsyncSession, job: StudioJob, user: User) -> 
                 max_batch_duration_sec=float(p.get("max_batch_duration_sec") or 4),
                 min_shot_duration_sec=float(p.get("min_shot_duration_sec") or 0.4),
                 face_samples=int(p.get("face_samples") or 6),
-                target_batch_duration_sec=float(p.get("target_batch_duration_sec") or p.get("max_batch_duration_sec") or 4),
+                target_batch_duration_sec=float(
+                    p.get("target_batch_duration_sec") or p.get("max_batch_duration_sec") or 4
+                ),
             )
         )
+    finally:
+        td.cleanup()
+    cuts = cut_times_from_plan(plan)
+    return {
+        "video_duration_sec": float(plan.get("video_duration_sec") or 0.0),
+        "cut_times": cuts,
+        "segmentation_mode": plan.get("segmentation_mode"),
+        "batches_preview": [
+            {
+                "id": rb.get("id"),
+                "t_start": rb.get("effective_t_start"),
+                "t_end": rb.get("effective_t_end"),
+                "duration": rb.get("effective_duration"),
+            }
+            for rb in (plan.get("resolved_batches") or [])
+        ],
+    }
+
+
+async def wizard_run_plan(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+    *,
+    cut_times: list[float] | None = None,
+    plan_mode: str = "auto",
+) -> dict[str, Any]:
+    p = job_params(job)
+    state = _wizard_state(job)
+    mode = str(plan_mode or "auto").strip().lower()
+    if mode not in ("auto", "manual"):
+        mode = "auto"
+    # Explicit cut_times list (including empty) forces manual mode.
+    if cut_times is not None:
+        mode = "manual"
+
+    src_path, td = _load_source_video_path(p)
+    try:
+        if mode == "manual":
+            plan: dict[str, Any] = await anyio.to_thread.run_sync(
+                lambda: plan_shot_batches_from_cuts(
+                    src_path,
+                    cut_times or [],
+                    min_batch_duration_sec=float(p.get("min_shot_duration_sec") or 0.4),
+                    max_batch_duration_sec=float(p.get("max_batch_duration_sec") or 4),
+                )
+            )
+        else:
+            plan = await anyio.to_thread.run_sync(
+                lambda: plan_shot_batches(
+                    src_path,
+                    scene_threshold=float(p.get("scene_threshold") or 0.35),
+                    max_shots_per_batch=int(p.get("max_shots_per_batch") or 4),
+                    max_batch_duration_sec=float(p.get("max_batch_duration_sec") or 4),
+                    min_shot_duration_sec=float(p.get("min_shot_duration_sec") or 0.4),
+                    face_samples=int(p.get("face_samples") or 6),
+                    target_batch_duration_sec=float(
+                        p.get("target_batch_duration_sec") or p.get("max_batch_duration_sec") or 4
+                    ),
+                )
+            )
     finally:
         td.cleanup()
 
@@ -348,8 +461,12 @@ async def wizard_run_plan(session: AsyncSession, job: StudioJob, user: User) -> 
     finally:
         td2.cleanup()
 
+    if plan.get("video_duration_sec"):
+        state["motion_duration_sec"] = float(plan["video_duration_sec"])
     state["wizard_phase"] = "planned"
     state["plan"] = plan
+    state["plan_mode"] = mode
+    state["manual_cut_times"] = cut_times_from_plan(plan)
     state["batches"] = batches
     state["stitched"] = {"status": "pending"}
     return await _save_state(session, job, state)
@@ -1115,13 +1232,31 @@ async def wizard_stitch(
     return await _save_state(session, job, state)
 
 
+def wizard_motion_video_path(job: StudioJob) -> Path:
+    p = job_params(job)
+    rel = str(p.get("motion_video_path") or "").strip()
+    if not rel:
+        raise FileNotFoundError("motion_video_path missing")
+    from app.config import BACKEND_DIR
+
+    path = (BACKEND_DIR / rel).resolve()
+    if not str(path).startswith(str(BACKEND_DIR.resolve())):
+        raise FileNotFoundError("invalid motion video path")
+    if not path.is_file():
+        raise FileNotFoundError("motion video not found")
+    return path
+
+
 def wizard_state_for_api(job: StudioJob) -> dict[str, Any]:
     state = _wizard_state(job)
     p = job_params(job)
+    suffix = str(p.get("motion_video_suffix") or ".mp4").strip() or ".mp4"
     return {
         "job_id": job.id,
         "job_type": job.job_type,
         "status": job.status,
+        "motion_video_url": f"/api/studio/debug/shot-batch-wizard/{int(job.id)}/motion-video",
+        "motion_video_suffix": suffix,
         "params": {
             "seedance_variant": p.get("seedance_variant"),
             "video_resolution": p.get("video_resolution"),
@@ -1129,6 +1264,8 @@ def wizard_state_for_api(job: StudioJob) -> dict[str, Any]:
             "wan_edit_tier": p.get("wan_edit_tier"),
             "studio_wave_profile": p.get("studio_wave_profile"),
             "output_aspect": p.get("output_aspect"),
+            "max_batch_duration_sec": p.get("max_batch_duration_sec"),
+            "min_shot_duration_sec": p.get("min_shot_duration_sec"),
         },
         **state,
     }
