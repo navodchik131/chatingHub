@@ -848,43 +848,39 @@ async def wizard_generate_opening(
         scene = _identity_brief(prompt, batch_id=batch_id)
 
         display_jpeg = opening_jpeg
-        if rb.get("requires_synthetic_opening_frame") or batch_id > 1:
+        # "Generate" must always run model_scene synth (pose from segment + studio model).
+        # Previously batch 1 skipped synth unless requires_synthetic_opening_frame — with
+        # manual_cuts that flag is always false, so users only got the raw extracted frame.
+        try:
+            synth = await _generate_synthetic_opening_frame(
+                session=session,
+                user=user,
+                owner_id=oid,
+                model_id=mid,
+                scene_brief=scene,
+                output_aspect=output_aspect,
+                segment_video_path=vpath_eff,
+                opening_frame_jpeg=opening_jpeg,
+                lock_model_hairstyle=batch_id > 1,
+                workflow_wave_model=str(p.get("workflow_wave_model") or "").strip() or None,
+                wan_edit_tier=str(p.get("wan_edit_tier") or "standard"),
+                studio_wave_profile=str(p.get("studio_wave_profile") or "").strip() or None,
+            )
+        except Exception as e:
+            log.warning("wizard opening synth failed job=%s batch=%s: %s", job.id, batch_id, e)
+            synth = None
+        synth_url = str((synth or {}).get("generated_image_url") or "").strip()
+        if synth_url:
+            opening_url = synth_url
+            mode = "synthetic_generated"
             try:
-                synth = await _generate_synthetic_opening_frame(
-                    session=session,
-                    user=user,
-                    owner_id=oid,
-                    model_id=mid,
-                    scene_brief=scene,
-                    output_aspect=output_aspect,
-                    segment_video_path=vpath_eff,
-                    opening_frame_jpeg=opening_jpeg,
-                    lock_model_hairstyle=batch_id > 1,
-                    workflow_wave_model=str(p.get("workflow_wave_model") or "").strip() or None,
-                    wan_edit_tier=str(p.get("wan_edit_tier") or "standard"),
-                    studio_wave_profile=str(p.get("studio_wave_profile") or "").strip() or None,
-                )
+                display_jpeg = await _download_url_bytes(synth_url)
             except Exception as e:
-                log.warning("wizard opening synth failed job=%s batch=%s: %s", job.id, batch_id, e)
-                synth = None
-            synth_url = str((synth or {}).get("generated_image_url") or "").strip()
-            if synth_url:
-                opening_url = synth_url
-                mode = "synthetic_generated"
-                try:
-                    display_jpeg = await _download_url_bytes(synth_url)
-                except Exception as e:
-                    log.warning(
-                        "wizard opening synth download failed job=%s batch=%s: %s",
-                        job.id,
-                        batch_id,
-                        e,
-                    )
-            else:
-                opening_url = await evolink_upload_file_bytes(
-                    data=opening_jpeg,
-                    filename=f"opening_batch_{batch_id}_g{gen}.jpg",
-                    content_type="image/jpeg",
+                log.warning(
+                    "wizard opening synth download failed job=%s batch=%s: %s",
+                    job.id,
+                    batch_id,
+                    e,
                 )
         else:
             opening_url = await evolink_upload_file_bytes(
