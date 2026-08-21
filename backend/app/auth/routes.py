@@ -34,7 +34,11 @@ from app.services.device_signal import device_signal_from_request
 from app.services.auth_provision import provision_workspace_owner
 from app.services.billing_plan import normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
-from app.services.plan_entitlements import chat_allowed_for_subscription, plan_usage_snapshot
+from app.services.plan_entitlements import (
+    chat_allowed_for_subscription,
+    companion_allowed_for_subscription,
+    plan_usage_snapshot,
+)
 from app.services.workflow_entitlements import is_workflow_demo_limited
 from app.services.starter_plan import ensure_starter_managed_subscription, starter_managed_effective
 from app.services.funnel_analytics import record_funnel_event_once
@@ -387,6 +391,7 @@ async def me(
         demo_generations_remaining=int(cr.demo_generations_remaining) if cr else 0,
         demo_generations_grant=max(0, int(settings.demo_generations_grant)),
         chat_allowed=chat_allowed_for_subscription(sub),
+        companion_allowed=companion_allowed_for_subscription(sub),
         workflow_demo_limited=is_workflow_demo_limited(sub, cr),
         telegram_linked=owner_telegram_linked(owner_for_identity),
         telegram_username=owner_for_identity.telegram_username,

@@ -49,15 +49,11 @@ def platform_covers_studio_api_costs(plan: str) -> bool:
 
 
 def can_purchase_credits_pack(plan: str, sub: Subscription | None) -> bool:
-    """Credits — всегда; Standard / Pro — при активной оплаченной подписке."""
+    """Покупка кредитов — только при активной оплаченной подписке (любой тариф)."""
     from app.services.entitlements import subscription_is_paid_active
 
-    plan_n = normalize_billing_plan(plan)
-    if is_credits_plan(plan_n):
-        return True
-    if plan_n in (BILLING_PLAN_STANDARD, BILLING_PLAN_PRO):
-        return subscription_is_paid_active(sub)
-    return False
+    _ = plan
+    return subscription_is_paid_active(sub)
 
 
 def studio_charges_credits(plan: str) -> bool:
@@ -66,7 +62,19 @@ def studio_charges_credits(plan: str) -> bool:
 
 
 def plan_allows_chat(plan: str) -> bool:
+    """Диалоги — на Standard / Pro (не на Credits)."""
     return not is_credits_plan(plan)
+
+
+def plan_allows_companion(plan: str, tier: str | None = None) -> bool:
+    """AI-бот (companion) — только Standard Studio и Pro Studio."""
+    from app.services.plan_catalog import TIER_STUDIO, normalize_plan_tier
+
+    if not plan_allows_chat(plan):
+        return False
+    if tier is None:
+        return False
+    return normalize_plan_tier(tier) == TIER_STUDIO
 
 
 def byok_keys_ready_for_wavespeed(*, plan: str, ws: WavespeedConnection | None) -> bool:

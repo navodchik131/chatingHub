@@ -35,7 +35,7 @@ export function cabinetPlanFeatures(lang, tier, billing, period, monthlyCredits)
   const chatLine = ru ? 'Диалоги + перевод' : 'Chats + translation'
   const extra =
     tier === 'studio'
-      ? (ru ? 'Без лимита диалогов' : 'Unlimited dialogs')
+      ? (ru ? 'AI-бот без лимита диалогов' : 'AI bot · unlimited dialogs')
       : tier === 'pro'
         ? (ru ? 'Команда и KPI' : 'Team & KPI')
         : (ru ? 'Студия картинок и видео' : 'Image & video studio')

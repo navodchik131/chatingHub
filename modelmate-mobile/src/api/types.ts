@@ -13,6 +13,7 @@ export type UserMeOut = {
   is_platform_admin: boolean;
   permissions_mask: number;
   chat_allowed: boolean;
+  companion_allowed?: boolean;
   workflow_demo_limited?: boolean;
   demo_generations_remaining?: number;
   telegram_linked?: boolean;

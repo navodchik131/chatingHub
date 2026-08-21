@@ -201,7 +201,10 @@ async def patch_telegram_user_connection(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> IntegrationStatusOut:
-    from app.api.integrations_routes import _apply_companion_connection_patch
+    from app.api.integrations_routes import (
+        _apply_companion_connection_patch,
+        _assert_companion_plan_if_enabling,
+    )
 
     assert_permission(user, PERM_INTEGRATIONS)
     oid = workspace_owner_id(user)
@@ -224,6 +227,7 @@ async def patch_telegram_user_connection(
             connection_id=row.id,
             studio_model_id=body.studio_model_id,
         )
+    await _assert_companion_plan_if_enabling(session, oid, body)
     _apply_companion_connection_patch(row, body)
     await session.commit()
     request_telegram_user_worker_refresh()

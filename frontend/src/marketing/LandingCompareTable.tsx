@@ -57,6 +57,8 @@ export function LandingCompareTable() {
           return t('landing.compare.creditsDemoValue', { count: demoGenerations })
         case 'chat':
           return no
+        case 'aiBot':
+          return no
         default:
           return no
       }
@@ -78,12 +80,14 @@ export function LandingCompareTable() {
           : no
       case 'chat':
         return yes
+      case 'aiBot':
+        return plan.tier === 'studio' ? yes : no
       default:
         return no
     }
   }
 
-  const rows = ['price', 'users', 'models', 'ownKey', 'credits', 'chat'] as const
+  const rows = ['price', 'users', 'models', 'ownKey', 'credits', 'chat', 'aiBot'] as const
   const rowLabels: Record<(typeof rows)[number], string> = {
     price: t('landing.compare.rowPrice'),
     users: t('landing.compare.rowUsers'),
@@ -91,6 +95,7 @@ export function LandingCompareTable() {
     ownKey: t('landing.compare.rowOwnKey'),
     credits: t('landing.compare.rowCredits'),
     chat: t('landing.compare.rowChat'),
+    aiBot: t('landing.compare.rowAiBot'),
   }
 
   return (

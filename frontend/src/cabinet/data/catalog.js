@@ -106,7 +106,8 @@ export const guideDefs = (lang) => [
   },
   {
     title: lang === 'ru' ? 'Подключить каналы' : 'Connect channels',
-    desc: lang === 'ru' ? 'Привяжите Telegram/Fanvue и AI-движок. Здесь же — AI-компаньон для автоответов от лица персонажа.' : 'Link Telegram/Fanvue and the AI engine; set up the AI companion.',
+    desc: lang === 'ru' ? 'Привяжите Telegram/Fanvue и AI-движок. AI-компаньон — на тарифах Standard Studio и Pro Studio.' : 'Link Telegram/Fanvue and the AI engine. AI companion — Standard Studio / Pro Studio only.',
+    help: lang === 'ru' ? 'Токены и OAuth. AI-бот для автоответов доступен только на Studio.' : 'Tokens and OAuth. AI auto-replies require a Studio plan.',
     cta: lang === 'ru' ? 'К подключениям' : 'To connections',
     page: 'connections',
     youtubeId: 'YrhPkGj_CsA',

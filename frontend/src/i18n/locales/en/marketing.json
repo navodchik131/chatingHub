@@ -185,15 +185,15 @@
       },
       {
         "title": "Generate shots",
-        "text": "Images for photos and carousels. Video and chat — after subscribing to Standard or Pro."
+        "text": "Images for photos and carousels. Video and dialogs — after Standard or Pro. AI bot — on Standard Studio or Pro Studio."
       },
       {
         "title": "Top up or choose a plan",
-        "text": "Credits — buy credits without a subscription. Standard — credits and chat included. Pro — your own WaveSpeed key."
+        "text": "Credits — no subscription (credit packs locked). Standard / Pro — subscription and dialogs; buy extra credits while subscribed. AI bot — Studio only."
       },
       {
         "title": "Connect Telegram/Fanvue",
-        "text": "On Standard and Pro — one inbox with auto-translation in Connections."
+        "text": "On Standard and Pro — one inbox with auto-translation. AI bot auto-replies — on the Studio tier."
       }
     ],
     "cta": "Start free — {{demoGenerations}} images"
@@ -261,6 +261,7 @@
       "proKey": "Your WaveSpeed key — no platform charges for generation",
       "standardCredits": "Generation credits included",
       "chat": "Fanvue + Telegram chat",
+      "aiBot": "AI bot (auto-replies) — Studio",
       "translation": "Auto-translate conversations",
       "history": "Generation history",
       "creditsYear": "{{total}} credits per year ({{monthly}} / mo.)",
@@ -282,6 +283,7 @@
       "rowOwnKey": "Your WaveSpeed key",
       "rowCredits": "Credits / demo",
       "rowChat": "Chat + translation",
+      "rowAiBot": "AI bot",
       "yes": "✓",
       "no": "—",
       "creditsPriceValue": "from {{creditUnitPrice}}",
@@ -698,15 +700,15 @@
       "On signup you receive {{demoGenerations}} free image generations.",
       "Regular photos use nano-banana-2; NSFW uses wan-2.7 on platform WaveSpeed.",
       "Demo is not calendar-limited: generations stay until you spend them.",
-      "Fanvue / Telegram chat and larger team limits unlock on Standard or Pro."
+      "Fanvue / Telegram chat unlocks on Standard or Pro. AI bot (auto-replies) — only on Standard Studio or Pro Studio."
     ],
     "creditsEyebrow": "Balance",
     "creditsTitle": "How credits work.",
     "creditsDek": "Credits are the studio’s internal currency. They pay for generations on Credits / Standard and can cover a subscription.",
     "creditPoints": [
-      "Top up in the dashboard via YooKassa — any amount from {{creditsMin}} at {{creditsUnitShort}} per credit.",
-      "On Credits without a subscription the studio runs on platform WaveSpeed; chat is unavailable.",
-      "Standard — subscription with plan credits, chat, and team in one workspace.",
+      "Top up in the dashboard via YooKassa — with an active Standard or Pro subscription, from {{creditsMin}} at {{creditsUnitShort}} per credit.",
+      "On Credits without a subscription the studio runs on platform WaveSpeed; credit packs and chat are unavailable.",
+      "Standard — subscription with plan credits, dialogs, and team; AI bot — on the Studio tier.",
       "Pro — your own WaveSpeed key: generations are billed by the provider; the platform does not charge credits for images and video.",
       "Credits never expire and roll over between periods."
     ],
@@ -714,16 +716,16 @@
     "afterTitle": "Where to go next.",
     "afterItems": [
       {
-        "title": "Top up credits",
-        "text": "Stay on Credits: buy generations as needed, no subscription required."
+        "title": "Subscribe",
+        "text": "Any Standard or Pro plan unlocks credit packs and dialogs. For the AI bot, choose Studio."
       },
       {
         "title": "Standard",
-        "text": "A subscription with plan credits — studio, chat, and team. Ideal for regular generation."
+        "text": "A subscription with plan credits — studio, dialogs, and team. AI bot — on Standard Studio."
       },
       {
         "title": "Pro",
-        "text": "Your WaveSpeed API key: pay the provider directly. ModelMate covers infrastructure, chat, and team."
+        "text": "Your WaveSpeed API key: pay the provider directly. AI bot — on Pro Studio."
       }
     ],
     "ctaPrimary": "Try free — {{demoGenerations}} images",
@@ -759,13 +761,13 @@
       {
         "question": "Where do I start after signing up?",
         "paragraphs": [
-          "1) Log in — free image generations (Credits) are available immediately. 2) Create your model and upload references in Studio. 3) Images — first shots without a WaveSpeed key. 4) For chat and video, subscribe to Standard or Pro. 5) A WaveSpeed key is only required on Pro — in Connections."
+          "1) Log in — free image generations (Credits) are available immediately. 2) Create your model and upload references in Studio. 3) Images — first shots without a WaveSpeed key. 4) For dialogs and video, subscribe to Standard or Pro; for AI bot — Standard Studio or Pro Studio. 5) A WaveSpeed key is only required on Pro — in Connections."
         ]
       },
       {
         "question": "What are Credits, Standard, and Pro?",
         "paragraphs": [
-          "Credits — no subscription: buy credits, studio runs on platform WaveSpeed, no chat. Standard — subscription with generation credits, chat, and team. Pro — subscription with your own WaveSpeed key: you pay the provider directly; the platform does not charge credits for images and video."
+          "Credits — no subscription: studio on platform WaveSpeed; credit packs and chat unavailable. Standard — subscription with generation credits, dialogs, and team; AI bot — on Standard Studio. Pro — your own WaveSpeed key; AI bot — on Pro Studio. Extra credit packs require any active Standard or Pro subscription."
         ]
       },
       {

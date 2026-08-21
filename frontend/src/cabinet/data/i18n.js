@@ -95,7 +95,7 @@ export const RU = {
   holdPolicy: 'Политика холда и модерации —',
   newDonation: 'Новый донат', donTitle: 'Заголовок', donDesc: 'Описание', minSum: 'Мин. сумма', donCurrency: 'Валюта',
   saveDraft: 'Черновик', toModeration: 'На модерацию', myDonations: 'Мои донаты',
-  billingDesc: 'Подписка, кредиты и оплата. {{creditOneLiner}}. Кредиты списываются за генерации.',
+  billingDesc: 'Подписка, кредиты и оплата. {{creditOneLiner}}. Докупка кредитов — при активной подписке. AI-бот — на Standard Studio / Pro Studio.',
   billingNewsBadge: 'Важная новость',
   billingNewsTitle: 'Обновили систему кредитов',
   billingNewsBody:
@@ -298,7 +298,7 @@ export const EN = {
   holdPolicy: 'Hold & moderation policy —',
   newDonation: 'New donation', donTitle: 'Title', donDesc: 'Description', minSum: 'Min amount', donCurrency: 'Currency',
   saveDraft: 'Draft', toModeration: 'Submit', myDonations: 'My donations',
-  billingDesc: 'Subscription, credits and payments. {{creditOneLiner}}. Credits are spent on generations.',
+  billingDesc: 'Subscription, credits and payments. {{creditOneLiner}}. Extra credits require an active subscription. AI bot — Standard Studio / Pro Studio.',
   billingNewsBadge: 'Important update',
   billingNewsTitle: 'We updated the credit system',
   billingNewsBody:

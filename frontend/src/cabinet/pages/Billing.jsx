@@ -16,6 +16,7 @@ import {
 import { copyText } from '../utils/clipboard';
 import { fetchUsdRate, formatPlanPrice, formatCreditOneLiner, fillPriceTemplate, getCachedRubPerUsd } from '../utils/money';
 import { cabinetPlanFeatures } from '../utils/planFeatures';
+import { canPurchaseCredits } from '../../billing/planLabels';
 
 function normalizePlan(raw) {
   const p = String(raw || 'standard').toLowerCase();
@@ -79,6 +80,7 @@ export default function Billing() {
   const demoLabel = formatDemoCounterLong(lang, demoRemaining, demoGrant);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
   const subscriptionActive = String(me?.subscription_status || '').toLowerCase() === 'active';
+  const canBuyCredits = canPurchaseCredits(me) && (yookassaAvailable || tributeAvailable);
   const usageBars = mapUsageBars(me, lang);
   const historyRows = mapCreditHistory(creditHistory, lang);
   const packs = (() => {
@@ -187,11 +189,16 @@ export default function Billing() {
           )}
           <Hoverable
             style={{
-              background: color.lime, color: color.limeInk, fontWeight: 800, fontSize: 12.5,
-              borderRadius: 10, padding: '10px 16px', textAlign: 'center', cursor: 'pointer',
+              background: canBuyCredits ? color.lime : 'rgba(255,255,255,.08)',
+              color: canBuyCredits ? color.limeInk : color.textMuted,
+              fontWeight: 800, fontSize: 12.5,
+              borderRadius: 10, padding: '10px 16px', textAlign: 'center',
+              cursor: canBuyCredits ? 'pointer' : 'not-allowed',
+              opacity: canBuyCredits ? 1 : 0.7,
             }}
-            hover={{ background: color.limeHi }}
+            hover={canBuyCredits ? { background: color.limeHi } : undefined}
             onClick={() => {
+              if (!canBuyCredits) return;
               const pack = packs[0];
               if (!pack) return;
               void cabinet.payBilling(defaultPayMethod, pack.product, pack.creditsQty);
@@ -199,6 +206,13 @@ export default function Billing() {
           >
             {t.topup}
           </Hoverable>
+          {!canBuyCredits ? (
+            <div style={{ fontSize: 11, color: color.textMuted, marginTop: 10, lineHeight: 1.45 }}>
+              {lang === 'ru'
+                ? 'Покупка кредитов доступна только при активной подписке Standard или Pro.'
+                : 'Credit packs require an active Standard or Pro subscription.'}
+            </div>
+          ) : null}
         </div>
 
         <Panel style={{ padding: '16px 18px' }}>
@@ -353,16 +367,28 @@ export default function Billing() {
 
       {/* credit packs */}
       <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>{t.creditPacks}</div>
+      {!canBuyCredits ? (
+        <div style={{ fontSize: 12, color: color.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+          {lang === 'ru'
+            ? 'Чтобы докупить кредиты, оформите любую подписку Standard или Pro (Solo / Pro / Studio).'
+            : 'To buy extra credits, subscribe to any Standard or Pro plan (Solo / Pro / Studio).'}
+        </div>
+      ) : null}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
         {packs.map((p) => (
           <Hoverable
             key={p.cr}
             style={{
               background: color.surface, border: `1px solid ${line.hair}`, borderRadius: 14,
-              padding: '14px 16px', cursor: 'pointer',
+              padding: '14px 16px',
+              cursor: canBuyCredits ? 'pointer' : 'not-allowed',
+              opacity: canBuyCredits ? 1 : 0.55,
             }}
-            hover={{ borderColor: 'rgba(215,244,82,.4)' }}
-            onClick={() => void cabinet.payBilling(defaultPayMethod, p.product || 'credits_pack', p.creditsQty)}
+            hover={canBuyCredits ? { borderColor: 'rgba(215,244,82,.4)' } : undefined}
+            onClick={() => {
+              if (!canBuyCredits) return;
+              void cabinet.payBilling(defaultPayMethod, p.product || 'credits_pack', p.creditsQty);
+            }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
               <span style={{ fontFamily: font.display, fontWeight: 600, fontSize: 18, color: color.lime }}>{p.cr}</span>

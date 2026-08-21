@@ -94,13 +94,18 @@ function CompanionConnectionEditor({
   );
   const [goalText, setGoalText] = useState(raw?.companion_goal_text || '');
   const [goalLink, setGoalLink] = useState(raw?.companion_goal_link || '');
+  const companionAllowed = cabinet?.me?.companion_allowed === true
+    || (cabinet?.me?.companion_allowed == null
+      && String(cabinet?.me?.plan_tier || '').toLowerCase() === 'studio'
+      && String(cabinet?.me?.subscription_status || '').toLowerCase() === 'active');
 
   if (!raw) return null;
 
   const save = async () => {
+    if (!companionAllowed && companionMode !== 'off') return;
     const ok = await cabinet.patchConnectionSettings(platformId, connectionId, {
       modelId: modelId || null,
-      companionMode,
+      companionMode: companionAllowed ? companionMode : 'off',
       delayMin,
       delayMax,
       maxPerHour,
@@ -116,6 +121,13 @@ function CompanionConnectionEditor({
       <div style={{ fontWeight: 800, fontSize: 13 }}>
         {lang === 'ru' ? 'AI-компаньон на подключении' : 'Connection AI companion'}
       </div>
+      {!companionAllowed ? (
+        <NoteBlock>
+          {lang === 'ru'
+            ? 'AI-бот доступен только на тарифах Standard Studio и Pro Studio.'
+            : 'AI bot is available only on Standard Studio and Pro Studio.'}
+        </NoteBlock>
+      ) : null}
       <ModelSelect
         label={lang === 'ru' ? 'ПЕРСОНАЖ' : 'CHARACTER'}
         value={modelId}
@@ -125,7 +137,12 @@ function CompanionConnectionEditor({
       />
       <div>
         <div style={fieldLbl}>{lang === 'ru' ? 'РЕЖИМ' : 'MODE'}</div>
-        <select value={companionMode} onChange={(e) => setCompanionMode(e.target.value)} style={selectSt}>
+        <select
+          value={companionAllowed ? companionMode : 'off'}
+          onChange={(e) => setCompanionMode(e.target.value)}
+          style={selectSt}
+          disabled={!companionAllowed}
+        >
           {companionModeOptions(lang).map((o) => (
             <option key={o.id} value={o.id}>{o.label}</option>
           ))}

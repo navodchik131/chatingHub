@@ -320,6 +320,8 @@ class UserMeOut(BaseModel):
     demo_generations_grant: int = 3
     """Чаты и диалоги доступны (Standard / Pro; не Credits без оплаченной подписки)."""
     chat_allowed: bool = False
+    """AI-бот (companion) — только Standard Studio / Pro Studio."""
+    companion_allowed: bool = False
     """Credits с демо без купленных кредитов — только workflow «По рефу»."""
     workflow_demo_limited: bool = False
     telegram_linked: bool = False

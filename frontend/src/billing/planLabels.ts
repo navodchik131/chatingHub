@@ -16,13 +16,23 @@ export interface BillingMeLike {
   is_platform_admin?: boolean
   billing_require_active_subscription?: boolean
   chat_allowed?: boolean
+  companion_allowed?: boolean
   workflow_demo_limited?: boolean
 }
 
-/** Чаты доступны на Standard / Pro (не на Credits без оплаченной подписки). */
+/** Диалоги — на Standard / Pro (сервер: chat_allowed). */
 export function chatAllowedForPlan(me: BillingMeLike): boolean {
   if (me.chat_allowed != null) return me.chat_allowed
   return normalizeBillingPlan(me.billing_plan) !== 'credits'
+}
+
+/** AI-бот — только Standard Studio / Pro Studio. */
+export function companionAllowedForPlan(me: BillingMeLike): boolean {
+  if (me.companion_allowed != null) return me.companion_allowed
+  const plan = normalizeBillingPlan(me.billing_plan)
+  if (plan !== 'standard' && plan !== 'pro') return false
+  if ((me.plan_tier || '').toLowerCase() !== 'studio') return false
+  return (me.subscription_status || '').toLowerCase() === 'active'
 }
 
 /** Соответствует серверной subscription_active: active/trialing и период не истёк. */
@@ -70,14 +80,10 @@ export function studioAccessAllowed(me: BillingMeLike): boolean {
   return subscriptionCoversStudioAccess(me)
 }
 
+/** Покупка кредитов — только при активной оплаченной подписке. */
 export function canPurchaseCredits(me: BillingMeLike | null | undefined): boolean {
-  if (!me?.online_payment_available) return false
-  const plan = normalizeBillingPlan(me.billing_plan)
-  if (plan === 'credits') return true
-  if (plan === 'standard' || plan === 'pro') {
-    return (me.subscription_status || '').toLowerCase() === 'active'
-  }
-  return false
+  if (!me) return false
+  return (me.subscription_status || '').toLowerCase() === 'active'
 }
 
 export function billingPlanKindLabel(plan: CreditsPlanKind | string): string {

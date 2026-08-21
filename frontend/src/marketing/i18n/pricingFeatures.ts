@@ -39,6 +39,8 @@ export function marketingTierFeatures(
         : t('pricing.features.creditsMonth', { total })
   }
   if (tier === 'pro') base.push(t('pricing.features.team'))
-  if (tier === 'studio') base.push(t('pricing.features.studioLimits'))
+  if (tier === 'studio') {
+    base.push(t('pricing.features.aiBot'), t('pricing.features.studioLimits'))
+  }
   return base
 }

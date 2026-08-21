@@ -28,6 +28,7 @@ import { DialogSettingsSheet } from '@/src/components/DialogSettingsSheet';
 import { EmojiPickerSheet } from '@/src/components/EmojiPickerSheet';
 import { IcoBack, IcoSend, IcoThemeGrid } from '@/src/components/Icons';
 import { useAppSettings } from '@/src/context/AppSettingsContext';
+import { useAppData } from '@/src/context/AppDataProvider';
 import { CHAT_THEMES, chatThemeById, type ChatThemeId } from '@/src/styles/chatThemes';
 import { color, font } from '@/src/styles/tokens';
 
@@ -278,6 +279,11 @@ export function ThreadView({
   onToggleReaction,
 }: ThreadViewProps) {
   const insets = useSafeAreaInsets();
+  const { me } = useAppData();
+  const companionAllowed = me?.companion_allowed === true
+    || (me?.companion_allowed == null
+      && String(me?.plan_tier || '').toLowerCase() === 'studio'
+      && String(me?.subscription_status || '').toLowerCase() === 'active');
   const scrollRef = useRef<ScrollView>(null);
   const nearBottomRef = useRef(true);
   const didInitialScrollRef = useRef(false);
@@ -497,6 +503,7 @@ export function ThreadView({
           visible={settingsOpen}
           conv={convForSettings}
           lang={lang}
+          companionAllowed={companionAllowed}
           onClose={() => setSettingsOpen(false)}
           onPatch={(patch) => void onPatchSettings?.(patch)}
         />

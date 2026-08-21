@@ -7,6 +7,7 @@ type DialogSettingsSheetProps = {
   visible: boolean;
   conv: ConversationOut | null;
   lang: 'ru' | 'en';
+  companionAllowed?: boolean;
   onClose: () => void;
   onPatch: (patch: ConversationSettingsPatch) => void;
 };
@@ -40,7 +41,14 @@ const COPY = {
   },
 };
 
-export function DialogSettingsSheet({ visible, conv, lang, onClose, onPatch }: DialogSettingsSheetProps) {
+export function DialogSettingsSheet({
+  visible,
+  conv,
+  lang,
+  companionAllowed = true,
+  onClose,
+  onPatch,
+}: DialogSettingsSheetProps) {
   if (!conv) return null;
   const t = COPY[lang];
   const translateOn = !conv.auto_translate_disabled;
@@ -62,13 +70,24 @@ export function DialogSettingsSheet({ visible, conv, lang, onClose, onPatch }: D
           </View>
 
           <Text style={styles.sectionLabel}>{t.autoMode}</Text>
+          {!companionAllowed ? (
+            <Text style={styles.hint}>
+              {lang === 'ru'
+                ? 'AI-бот доступен только на Standard Studio и Pro Studio.'
+                : 'AI bot is available only on Standard Studio and Pro Studio.'}
+            </Text>
+          ) : null}
           {MODE_OPTIONS.map((mo) => {
             const active = companionMode === mo.id;
+            const locked = !companionAllowed && mo.id !== 'off';
             return (
               <Pressable
                 key={mo.id}
-                style={[styles.modeRow, active && styles.modeRowActive]}
-                onPress={() => onPatch({ companion_mode_override: mo.id })}
+                style={[styles.modeRow, active && styles.modeRowActive, locked && { opacity: 0.45 }]}
+                onPress={() => {
+                  if (locked) return;
+                  onPatch({ companion_mode_override: mo.id });
+                }}
               >
                 <Text style={[styles.modeText, active && styles.modeTextActive]}>{t[mo.labelKey]}</Text>
                 <View style={[styles.dot, active && styles.dotActive]} />

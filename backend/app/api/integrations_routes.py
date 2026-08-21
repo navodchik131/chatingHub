@@ -88,7 +88,7 @@ from app.services.instagram_connection import (
 )
 from app.services.companion_bot.feedback import list_feedback_reports
 from app.services.fanvue_sync import sync_fanvue_chat_history
-from app.services.plan_entitlements import plan_limits_for_sub
+from app.services.plan_entitlements import assert_companion_allowed_for_plan, plan_limits_for_sub
 from app.services.studio_keys import wavespeed_cabinet_flags
 from app.services.platform_connections import (
     assert_can_add_platform_connection,
@@ -389,6 +389,21 @@ def _apply_companion_connection_patch(
     delay_max = int(row.companion_delay_max_sec or delay_min)
     if delay_max < delay_min:
         row.companion_delay_max_sec = delay_min
+
+
+def _companion_patch_enables_bot(body: PlatformConnectionPatchIn) -> bool:
+    if "companion_mode" not in body.model_fields_set or body.companion_mode is None:
+        return False
+    return str(body.companion_mode).strip().lower() not in ("", "off")
+
+
+async def _assert_companion_plan_if_enabling(
+    session: AsyncSession, owner_id: int, body: PlatformConnectionPatchIn
+) -> None:
+    if not _companion_patch_enables_bot(body):
+        return
+    sub = await session.scalar(select(Subscription).where(Subscription.user_id == owner_id))
+    assert_companion_allowed_for_plan(sub)
 
 
 def _fanvue_oauth_ready() -> bool:
@@ -1526,6 +1541,7 @@ async def patch_telegram_connection(
             connection_id=row.id,
             studio_model_id=body.studio_model_id,
         )
+    await _assert_companion_plan_if_enabling(session, oid, body)
     _apply_companion_connection_patch(row, body)
     await session.commit()
     return await _integration_status(session, user)
@@ -1580,6 +1596,7 @@ async def patch_fanvue_connection(
             connection_id=row.id,
             studio_model_id=body.studio_model_id,
         )
+    await _assert_companion_plan_if_enabling(session, oid, body)
     _apply_companion_connection_patch(row, body)
     await session.commit()
     return await _integration_status(session, user)
@@ -1828,6 +1845,7 @@ async def patch_instagram_connection(
             connection_id=row.id,
             studio_model_id=body.studio_model_id,
         )
+    await _assert_companion_plan_if_enabling(session, oid, body)
     _apply_companion_connection_patch(row, body)
     await session.commit()
     return await _integration_status(session, user)

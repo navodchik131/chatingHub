@@ -185,7 +185,7 @@ async def yookassa_start_payment(
             raise HTTPException(
                 status_code=402,
                 detail=(
-                    "Покупка кредитов доступна на тарифе Credits или при активной подписке Standard / Pro."
+                    "Покупка кредитов доступна только при активной подписке Standard или Pro."
                 ),
             )
         q = body.credits_quantity
@@ -250,6 +250,7 @@ async def yookassa_start_payment(
 async def tribute_checkout(
     body: TributeCheckoutIn,
     user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> TributeCheckoutOut:
     if not is_workspace_owner(user):
         raise HTTPException(
@@ -264,7 +265,22 @@ async def tribute_checkout(
             detail="Привяжите Telegram в кабинете (Обзор) — без этого Tribute не сопоставит оплату с аккаунтом",
         )
 
-    product = resolve_product_id(body.product.strip())
+    raw_product = (body.product or "").strip()
+    product = resolve_product_id(raw_product)
+    if raw_product.lower() == "credits_pack":
+        billing_uid = workspace_owner_id(user)
+        sub_row = await session.scalar(
+            select(Subscription).where(Subscription.user_id == billing_uid)
+        )
+        plan = normalize_billing_plan(sub_row.billing_plan if sub_row else None)
+        if not can_purchase_credits_pack(plan, sub_row):
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "Покупка кредитов доступна только при активной подписке Standard или Pro."
+                ),
+            )
+        product = "credits_pack"
     catalog = tribute_billing_catalog()
     tribute_pid = catalog.tribute_product_id_for(
         product,

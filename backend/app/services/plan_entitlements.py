@@ -22,6 +22,7 @@ from app.services.billing_plan import (
     is_pro_plan,
     normalize_billing_plan,
     plan_allows_chat,
+    plan_allows_companion,
 )
 from app.services.entitlements import subscription_is_paid_active
 from app.services.plan_catalog import (
@@ -141,6 +142,7 @@ def _limit_http(detail: str) -> HTTPException:
 
 
 def chat_allowed_for_subscription(sub: Subscription | None) -> bool:
+    """Диалоги — на Standard / Pro (не на Credits без оплаченной подписки)."""
     plan = normalize_billing_plan(sub.billing_plan if sub else None)
     if not plan_allows_chat(plan):
         return False
@@ -161,6 +163,27 @@ def assert_chat_allowed_for_plan(sub: Subscription | None) -> None:
     raise HTTPException(
         status_code=403,
         detail="Чаты доступны на подписке Standard или Pro.",
+    )
+
+
+def companion_allowed_for_subscription(sub: Subscription | None) -> bool:
+    """AI-бот — только Standard Studio / Pro Studio с активной оплатой."""
+    if sub is None or not subscription_is_paid_active(sub):
+        return False
+    plan = normalize_billing_plan(sub.billing_plan)
+    tier = getattr(sub, "plan_tier", None)
+    return plan_allows_companion(plan, tier)
+
+
+def assert_companion_allowed_for_plan(sub: Subscription | None) -> None:
+    if companion_allowed_for_subscription(sub):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "AI-бот доступен только на тарифах Standard Studio и Pro Studio. "
+            "Оформите или повысьте подписку."
+        ),
     )
 
 

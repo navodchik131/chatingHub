@@ -216,13 +216,25 @@
       const unit = cp?.unit_price_rub || 0
       const bulk = cp?.bulk_unit_price_rub || unit
       const price = Math.round(qty * bulk)
+      const subActive = String(me?.subscription_status || '').toLowerCase() === 'active'
       return {
         cr: String(qty),
         price: price.toLocaleString('ru-RU') + ' ₽',
         bonus: qty >= 600 ? '+15%' : qty >= 300 ? '+10%' : qty >= 150 ? '+5%' : false,
         product: x.product,
         creditsQty: qty,
-        pick: () => { store.selectedCreditPack = x.product; payYookassa('credits_pack', qty) },
+        pick: () => {
+          if (!subActive) {
+            bridge.toast?.(
+              lang === 'ru'
+                ? 'Покупка кредитов доступна только при активной подписке'
+                : 'Credit packs require an active subscription',
+            )
+            return
+          }
+          store.selectedCreditPack = x.product
+          payYookassa('credits_pack', qty)
+        },
       }
     })
     const uiTier = bridge.store.logic?.state?.tier || 'standard'

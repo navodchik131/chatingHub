@@ -20,6 +20,7 @@ from app.db.models import (
     Message,
     MessageDirection,
     Platform,
+    Subscription,
 )
 from app.db.repo import list_messages
 from app.db.session import SessionLocal
@@ -28,9 +29,14 @@ from app.services.companion_bot.generate import generate_companion_reply
 from app.services.companion_bot.prompt import PROMPT_VERSION, last_fan_message_text, resolve_target_lang
 from app.services.companion_bot.reply_target import resolve_reply_to_message_id
 from app.services.companion_bot.send import broadcast_companion_message, send_companion_outbound
+from app.services.plan_entitlements import companion_allowed_for_subscription
 from app.services.realtime import hub
 
 log = logging.getLogger(__name__)
+
+
+async def _owner_subscription(session: AsyncSession, owner_user_id: int) -> Subscription | None:
+    return await session.scalar(select(Subscription).where(Subscription.user_id == owner_user_id))
 
 
 def _log_companion_skip(conv_id: int, reason: str, **extra: object) -> None:
@@ -506,6 +512,10 @@ async def run_companion_reply_job(
         if not conv or conv.user_id != owner_user_id:
             _log_companion_skip(conv_id, "conv_not_found_or_owner_mismatch")
             return
+        sub = await _owner_subscription(session, owner_user_id)
+        if not companion_allowed_for_subscription(sub):
+            _log_companion_skip(conv_id, "plan_companion_not_allowed")
+            return
         cfg = await get_companion_config_for_conversation(session, conv)
         if not cfg:
             _log_companion_skip(conv_id, "companion_off_or_no_config")
@@ -666,6 +676,10 @@ async def run_companion_followup_job(
     async with SessionLocal() as session:
         conv = await session.get(Conversation, conv_id)
         if not conv or conv.user_id != owner_user_id:
+            return
+        sub = await _owner_subscription(session, owner_user_id)
+        if not companion_allowed_for_subscription(sub):
+            _log_companion_skip(conv_id, "plan_companion_not_allowed")
             return
         cfg = await get_companion_config_for_conversation(session, conv)
         if not cfg:

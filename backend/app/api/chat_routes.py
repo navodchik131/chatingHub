@@ -123,7 +123,10 @@ from app.services.translation import translate_from_russian
 from app.services.studio_grok_motion import grok_motion_api_configured
 from app.services.studio_grok_scene_compose import grok_scene_compose_configured
 from app.services.plan_catalog import catalog_public_dict
-from app.services.plan_entitlements import assert_chat_allowed_for_plan
+from app.services.plan_entitlements import (
+    assert_chat_allowed_for_plan,
+    assert_companion_allowed_for_plan,
+)
 from app.services.studio_image_pricing import image_pricing_public_dict
 from app.services.billing_credits import billing_credits_pricing_public
 from app.services.studio_operation_pricing import studio_operations_pricing_public
@@ -723,6 +726,10 @@ async def api_patch_conversation(
         if body.auto_translate_disabled is not None:
             conv.auto_translate_disabled = bool(body.auto_translate_disabled)
     if "companion_mode_override" in body.model_fields_set:
+        mode = (body.companion_mode_override or "off").strip().lower()
+        if mode and mode != "off":
+            billing = await resolve_billing_user(session, user)
+            assert_companion_allowed_for_plan(billing.subscription)
         conv.companion_mode_override = body.companion_mode_override
     if "manual_category" in body.model_fields_set:
         conv.manual_category = body.manual_category
