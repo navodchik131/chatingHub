@@ -281,6 +281,15 @@ class Settings(BaseSettings):
     # Архив студии (файлы + БД): автоудаление записей старше N дней; 0 = отключено
     studio_generations_retention_days: int = Field(default=4, ge=0)
     studio_generations_retention_interval_hours: int = Field(default=24, ge=1)
+    # Runtime-мусор в data/ (outline cache, pose refs, motion uploads, jobs, workflow refs).
+    # 0 по каждому типу = не чистить этот тип. Не трогает studio_generations / models / chat_media.
+    studio_runtime_cleanup_enabled: bool = Field(default=True)
+    studio_runtime_cleanup_interval_hours: int = Field(default=24, ge=1)
+    studio_outline_cache_retention_days: int = Field(default=7, ge=0)
+    studio_pose_refs_retention_days: int = Field(default=2, ge=0)
+    studio_motion_videos_retention_days: int = Field(default=7, ge=0)
+    studio_workflow_refs_retention_days: int = Field(default=14, ge=0)
+    studio_jobs_retention_days: int = Field(default=7, ge=0)
     # Скачивание готового кадра с CDN провайдера в архив студии (повторы при обрыве/таймауте).
     studio_archive_download_attempts: int = Field(default=6, ge=1, le=15)
     studio_archive_download_timeout_seconds: float = Field(default=300.0, ge=30.0, le=600.0)

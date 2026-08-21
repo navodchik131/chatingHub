@@ -27,6 +27,7 @@ from app.connectors.telegram.state import (
 from app.db.session import init_db
 from app.services.studio_generation_storage import retry_pending_studio_archives
 from app.services.studio_generations_retention import purge_studio_generations_expired
+from app.services.studio_runtime_cleanup import purge_studio_runtime_artifacts
 from app.services.email_campaigns import email_campaign_worker_loop
 from app.services.fanvue_inbox_poll import fanvue_inbox_poll_loop
 
@@ -82,6 +83,16 @@ async def _studio_generations_retention_loop() -> None:
         await asyncio.sleep(max(3600, settings.studio_generations_retention_interval_hours * 3600))
 
 
+async def _studio_runtime_cleanup_loop() -> None:
+    await asyncio.sleep(180)
+    while True:
+        try:
+            await purge_studio_runtime_artifacts()
+        except Exception:
+            log.exception("Studio runtime cleanup failed")
+        await asyncio.sleep(max(3600, settings.studio_runtime_cleanup_interval_hours * 3600))
+
+
 async def _studio_archive_retry_loop() -> None:
     await asyncio.sleep(90)
     interval = max(60, int(settings.studio_archive_retry_interval_seconds))
@@ -120,6 +131,7 @@ async def lifespan(app: FastAPI):
     bot: Bot | None = None
     polling_task: asyncio.Task[None] | None = None
     retention_task: asyncio.Task[None] | None = None
+    runtime_cleanup_task: asyncio.Task[None] | None = None
     archive_retry_task: asyncio.Task[None] | None = None
     fanvue_poll_task: asyncio.Task[None] | None = None
     email_worker_task: asyncio.Task[None] | None = None
@@ -165,6 +177,18 @@ async def lifespan(app: FastAPI):
             "Studio generations retention enabled: %s day(s), every %s h",
             settings.studio_generations_retention_days,
             settings.studio_generations_retention_interval_hours,
+        )
+    if settings.studio_runtime_cleanup_enabled:
+        runtime_cleanup_task = asyncio.create_task(_studio_runtime_cleanup_loop())
+        log.info(
+            "Studio runtime cleanup enabled: outline=%sd pose=%sd motion=%sd "
+            "workflow_refs=%sd jobs=%sd, every %s h",
+            settings.studio_outline_cache_retention_days,
+            settings.studio_pose_refs_retention_days,
+            settings.studio_motion_videos_retention_days,
+            settings.studio_workflow_refs_retention_days,
+            settings.studio_jobs_retention_days,
+            settings.studio_runtime_cleanup_interval_hours,
         )
     archive_retry_task = asyncio.create_task(_studio_archive_retry_loop())
     log.info(
@@ -263,6 +287,12 @@ async def lifespan(app: FastAPI):
         retention_task.cancel()
         try:
             await retention_task
+        except asyncio.CancelledError:
+            pass
+    if runtime_cleanup_task:
+        runtime_cleanup_task.cancel()
+        try:
+            await runtime_cleanup_task
         except asyncio.CancelledError:
             pass
     if archive_retry_task:
