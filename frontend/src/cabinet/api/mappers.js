@@ -452,12 +452,17 @@ export function mapConnectionStatus(integrations, connId, lang) {
 }
 
 export function mapDonationStats(overview, lang, events = []) {
-  const { currency, total, available, held, paid } = resolveDonationBalances(overview, events)
+  const {
+    totalLabel,
+    availableLabel,
+    heldLabel,
+    paidLabel,
+  } = resolveDonationBalances(overview, events)
   return [
-    { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: fmtMoney(total, currency), color: '#F2F3F0' },
-    { label: lang === 'ru' ? 'ДОСТУПНО' : 'AVAILABLE', value: fmtMoney(available, currency), color: '#4ADE80' },
-    { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: fmtMoney(held, currency), color: '#FB923C' },
-    { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: fmtMoney(paid, currency), color: '#9BA0A6' },
+    { label: lang === 'ru' ? 'ВСЕГО' : 'TOTAL', value: totalLabel, color: '#F2F3F0' },
+    { label: lang === 'ru' ? 'ДОСТУПНО' : 'AVAILABLE', value: availableLabel, color: '#4ADE80' },
+    { label: lang === 'ru' ? 'НА УДЕРЖАНИИ' : 'ON HOLD', value: heldLabel, color: '#FB923C' },
+    { label: lang === 'ru' ? 'ВЫПЛАЧЕНО' : 'PAID OUT', value: paidLabel, color: '#9BA0A6' },
   ]
 }
 

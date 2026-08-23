@@ -111,7 +111,17 @@ type AppDataValue = {
   creditHistory: { label: string; amount: string; positive: boolean }[];
   donations: ReturnType<typeof mapDonationRow>[];
   donationEvents: ReturnType<typeof mapDonationEventRow>[];
-  donationBalances: { total: number; available: number; held: number; paid: number; currency: string };
+  donationBalances: {
+    total: number;
+    available: number;
+    held: number;
+    paid: number;
+    currency: string;
+    totalLabel: string;
+    availableLabel: string;
+    heldLabel: string;
+    paidLabel: string;
+  };
   donationAvailableMinor: number;
   payoutWallet: string;
   members: ReturnType<typeof mapTeamMember>[];

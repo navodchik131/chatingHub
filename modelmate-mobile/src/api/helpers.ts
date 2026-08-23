@@ -9,11 +9,18 @@ export function fmtCredits(n: number | undefined | null): string {
 }
 
 export function fmtMoney(minor: number, currency = 'RUB'): string {
+  const c = String(currency || 'RUB').toUpperCase();
   const rub = (Number(minor) || 0) / 100;
-  if (currency.toUpperCase() === 'RUB') {
+  if (c === 'RUB') {
     return `${rub.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₽`;
   }
-  return `${rub.toFixed(2)} ${currency}`;
+  if (c === 'USD') {
+    return `$${rub.toFixed(2)}`;
+  }
+  if (c === 'EUR') {
+    return `€${rub.toFixed(2)}`;
+  }
+  return `${rub.toFixed(2)} ${c}`;
 }
 
 /** Сумма в рублях (как в admin API), не в копейках. */
@@ -172,10 +179,9 @@ export function charFieldsFromModel(model: {
 function pickCurrencyAmount(map: Record<string, number> | undefined, preferred = 'RUB'): number | undefined {
   if (!map) return undefined;
   const pref = preferred.toUpperCase();
-  if (map[pref] != null) return map[pref];
-  if (map[pref.toLowerCase()] != null) return map[pref.toLowerCase()];
-  const keys = Object.keys(map);
-  return keys.length ? map[keys[0]] : undefined;
+  if (map[pref] != null) return Number(map[pref]) || 0;
+  if (map[pref.toLowerCase()] != null) return Number(map[pref.toLowerCase()]) || 0;
+  return undefined;
 }
 
 function donationAvailableAtUtc(occurredAt: Date): Date {
@@ -218,27 +224,87 @@ export function summarizeDonationPayouts(
   return { totalByCurrency, availableByCurrency, heldByCurrency, paidByCurrency };
 }
 
+const MONEY_CURRENCY_ORDER = ['RUB', 'USD', 'EUR'] as const;
+
+export function fmtMoneyMap(map: Record<string, number> | undefined, emptyValue: string | null = null): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  const keys = [
+    ...MONEY_CURRENCY_ORDER,
+    ...Object.keys(map || {}).map((k) => String(k).toUpperCase()),
+  ];
+  for (const cur of keys) {
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    const raw = map?.[cur] ?? map?.[cur.toLowerCase()];
+    if (raw == null) continue;
+    const amt = Number(raw) || 0;
+    if (amt === 0) continue;
+    parts.push(fmtMoney(amt, cur));
+  }
+  if (parts.length) return parts.join(' · ');
+  if (emptyValue != null) return emptyValue;
+  return fmtMoney(0, 'RUB');
+}
+
+function mergeCurrencyMaps(...maps: (Record<string, number> | undefined)[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const map of maps) {
+    if (!map) continue;
+    for (const [rawKey, rawVal] of Object.entries(map)) {
+      const cur = String(rawKey).toUpperCase();
+      const amt = Number(rawVal) || 0;
+      if (!amt) continue;
+      out[cur] = Math.max(out[cur] ?? 0, amt);
+    }
+  }
+  return out;
+}
+
+function pickPrimaryCurrency(totalByCurrency: Record<string, number>, preferred = 'RUB'): string {
+  const pref = preferred.toUpperCase();
+  if ((totalByCurrency?.[pref] ?? 0) > 0) return pref;
+  const ordered = [...MONEY_CURRENCY_ORDER, ...Object.keys(totalByCurrency || {})];
+  for (const cur of ordered) {
+    if ((totalByCurrency?.[cur] ?? 0) > 0) return cur;
+  }
+  return pref;
+}
+
 export function resolveDonationBalances(
   overview: { totals_by_currency?: Record<string, number> } | null | undefined,
   events: { amount_minor?: number; currency?: string; payout_status?: string; occurred_at?: string }[],
   preferredCurrency = 'RUB',
 ) {
   const payoutSummary = summarizeDonationPayouts(events);
-  const currency = (
-    pickCurrencyAmount(overview?.totals_by_currency, preferredCurrency) != null
-      ? preferredCurrency
-      : Object.keys(overview?.totals_by_currency || {})[0]
-        || Object.keys(payoutSummary.totalByCurrency)[0]
-        || preferredCurrency
-  ).toUpperCase();
-  const total =
-    pickCurrencyAmount(payoutSummary.totalByCurrency, currency)
-    ?? pickCurrencyAmount(overview?.totals_by_currency, currency)
-    ?? 0;
-  const available = pickCurrencyAmount(payoutSummary.availableByCurrency, currency) ?? 0;
-  const held = pickCurrencyAmount(payoutSummary.heldByCurrency, currency) ?? 0;
-  const paid = pickCurrencyAmount(payoutSummary.paidByCurrency, currency) ?? 0;
-  return { currency, total, available, held, paid };
+  const totalByCurrency = mergeCurrencyMaps(
+    overview?.totals_by_currency,
+    payoutSummary.totalByCurrency,
+  );
+  const availableByCurrency = { ...payoutSummary.availableByCurrency };
+  const heldByCurrency = { ...payoutSummary.heldByCurrency };
+  const paidByCurrency = { ...payoutSummary.paidByCurrency };
+
+  const currency = pickPrimaryCurrency(totalByCurrency, preferredCurrency);
+  const total = totalByCurrency[currency] ?? 0;
+  const available = availableByCurrency[currency] ?? 0;
+  const held = heldByCurrency[currency] ?? 0;
+  const paid = paidByCurrency[currency] ?? 0;
+  return {
+    currency,
+    total,
+    available,
+    held,
+    paid,
+    totalByCurrency,
+    availableByCurrency,
+    heldByCurrency,
+    paidByCurrency,
+    totalLabel: fmtMoneyMap(totalByCurrency),
+    availableLabel: fmtMoneyMap(availableByCurrency),
+    heldLabel: fmtMoneyMap(heldByCurrency),
+    paidLabel: fmtMoneyMap(paidByCurrency),
+  };
 }
 
 export const AI_ENGINE_LABELS: Record<string, string> = {

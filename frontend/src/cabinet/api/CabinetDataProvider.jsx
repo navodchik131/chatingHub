@@ -836,10 +836,14 @@ export function CabinetDataProvider({ children }) {
 
   const requestPayout = useCallback(async () => {
     await run(async () => {
-      const { currency } = resolveDonationBalances(
+      const balances = resolveDonationBalances(
         donationOverviewRef.current,
         donationEventsRef.current,
       )
+      const availableEntries = Object.entries(balances.availableByCurrency || {})
+        .filter(([, amt]) => Number(amt) > 0)
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+      const currency = availableEntries[0]?.[0] || balances.currency
       await actions.requestDonationPayout(currency)
       await refreshAll()
     })

@@ -1885,8 +1885,8 @@ export function ScreenRouter() {
         <TopBar title={t.navDonations} onBack={pop} />
         {appError ? <Text style={s.errorBanner}>{appError}</Text> : null}
         <View style={s.kpiRow}>
-          <Kpi label={t.donationsTotal} value={fmtMoney(donationBalances.total, donationBalances.currency)} />
-          <Kpi label={t.donationsAvailable} value={fmtMoney(donationBalances.available, donationBalances.currency)} accent={color.green} />
+          <Kpi label={t.donationsTotal} value={donationBalances.totalLabel} />
+          <Kpi label={t.donationsAvailable} value={donationBalances.availableLabel} accent={color.green} />
         </View>
         <SectionLabel>{t.donationsWithdraw}</SectionLabel>
         <Card style={s.gap9}>

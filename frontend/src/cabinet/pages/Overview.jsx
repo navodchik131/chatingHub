@@ -5,7 +5,7 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, avG } from '../styles/tokens';
 import { borderHoverOff } from '../styles/mixins';
 import { guideDefs } from '../data/catalog';
-import { fmtCreditsWithUsd, fmtMoney, fmtToday, resolveDonationBalances } from '../api/helpers';
+import { fmtCreditsWithUsd, fmtToday, resolveDonationBalances } from '../api/helpers';
 import {
   demoGenerationsGrant,
   demoGenerationsRemaining,
@@ -50,8 +50,8 @@ export default function Overview() {
   const recentDialogs = conversations.slice(0, 4).map((c, i) => mapDialogRow(c, i));
   const recentFrames = archiveImages.slice(0, 4);
   const donationBalances = resolveDonationBalances(donationOverview, donationEvents)
-  const donationAvail = fmtMoney(donationBalances.available, donationBalances.currency)
-  const donationTotal = fmtMoney(donationBalances.total, donationBalances.currency)
+  const donationAvail = donationBalances.availableLabel
+  const donationTotal = donationBalances.totalLabel
   const dialogCount = conversations.length;
   const teamReplies = sumOutboundMessages(chatterStats);
   const unreadTotal = conversations.reduce((a, c) => a + (c.unread_count || 0), 0);

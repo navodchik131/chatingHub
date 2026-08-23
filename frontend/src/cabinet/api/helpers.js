@@ -41,10 +41,10 @@ export function fmtCreditsWithUsd(n, lang = 'ru') {
 export function pickCurrencyAmount(map, preferred = 'RUB') {
   if (!map) return undefined
   const pref = String(preferred || 'RUB').toUpperCase()
-  if (map[pref] != null) return map[pref]
-  if (map[pref.toLowerCase()] != null) return map[pref.toLowerCase()]
-  const keys = Object.keys(map)
-  return keys.length ? map[keys[0]] : undefined
+  if (map[pref] != null) return Number(map[pref]) || 0
+  if (map[pref.toLowerCase()] != null) return Number(map[pref.toLowerCase()]) || 0
+  // Не подставляем другую валюту — иначе $15 превращается в «15 ₽».
+  return undefined
 }
 
 function donationAvailableAtUtc(occurredAt) {
@@ -86,23 +86,88 @@ export function summarizeDonationPayouts(events, now = new Date()) {
   return { totalByCurrency, availableByCurrency, heldByCurrency, paidByCurrency }
 }
 
+const MONEY_CURRENCY_ORDER = ['RUB', 'USD', 'EUR']
+
+/** Форматирует map валют → «200,00 ₽ · $15.00». */
+export function fmtMoneyMap(map, emptyValue = null) {
+  const parts = []
+  const seen = new Set()
+  const keys = [
+    ...MONEY_CURRENCY_ORDER,
+    ...Object.keys(map || {}).map((k) => String(k).toUpperCase()),
+  ]
+  for (const cur of keys) {
+    if (seen.has(cur)) continue
+    seen.add(cur)
+    const raw = map?.[cur] ?? map?.[cur.toLowerCase()]
+    if (raw == null) continue
+    const amt = Number(raw) || 0
+    if (amt === 0) continue
+    parts.push(fmtMoney(amt, cur))
+  }
+  if (parts.length) return parts.join(' · ')
+  if (emptyValue != null) return emptyValue
+  return fmtMoney(0, 'RUB')
+}
+
+function mergeCurrencyMaps(...maps) {
+  const out = {}
+  for (const map of maps) {
+    if (!map) continue
+    for (const [rawKey, rawVal] of Object.entries(map)) {
+      const cur = String(rawKey).toUpperCase()
+      const amt = Number(rawVal) || 0
+      if (!amt) continue
+      // Берём max: overview — полный агрегат, events могут быть урезаны limit'ом.
+      out[cur] = Math.max(out[cur] ?? 0, amt)
+    }
+  }
+  return out
+}
+
+function pickPrimaryCurrency(totalByCurrency, preferred = 'RUB') {
+  const pref = String(preferred || 'RUB').toUpperCase()
+  if ((totalByCurrency?.[pref] ?? 0) > 0) return pref
+  const ordered = [
+    ...MONEY_CURRENCY_ORDER,
+    ...Object.keys(totalByCurrency || {}),
+  ]
+  for (const cur of ordered) {
+    if ((totalByCurrency?.[cur] ?? 0) > 0) return cur
+  }
+  return pref
+}
+
 export function resolveDonationBalances(overview, events, preferredCurrency = 'RUB') {
   const payoutSummary = summarizeDonationPayouts(events)
-  const currency = (
-    pickCurrencyAmount(overview?.totals_by_currency, preferredCurrency) != null
-      ? preferredCurrency
-      : Object.keys(overview?.totals_by_currency || {})[0]
-        || Object.keys(payoutSummary.totalByCurrency)[0]
-        || preferredCurrency
-  ).toUpperCase()
-  const total =
-    pickCurrencyAmount(payoutSummary.totalByCurrency, currency)
-    ?? pickCurrencyAmount(overview?.totals_by_currency, currency)
-    ?? 0
-  const available = pickCurrencyAmount(payoutSummary.availableByCurrency, currency) ?? 0
-  const held = pickCurrencyAmount(payoutSummary.heldByCurrency, currency) ?? 0
-  const paid = pickCurrencyAmount(payoutSummary.paidByCurrency, currency) ?? 0
-  return { currency, total, available, held, paid }
+  const totalByCurrency = mergeCurrencyMaps(
+    overview?.totals_by_currency,
+    payoutSummary.totalByCurrency,
+  )
+  const availableByCurrency = { ...payoutSummary.availableByCurrency }
+  const heldByCurrency = { ...payoutSummary.heldByCurrency }
+  const paidByCurrency = { ...payoutSummary.paidByCurrency }
+
+  const currency = pickPrimaryCurrency(totalByCurrency, preferredCurrency)
+  const total = totalByCurrency[currency] ?? 0
+  const available = availableByCurrency[currency] ?? 0
+  const held = heldByCurrency[currency] ?? 0
+  const paid = paidByCurrency[currency] ?? 0
+  return {
+    currency,
+    total,
+    available,
+    held,
+    paid,
+    totalByCurrency,
+    availableByCurrency,
+    heldByCurrency,
+    paidByCurrency,
+    totalLabel: fmtMoneyMap(totalByCurrency),
+    availableLabel: fmtMoneyMap(availableByCurrency),
+    heldLabel: fmtMoneyMap(heldByCurrency),
+    paidLabel: fmtMoneyMap(paidByCurrency),
+  }
 }
 
 export function fmtMoney(minor, currency = 'RUB') {
