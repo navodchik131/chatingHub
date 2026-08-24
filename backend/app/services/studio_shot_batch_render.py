@@ -700,8 +700,8 @@ async def _generate_synthetic_opening_frame(
     wan_edit_tier: str = "standard",
     studio_wave_profile: str | None = None,
 ) -> dict[str, Any] | None:
-    # Reuse motion_first_frame in model_scene mode (BoardStory-style): pose from video,
-    # full model identity — not face_swap which keeps the video actor when face is hidden.
+    # Anchor Studio Mode A (face_swap): Image1=face, Image2=dressed body, Image3=segment frame.
+    # Same prompts/order as cabinet faceswap — not the old model_scene identity dump.
     from app.api import studio_routes as sr
     from app.services import studio_jobs
 
@@ -710,15 +710,10 @@ async def _generate_synthetic_opening_frame(
     )
     if (studio_wave_profile or "").strip().lower() in ("regular", "nsfw"):
         profile = (studio_wave_profile or "").strip().lower()
-    identity_note = (
-        " CRITICAL: completely replace the person from the reference video with the selected "
-        "studio model — keep pose, camera, and scene, but use only the model's face, hair, and body. "
-        "Do not preserve the original video actor."
-    )
     params: dict[str, Any] = {
         "existing_generation_id": "",
         "model_id": str(model_id),
-        "description": ((scene_brief or "").strip() + identity_note).strip(),
+        "description": (scene_brief or "").strip(),
         "output_aspect": output_aspect,
         "wan_edit_tier": tier,
         "studio_wave_profile": profile,
@@ -727,7 +722,7 @@ async def _generate_synthetic_opening_frame(
         "lock_model_hairstyle": "1" if lock_model_hairstyle else "0",
         "use_still_as_final": "0",
         "exif_camera": "main",
-        "studio_mode": "model_scene",
+        "studio_mode": "face_swap",
         "workflow_first_frame": "1",
     }
     job = await studio_jobs.create_studio_job(

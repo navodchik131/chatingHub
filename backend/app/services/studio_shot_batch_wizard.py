@@ -848,7 +848,7 @@ async def wizard_generate_opening(
         scene = _identity_brief(prompt, batch_id=batch_id)
 
         display_jpeg = opening_jpeg
-        # "Generate" must always run model_scene synth (pose from segment + studio model).
+        # "Generate" always runs Anchor Mode A synth (face + dressed body + segment frame).
         # Previously batch 1 skipped synth unless requires_synthetic_opening_frame — with
         # manual_cuts that flag is always false, so users only got the raw extracted frame.
         try:

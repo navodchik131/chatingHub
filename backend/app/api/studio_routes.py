@@ -6361,6 +6361,12 @@ async def _studio_job_execute_motion_first_frame(
             ) from e
 
     desc_base = (description or "").strip()
+    # Strip shot-batch identity boilerplate — Anchor Mode A/B already replaces the person.
+    _identity_boilerplate = (
+        "CRITICAL: completely replace the person from the reference video with the selected"
+    )
+    if _identity_boilerplate in desc_base:
+        desc_base = desc_base.split(_identity_boilerplate, 1)[0].strip()
     user_extra_blocks: list[str] = []
     if motion_clip_summary and motion_clip_summary.strip():
         block_title = (
@@ -6372,30 +6378,7 @@ async def _studio_job_execute_motion_first_frame(
     extra_joined = "\n\n".join(user_extra_blocks) if user_extra_blocks else ""
     user_notes_grok = "\n\n".join(x for x in (desc_base, extra_joined) if x).strip()
 
-    try:
-        from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
-
-        await assert_grok_allowed(session, oid, sub_b)
-        await record_grok_usage(session, oid, source="motion_first_frame")
-        refined, reference_scene, grok_neg = await grok_compose_motion_first_frame(
-            pose_reference_bytes=first_frame,
-            pose_reference_mime=first_frame_media,
-            sm=sm_loaded,
-            wave_profile=wave_profile_n,
-            user_notes=user_notes_grok,
-            lock_hairstyle=effective_lock_hairstyle,
-            credentials=grok_motion_studio_credentials(),
-        )
-        reference_scene = (reference_scene or "").strip()
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
-
-    motion_auto_for_db = (reference_scene or "").strip()
-    if motion_clip_summary and motion_clip_summary.strip():
-        marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
-        motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
-
-    # Первый кадр motion: по умолчанию face_swap; shot-batch synthetic — model_scene.
+    # Первый кадр motion: по умолчанию face_swap (Mode A); shot-batch тоже на Mode A.
     mode_n = _normalize_studio_mode(str(p.get("studio_mode") or "face_swap"))
     skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
@@ -6411,6 +6394,82 @@ async def _studio_job_execute_motion_first_frame(
         image_bytes=first_frame,
         wave_profile=wave_profile_n,
     )
+
+    # Anchor Studio for still generation (same prompts/order as cabinet swap/ref).
+    anchor_result = None
+    if (
+        not skip_ws
+        and first_frame
+        and imgs_model
+        and mode_n in ("face_swap", "model_scene")
+        and ws_key
+    ):
+        try:
+            from app.services.studio_anchor_runner import run_anchor_pipeline
+
+            anchor_result = await run_anchor_pipeline(
+                studio_mode=mode_n,
+                owner_id=oid,
+                model_id=int(eff_mid),
+                model_images=imgs_model,
+                model_profile_text=model_profile_text,
+                scene_bytes=first_frame,
+                scene_mime=first_frame_media or "image/jpeg",
+                user_notes=desc_base,
+                identity_visibility=None,
+                existing_scene_description=None,
+                llm_credentials=llm_creds,
+                wavespeed_api_key=ws_key,
+                wave_profile=wave_profile_n,
+                wan_edit_tier=wan_tier_n,
+                wave_model_id=(
+                    workflow_wave_model
+                    or ("wan-2.7" if wave_profile_n == "nsfw" else "nano-banana-pro")
+                ),
+                aspect_ratio=aspect_key,
+                force_redress=False,
+            )
+            if anchor_result is not None:
+                log.info(
+                    "motion first-frame anchor mode=%s cache=%s job=%s",
+                    anchor_result.mode,
+                    anchor_result.dressed_from_cache,
+                    job.id,
+                )
+        except Exception as e:
+            log.warning("motion first-frame anchor failed job=%s: %s — falling back", job.id, e)
+            anchor_result = None
+
+    refined: str
+    reference_scene: str
+    grok_neg: str | None
+    if anchor_result is not None:
+        refined = anchor_result.refined_prompt
+        reference_scene = (anchor_result.scene_description or "").strip()
+        grok_neg = None
+    else:
+        try:
+            from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
+
+            await assert_grok_allowed(session, oid, sub_b)
+            await record_grok_usage(session, oid, source="motion_first_frame")
+            refined, reference_scene, grok_neg = await grok_compose_motion_first_frame(
+                pose_reference_bytes=first_frame,
+                pose_reference_mime=first_frame_media,
+                sm=sm_loaded,
+                wave_profile=wave_profile_n,
+                user_notes=user_notes_grok,
+                lock_hairstyle=effective_lock_hairstyle,
+                credentials=grok_motion_studio_credentials(),
+            )
+            reference_scene = (reference_scene or "").strip()
+        except RuntimeError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
+
+    motion_auto_for_db = (reference_scene or "").strip()
+    if motion_clip_summary and motion_clip_summary.strip():
+        marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
+        motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
 
     cost = apply_studio_credit_cost(plan, studio_prompt_refine_credit_cost())
     billing = await ensure_can_consume_credits(session, user, cost)
@@ -6494,66 +6553,10 @@ async def _studio_job_execute_motion_first_frame(
         image_urls: list[str] = []
         user_pose_ref_prepended = False
         pose_ct = first_frame_media if first_frame_media.startswith("image/") else "image/jpeg"
-        try:
-            if mode_n == "model_scene":
-                image_urls = motion_model_scene_wavespeed_image_urls(
-                    pub=pub,
-                    owner_id=oid,
-                    pose_bytes=first_frame,
-                    pose_mime=pose_ct,
-                    sm=sm_loaded,
-                    wave_profile=wave_profile_n,
-                    save_pose_reference_bytes=save_pose_reference_bytes,
-                    create_pose_reference_access_token=create_pose_reference_access_token,
-                    create_model_image_access_token=create_model_image_access_token,
-                )
-            else:
-                image_urls = motion_face_swap_wavespeed_image_urls(
-                    pub=pub,
-                    owner_id=oid,
-                    pose_bytes=first_frame,
-                    pose_mime=pose_ct,
-                    sm=sm_loaded,
-                    wave_profile=wave_profile_n,
-                    reference_scene=reference_scene or None,
-                    save_pose_reference_bytes=save_pose_reference_bytes,
-                    create_pose_reference_access_token=create_pose_reference_access_token,
-                    create_model_image_access_token=create_model_image_access_token,
-                )
-            user_pose_ref_prepended = True
-        except Exception as e:
-            log.warning("motion: grok pose/identity urls failed: %s", e)
-            wavespeed_message = "Не удалось подготовить кадр для WaveSpeed."
-
-        if not image_urls:
-            wavespeed_message = wavespeed_message or "Нет изображений для WaveSpeed."
-
-        if not wavespeed_message:
-            pose_is_last_after_reorder = False
-            use_nano_reorder = wave_profile_n == "regular" and (
-                not workflow_wave_model
-                or workflow_wave_model in ("nano-banana-pro", "nano-banana-2")
-            )
-            if use_nano_reorder:
-                pose_is_last_after_reorder = bool(
-                    user_pose_ref_prepended and len(image_urls) >= 2
-                )
-                image_urls = _nano_banana_reorder_image_urls(
-                    image_urls,
-                    studio_mode=mode_n,
-                    user_pose_ref_prepended=user_pose_ref_prepended,
-                )
-            wavespeed_prompt = assemble_motion_grok_wavespeed_prompt(
-                refined=refined,
-                model_profile_text=model_profile_text,
-                reference_scene=reference_scene or None,
-                extra_negative=grok_neg,
-                lock_hairstyle=effective_lock_hairstyle,
-                wave_profile=wave_profile_n,
-                user_pose_first=user_pose_ref_prepended,
-                user_pose_last=pose_is_last_after_reorder,
-                studio_mode=mode_n,
-            )
+        if anchor_result is not None:
+            image_urls = list(anchor_result.image_urls)
+            user_pose_ref_prepended = False
+            wavespeed_prompt = (refined or "").strip()
             if workflow_first_frame:
                 from app.services.studio_model_bootstrap import (
                     append_motion_first_frame_overlay_removal,
@@ -6627,6 +6630,140 @@ async def _studio_job_execute_motion_first_frame(
                     str(e),
                     wave_profile=wave_profile_n,
                 )
+        else:
+            try:
+                if mode_n == "model_scene":
+                    image_urls = motion_model_scene_wavespeed_image_urls(
+                        pub=pub,
+                        owner_id=oid,
+                        pose_bytes=first_frame,
+                        pose_mime=pose_ct,
+                        sm=sm_loaded,
+                        wave_profile=wave_profile_n,
+                        save_pose_reference_bytes=save_pose_reference_bytes,
+                        create_pose_reference_access_token=create_pose_reference_access_token,
+                        create_model_image_access_token=create_model_image_access_token,
+                    )
+                else:
+                    image_urls = motion_face_swap_wavespeed_image_urls(
+                        pub=pub,
+                        owner_id=oid,
+                        pose_bytes=first_frame,
+                        pose_mime=pose_ct,
+                        sm=sm_loaded,
+                        wave_profile=wave_profile_n,
+                        reference_scene=reference_scene or None,
+                        save_pose_reference_bytes=save_pose_reference_bytes,
+                        create_pose_reference_access_token=create_pose_reference_access_token,
+                        create_model_image_access_token=create_model_image_access_token,
+                    )
+                user_pose_ref_prepended = True
+            except Exception as e:
+                log.warning("motion: grok pose/identity urls failed: %s", e)
+                wavespeed_message = "Не удалось подготовить кадр для WaveSpeed."
+
+            if not image_urls:
+                wavespeed_message = wavespeed_message or "Нет изображений для WaveSpeed."
+
+            if not wavespeed_message:
+                pose_is_last_after_reorder = False
+                use_nano_reorder = wave_profile_n == "regular" and (
+                    not workflow_wave_model
+                    or workflow_wave_model in ("nano-banana-pro", "nano-banana-2")
+                )
+                if use_nano_reorder:
+                    pose_is_last_after_reorder = bool(
+                        user_pose_ref_prepended and len(image_urls) >= 2
+                    )
+                    image_urls = _nano_banana_reorder_image_urls(
+                        image_urls,
+                        studio_mode=mode_n,
+                        user_pose_ref_prepended=user_pose_ref_prepended,
+                    )
+                wavespeed_prompt = assemble_motion_grok_wavespeed_prompt(
+                    refined=refined,
+                    model_profile_text=model_profile_text,
+                    reference_scene=reference_scene or None,
+                    extra_negative=grok_neg,
+                    lock_hairstyle=effective_lock_hairstyle,
+                    wave_profile=wave_profile_n,
+                    user_pose_first=user_pose_ref_prepended,
+                    user_pose_last=pose_is_last_after_reorder,
+                    studio_mode=mode_n,
+                )
+                if workflow_first_frame:
+                    from app.services.studio_model_bootstrap import (
+                        append_motion_first_frame_overlay_removal,
+                        append_workflow_first_frame_face_grid,
+                    )
+
+                    wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
+                    wavespeed_prompt = append_motion_first_frame_overlay_removal(wavespeed_prompt)
+                from app.services.studio_workflow_image_resolution import (
+                    default_workflow_image_resolution,
+                    normalize_workflow_image_resolution,
+                    workflow_wavespeed_size_for_resolution,
+                )
+
+                workflow_wave_resolution = (
+                    normalize_workflow_image_resolution(workflow_wave_model, None)
+                    if workflow_wave_model
+                    else None
+                )
+                if settings.wavespeed_seedream_omit_size:
+                    size_for_ws = None
+                elif workflow_wave_model == "wan-2.7" and workflow_wave_resolution:
+                    size_for_ws = workflow_wavespeed_size_for_resolution(
+                        aspect_key, workflow_wave_resolution
+                    )
+                else:
+                    size_for_ws = wavespeed_size_string(aspect_key)
+                try:
+                    from app.services.wavespeed_client import workflow_edit_image_url
+
+                    if workflow_wave_model:
+                        ws_res = await workflow_edit_image_url(
+                            api_key=ws_key,
+                            wave_model_id=workflow_wave_model,
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                            wan_edit_tier=wan_tier_n,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                            size=size_for_ws,
+                            resolution=workflow_wave_resolution
+                            or default_workflow_image_resolution(workflow_wave_model),
+                        )
+                    elif wave_profile_n == "regular":
+                        ws_res = await nano_banana_pro_edit_image_url(
+                            api_key=ws_key,
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                        )
+                    else:
+                        ws_res = await workflow_edit_image_url(
+                            api_key=ws_key,
+                            wave_model_id="seedream-v5.0-pro",
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                            wan_edit_tier=wan_tier_n,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                            size=size_for_ws,
+                            resolution=default_workflow_image_resolution("seedream-v5.0-pro"),
+                        )
+                    generated_image_url = ws_res.url
+                    wavespeed_task_id = ws_res.task_id or wavespeed_task_id
+                except RuntimeError as e:
+                    wavespeed_message = _append_nano_banana_error_hint(
+                        str(e),
+                        wave_profile=wave_profile_n,
+                    )
 
         if generated_image_url and gen_row is not None:
             finished_row, cdn_preview = await studio_finish_image_generation(
