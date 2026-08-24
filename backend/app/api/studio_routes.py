@@ -170,6 +170,7 @@ from app.services.studio_openai import (
     finalize_masked_fullframe_wan_prompt,
     finalize_nano_banana_studio_prompt,
     finalize_wavespeed_studio_prompt,
+    generate_model_identity_anchor_from_images,
     generate_model_profile_json_from_images,
     load_image_studio_system,
     assemble_wavespeed_image_edit_prompt,
@@ -3309,7 +3310,7 @@ async def api_generate_model_profile(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioModelProfileGenerateOut:
-    """Собрать JSON model_profile по референс-фотографиям (внешность, не поза/сцена)."""
+    """Собрать identity-анкор FACE/HAIR/… по референс-фото (как в anchor-studio_3.html)."""
     assert_permission(user, PERM_STUDIO_MODELS)
     require_workspace_owner(user)
     oid = workspace_owner_id(user)
@@ -3356,7 +3357,7 @@ async def api_generate_model_profile(
         cost = 0
     billing = await ensure_can_consume_credits(session, user, cost)
     try:
-        text = await generate_model_profile_json_from_images(
+        text = await generate_model_identity_anchor_from_images(
             image_items=image_items,
             image_kinds=kinds_list,
             credentials=llm_creds,
@@ -4466,9 +4467,14 @@ async def _studio_job_execute_refine_prompt(
     visibility_block: str | None = None
     skip_no_face_suffix = False
     reference_analysis_for_out: dict[str, Any] | None = None
+    # Face swap / from-ref use Anchor Studio SCENE_ANALYSIS (HTML), not the old reference plan.
+    use_anchor_studio = bool(
+        image_bytes and mid is not None and mode_n in ("face_swap", "model_scene")
+    )
     use_reference_analysis = bool(
         image_bytes
         and mode_n in ("model", "no_face", "model_scene", "grok_compose", "face_swap")
+        and not use_anchor_studio
     )
     if use_reference_analysis:
         from app.services.studio_reference_analysis import (
@@ -4761,8 +4767,28 @@ async def _studio_job_execute_refine_prompt(
     grok_negative_extra: str | None = None
     workflow_scenario: str | None = str(p.get("workflow_scenario_type") or "").strip() or None
     location_donor_description: str | None = None
+    # Face swap / from-ref: Anchor Studio pipeline replaces LLM compose + WaveSpeed image order.
+    skip_llm_for_anchor = bool(
+        do_wavespeed
+        and image_bytes
+        and mid is not None
+        and imgs_model
+        and mode_n in ("face_swap", "model_scene")
+        and not mask_bytes
+    )
     try:
-        if workflow_source and workflow_ref_loaded:
+        if skip_llm_for_anchor:
+            refined = ""
+            reference_scene = (
+                prompt_plan.reference_scene_description if prompt_plan else None
+            )
+            prompt_brief_mode = "anchor_pending"
+            grok_negative_extra = None
+            if gen_row is not None:
+                gen_row.refined_prompt = None
+                session.add(gen_row)
+                await session.flush()
+        elif workflow_source and workflow_ref_loaded:
             from app.services.studio_deterministic_compose import compose_studio_scene_deterministic
 
             if settings.studio_deterministic_compose_enabled and prompt_plan is not None:
@@ -5042,6 +5068,63 @@ async def _studio_job_execute_refine_prompt(
                 session, gen_row, message=str(e), step="llm"
             )
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+    # Anchor Studio pipeline (anchor-studio_3.html): Mode A face_swap / Mode B model_scene.
+    # Wardrobe-prep → Image2; final prompt exact from HTML; cache dressed body on regenerate.
+    anchor_result = None
+    if (
+        do_wavespeed
+        and image_bytes
+        and mid is not None
+        and imgs_model
+        and mode_n in ("face_swap", "model_scene")
+        and not mask_bytes
+    ):
+        try:
+            from app.services.studio_anchor_runner import run_anchor_pipeline
+
+            anchor_result = await run_anchor_pipeline(
+                studio_mode=mode_n,
+                owner_id=oid,
+                model_id=int(mid),
+                model_images=imgs_model,
+                model_profile_text=model_profile_text_full or model_profile_text,
+                scene_bytes=image_bytes,
+                scene_mime=image_mime or "image/jpeg",
+                user_notes=desc if (desc or "").strip() else "",
+                identity_visibility=prompt_plan.visibility if prompt_plan else None,
+                existing_scene_description=None,
+                llm_credentials=llm_creds,
+                wavespeed_api_key=ws_key,
+                wave_profile=wave_profile_n,
+                wan_edit_tier=wan_tier_n,
+                wave_model_id=(
+                    workflow_wave_model
+                    if workflow_source and workflow_wave_model
+                    else ("wan-2.7" if wave_profile_n == "nsfw" else "nano-banana-pro")
+                ),
+                aspect_ratio=aspect_key,
+                force_redress=False,
+            )
+            if anchor_result is not None:
+                refined = anchor_result.refined_prompt
+                reference_scene = anchor_result.scene_description or reference_scene
+                prompt_brief_mode = f"anchor_mode_{anchor_result.mode}"
+                if gen_row is not None:
+                    gen_row.refined_prompt = refined
+                    gen_row.prompt_excerpt = (refined[:2000] if refined else None) or None
+                    session.add(gen_row)
+                    await session.flush()
+                log.info(
+                    "anchor pipeline mode=%s cache=%s urls=%s job=%s",
+                    anchor_result.mode,
+                    anchor_result.dressed_from_cache,
+                    len(anchor_result.image_urls),
+                    job.id,
+                )
+        except Exception as e:
+            log.warning("anchor pipeline failed job=%s: %s — falling back", job.id, e)
+            anchor_result = None
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
@@ -5348,7 +5431,91 @@ async def _studio_job_execute_refine_prompt(
             ws_identity_legend: str | None = None
             workflow_prompt_only_t2i = False
             pose_is_last_after_reorder = False
-            if workflow_ref_loaded and send_pose_to_ws:
+            # Anchor Studio: exact HTML prompt + Image1=face, Image2=dressed, [Image3=scene].
+            # Do not wrap with assemble_wavespeed_image_edit_prompt (would rewrite prompts).
+            if anchor_result is not None:
+                image_urls = list(anchor_result.image_urls)
+                user_pose_ref_prepended = False
+                wavespeed_prompt = (refined or "").strip()
+                size_for_ws: str | None
+                if settings.wavespeed_seedream_omit_size:
+                    size_for_ws = None
+                elif workflow_source and workflow_wave_model == "wan-2.7":
+                    size_for_ws = workflow_wavespeed_size_for_resolution(
+                        aspect_key, workflow_wave_resolution
+                    )
+                else:
+                    size_for_ws = wavespeed_size_string(aspect_key)
+                try:
+                    from app.services.wavespeed_client import workflow_edit_image_url
+
+                    if workflow_source and workflow_wave_model:
+                        ws_res = await workflow_edit_image_url(
+                            api_key=ws_key,
+                            wave_model_id=workflow_wave_model,
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                            wan_edit_tier=wan_tier_n,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                            size=size_for_ws,
+                            resolution=workflow_wave_resolution,
+                            on_task_submitted=_on_wavespeed_task_submitted,
+                        )
+                    elif wave_profile_n == "regular":
+                        ws_res = await nano_banana_pro_edit_image_url(
+                            api_key=ws_key,
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                            on_task_submitted=_on_wavespeed_task_submitted,
+                        )
+                    else:
+                        from app.services.studio_workflow_image_resolution import (
+                            default_workflow_image_resolution,
+                        )
+
+                        ws_res = await workflow_edit_image_url(
+                            api_key=ws_key,
+                            wave_model_id="seedream-v5.0-pro",
+                            image_urls=image_urls,
+                            prompt=wavespeed_prompt,
+                            aspect_ratio=aspect_key,
+                            wan_edit_tier=wan_tier_n,
+                            wave_profile=wave_profile_n,
+                            reference_scene_description=reference_scene,
+                            size=size_for_ws,
+                            resolution=default_workflow_image_resolution("seedream-v5.0-pro"),
+                            on_task_submitted=_on_wavespeed_task_submitted,
+                        )
+                    generated_image_url = ws_res.url
+                    wavespeed_task_id = ws_res.task_id or wavespeed_task_id
+                except RuntimeError as e:
+                    wavespeed_message = _append_nano_banana_error_hint(
+                        str(e), wave_profile=wave_profile_n
+                    )
+                    log.warning(
+                        "WaveSpeed anchor generation failed (owner_id=%s): %s",
+                        oid,
+                        wavespeed_message,
+                    )
+                    recovered_url, deferred = await resolve_wavespeed_image_job_after_error(
+                        session,
+                        gen_row,
+                        api_key=ws_key,
+                        refined_prompt=refined,
+                        error_message=wavespeed_message or str(e),
+                    )
+                    if recovered_url and recovered_url != "ready":
+                        generated_image_url = recovered_url
+                        wavespeed_message = None
+                    elif deferred:
+                        wavespeed_deferred_pending = True
+                        wavespeed_message = None
+            elif workflow_ref_loaded and send_pose_to_ws:
                 try:
                     refs_for_ws = workflow_ref_loaded
                     detail_edit_ws = _truthy_send_pose_reference_to_wavespeed(
@@ -5416,7 +5583,7 @@ async def _studio_job_execute_refine_prompt(
                     "обязательно уходит в WaveSpeed — отключить референс нельзя."
                 )
 
-            if not wavespeed_message:
+            if anchor_result is None and not wavespeed_message:
                 attach_model_urls = False
                 grok_ws_identity: list[UserStudioModelImage] = []
                 _ms_include_face = (
@@ -5549,7 +5716,11 @@ async def _studio_job_execute_refine_prompt(
                             "Нет изображений для WaveSpeed — проверьте режим, модель и файлы."
                         )
 
-            if not wavespeed_message and (image_urls or workflow_prompt_only_t2i):
+            if (
+                anchor_result is None
+                and not wavespeed_message
+                and (image_urls or workflow_prompt_only_t2i)
+            ):
                 if image_urls:
                     if wave_profile_n == "nsfw" and _truthy_wavespeed_flag(
                         wavespeed_single_reference

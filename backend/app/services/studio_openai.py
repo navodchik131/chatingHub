@@ -2294,3 +2294,75 @@ async def generate_model_profile_json_from_images(
         f"Модель вернула неполный профиль ({len(last_unfilled)} пустых полей: {preview}{suffix}). "
         "Повторите генерацию."
     )
+
+
+async def generate_model_identity_anchor_from_images(
+    *,
+    image_items: list[tuple[bytes, str | None]],
+    image_kinds: list[str] | None = None,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> str:
+    """Vision → structured FACE/HAIR/UPPER/LOWER/GENERAL BUILD anchor (anchor-studio_3.html)."""
+    if not image_items:
+        raise RuntimeError("Нет изображений")
+    from app.services.studio_anchor_pipeline import IDENTITY_ANALYSIS_PROMPT
+    from app.services.studio_grok_motion import (
+        _grok_fps_stills_model,
+        grok_motion_studio_credentials,
+    )
+    from app.services.studio_grok_scene_compose import (
+        _grok_scene_compose_model,
+        grok_scene_compose_configured,
+    )
+    from app.services.studio_model_images import profile_gen_image_kind_caption
+
+    user_content: list[dict] = [
+        {"type": "text", "text": IDENTITY_ANALYSIS_PROMPT},
+        {
+            "type": "text",
+            "text": f"Number of reference photos: {len(image_items)}.",
+        },
+    ]
+    kinds = list(image_kinds or [])
+    for idx, (raw, mime) in enumerate(image_items):
+        kind = kinds[idx] if idx < len(kinds) else "other"
+        caption = profile_gen_image_kind_caption(kind)
+        user_content.append(
+            {
+                "type": "text",
+                "text": f"--- Image {idx + 1} ({kind.upper()}) ---\n{caption}",
+            }
+        )
+        m = (mime or "image/jpeg").split(";")[0].strip()
+        if m not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+            m = "image/jpeg"
+        b64 = base64.standard_b64encode(raw).decode("ascii")
+        user_content.append(
+            {"type": "image_url", "image_url": {"url": f"data:{m};base64,{b64}"}}
+        )
+
+    if grok_scene_compose_configured():
+        model = (_grok_scene_compose_model() or "").strip() or _grok_fps_stills_model()
+        creds = grok_motion_studio_credentials()
+    else:
+        if not credentials:
+            raise RuntimeError("LLM credentials не настроены")
+        model = (settings.openai_studio_model_vision or "").strip() or settings.openai_studio_model
+        creds = credentials
+
+    text = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[{"role": "user", "content": user_content}],
+        max_tokens=4096,
+        temperature=0.2,
+        credentials=creds,
+        timeout_seconds=180.0,
+    )
+    out = (text or "").strip()
+    if not out:
+        raise RuntimeError("Пустой identity-анкор модели")
+    # Strip accidental markdown fences
+    if out.startswith("```"):
+        out = re.sub(r"^```(?:\w+)?\s*", "", out)
+        out = re.sub(r"\s*```$", "", out).strip()
+    return out

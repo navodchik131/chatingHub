@@ -7,14 +7,10 @@ const FACE_SWAP_IDENTITY_ROLE = 'model / identity'
 const FACE_SWAP_SCENE_ROLE = 'scene / pose / camera'
 const PO_REFU_SCENE_ROLE = 'pose + camera + framing + light donor'
 
-const FACE_SWAP_DEFAULT_PROMPT =
-  'Replace the person in the scene reference with the identity from the identity reference.\n' +
-  'Keep exact pose, camera angle, crop, background, props, and lighting from the scene reference.\n' +
-  "Do NOT copy the original person's face, hair, or body."
+// Anchor Studio: финальный промпт собирает бэкенд (Mode A/B). Здесь только заметки пользователя.
+const FACE_SWAP_DEFAULT_PROMPT = ''
 
-const PO_REFU_DEFAULT_PROMPT =
-  'PRIORITY: match USER_SCENE_REFERENCE geometry as closely as possible.\n' +
-  'If text conflicts with the reference image, the reference wins for pose/camera/light/crop.'
+const PO_REFU_DEFAULT_PROMPT = ''
 
 const FACE_SWAP_SCENE_DESC =
   'Исходная сцена с человеком — фиксируем pose, ракурс, кроп, фон, свет, реквизит.\n' +
