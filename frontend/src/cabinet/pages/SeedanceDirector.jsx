@@ -586,6 +586,7 @@ export default function SeedanceDirector() {
                           </div>
                         ) : null}
                       </div>
+                    );
                     })}
                   </Panel>
                 ))
