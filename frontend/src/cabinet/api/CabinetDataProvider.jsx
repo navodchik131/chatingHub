@@ -1108,31 +1108,27 @@ export function CabinetDataProvider({ children }) {
         setMe(await apiJson('/api/auth/me'))
         if (accepted?.job_id) {
           const jobId = accepted.job_id
-          const cleanupIds = [...tempIds]
-          const maxWaitMs = mode === 'carousel'
-            ? Math.max(8 * 60 * 1000, (Number(effState.carouselCount) || 4) * 4 * 60 * 1000)
-            : 15 * 60 * 1000
           void waitForStudioJobResult(jobId, {
-            maxWaitMs,
+            maxWaitMs: mode === 'carousel'
+              ? Math.max(8 * 60 * 1000, (Number(effState.carouselCount) || 4) * 4 * 60 * 1000)
+              : 15 * 60 * 1000,
             onStatus: () => {
               void refreshArchivePending()
             },
           })
             .catch((e) => {
-              setError(e?.message || String(e))
+              const msg = e?.message || String(e)
+              if (/превышено время ожидания|timeout|504|gateway/i.test(msg)) {
+                setError(
+                  'Генерация ещё идёт на сервере — карточка останется в «Сохранённых». Обновите через минуту.',
+                )
+              } else {
+                setError(msg)
+              }
             })
             .finally(async () => {
               await refreshArchivePending()
-              setArchiveImages((prev) => {
-                let next = prev
-                for (const tid of cleanupIds) {
-                  next = removeOptimisticStudioArchive(next, tid)
-                }
-                return next
-              })
-              // Incremental patch only — full archive reload would rotate JWT image URLs
-              // and force the browser to re-download every thumbnail.
-              await refreshArchivePending()
+              // Не удаляем optimistic-карточки: placeholder уже на сервере (202 + generation_id).
             })
         }
       } catch (e) {

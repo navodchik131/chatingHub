@@ -95,6 +95,11 @@ from app.services.studio_operation_pricing import (
     studio_prompt_refine_credit_cost,
     studio_upscale_credit_cost,
 )
+from app.services.studio_refine_billing import (
+    anchor_pipeline_eligible_from_params,
+    anchor_prep_credit_cost,
+    refine_prompt_billing_quote,
+)
 from app.services.admin_access import user_is_platform_admin
 from app.services.studio_keys import (
     apply_studio_credit_cost,
@@ -806,33 +811,6 @@ def _demo_slot_already_reserved(params: dict[str, Any]) -> bool:
     )
 
 
-def _refine_prompt_billing_quote(
-    plan: str,
-    *,
-    mask_bytes: bool,
-    billing_wave_model: str,
-    wan_tier_n: str,
-    grok_pipeline: str,
-) -> tuple[str, int, int]:
-    """usage_kind, quoted_cost (с промптом), base_studio_credit для demo/reserve."""
-    usage_kind = "studio_inpaint" if mask_bytes else STUDIO_IMAGE_USAGE_KIND
-    base_studio_credit = (
-        studio_inpaint_credit_cost()
-        if mask_bytes
-        else studio_prompt_refine_credit_cost()
-    )
-    quoted_cost = resolve_image_credit_cost(
-        plan,
-        wave_model_id=billing_wave_model,
-        wan_edit_tier=wan_tier_n,
-        grok_pipeline=grok_pipeline,
-        legacy_base=base_studio_credit,
-    )
-    if not mask_bytes:
-        quoted_cost += studio_prompt_refine_credit_cost()
-    return usage_kind, quoted_cost, base_studio_credit
-
-
 async def _reserve_refine_prompt_billing_at_accept(
     session: AsyncSession,
     user: User,
@@ -840,6 +818,7 @@ async def _reserve_refine_prompt_billing_at_accept(
     params: dict[str, Any],
     *,
     mask_bytes: bool,
+    has_scene_image: bool | None = None,
 ) -> None:
     sub_b, _, _ws_row, plan, credits, demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(
@@ -863,12 +842,18 @@ async def _reserve_refine_prompt_billing_at_accept(
         if workflow_wave_model
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
-    usage_kind, quoted_cost, base_studio_credit = _refine_prompt_billing_quote(
+    anchor_prep = anchor_pipeline_eligible_from_params(
+        params,
+        has_scene_image=has_scene_image,
+        mask_bytes=mask_bytes,
+    )
+    usage_kind, quoted_cost, base_studio_credit = refine_prompt_billing_quote(
         plan,
         mask_bytes=mask_bytes,
         billing_wave_model=billing_wave_model,
         wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
+        include_anchor_prep=anchor_prep,
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
@@ -4331,6 +4316,7 @@ async def api_studio_refine_prompt(
         oid,
         params,
         mask_bytes=bool(mask_bytes),
+        has_scene_image=bool(image_bytes),
     )
     job = await studio_jobs.create_studio_job(
         session,
@@ -4533,6 +4519,7 @@ async def _accept_studio_refine_job_from_workflow(
         oid,
         params,
         mask_bytes=False,
+        has_scene_image=bool(reference_images),
     )
     job = await studio_jobs.create_studio_job(
         session,
@@ -4981,12 +4968,21 @@ async def _studio_job_execute_refine_prompt(
         if workflow_wave_model
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
-    usage_kind, quoted_cost, base_studio_credit = _refine_prompt_billing_quote(
+    anchor_eligible = bool(
+        do_wavespeed
+        and image_bytes
+        and mid is not None
+        and imgs_model
+        and mode_n in ("face_swap", "model_scene")
+        and not mask_bytes
+    )
+    usage_kind, quoted_cost, base_studio_credit = refine_prompt_billing_quote(
         plan,
         mask_bytes=bool(mask_bytes),
         billing_wave_model=billing_wave_model,
         wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
+        include_anchor_prep=anchor_eligible,
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
@@ -5419,6 +5415,24 @@ async def _studio_job_execute_refine_prompt(
         except Exception as e:
             log.warning("anchor pipeline failed job=%s: %s — falling back", job.id, e)
             anchor_result = None
+
+    # Списание wardrobe prep только если prep реально выполнялся (не из кэша).
+    anchor_prep_applied = bool(
+        anchor_eligible
+        and anchor_result is not None
+        and not anchor_result.dressed_from_cache
+    )
+    if anchor_eligible and cost > 0 and not used_demo:
+        prep_billed = apply_studio_credit_cost(
+            plan,
+            anchor_prep_credit_cost(
+                plan,
+                billing_wave_model=billing_wave_model,
+                wan_tier_n=wan_tier_n,
+            ),
+        )
+        if not anchor_prep_applied:
+            cost = max(0, cost - prep_billed)
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
@@ -6274,6 +6288,10 @@ async def _studio_job_execute_refine_prompt(
             "has_image": bool(image_bytes),
             "studio_model_id": mid,
             "two_step": bool(image_bytes),
+            "anchor_prep_applied": anchor_prep_applied,
+            "anchor_dressed_from_cache": (
+                anchor_result.dressed_from_cache if anchor_result is not None else None
+            ),
             "wavespeed": bool(generated_image_url),
             "generation_id": generation_id,
             "studio_mode": mode_n,

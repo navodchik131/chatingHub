@@ -16,7 +16,7 @@ import {
   validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId,
   normalizeWaveModel, waveModelFromState, isNsfwMode, isUiSimplified, effectiveStudioState,
 } from '../api/studioHelpers';
-import { quoteStudioImageCredits, formatImageCostBadge } from '../../studioImagePricing';
+import { quoteStudioImageCredits, formatImageCostBadge, quoteCabinetImageGenerationCredits } from '../../studioImagePricing';
 import { normalizeBillingPlan } from '../../billing/planCatalog';
 import {
   demoGenerationsGrant,
@@ -47,27 +47,17 @@ function carouselCreditLabels(appState, lang, imagePricing) {
   };
 }
 
-const MODE_STUDIO_MODE = {
-  ref: 'model_scene',
-  swap: 'model',
-  outfit: 'model_scene',
-  location: 'model_scene',
-  prompt: 'model_scene',
-  edit: 'photo_edit',
-  carousel: 'photo_edit',
-};
-
-function imageModeCost(appState, modeId, lang, imagePricing) {
+function imageModeCost(appState, modeId, lang, imagePricing, promptRefineCredits) {
   const nsfw = isNsfwMode(appState);
   const wave = normalizeWaveModel(waveModelFromState(appState), nsfw);
-  const credits = quoteStudioImageCredits({
+  const extraRefs = (modeId === 'location' || modeId === 'outfit') ? 1 : 0;
+  const credits = quoteCabinetImageGenerationCredits({
     waveModelId: wave.apiId,
     waveProfile: appState.contentMode === 'sfw' ? 'regular' : 'nsfw',
     wanEditTier: wave.tier,
-    grokPipeline: modeId === 'swap' ? 'light' : 'standard',
-    studioMode: MODE_STUDIO_MODE[modeId] || 'model_scene',
-    workflow: false,
-  }, imagePricing);
+    modeId,
+    extraReferenceCount: extraRefs,
+  }, imagePricing, { promptRefineCredits });
   if (modeId === 'carousel') {
     return formatImageCostBadge(credits, lang, { perFrame: true });
   }
@@ -329,6 +319,7 @@ export default function Images() {
   const studioState = effectiveStudioState(s, cabinet.me);
 
   const imagePricing = cabinet.health?.studio_image_pricing;
+  const promptRefineCredits = cabinet.health?.studio_prompt_credit_cost ?? 2;
 
   const carouselCosts = useMemo(
     () => carouselCreditLabels(studioState, lang, imagePricing),
@@ -347,9 +338,9 @@ export default function Images() {
         return { ...m, cost: carouselCosts.perLabel };
       }
       if (isPro) return { ...m, cost: 'Pro' };
-      return { ...m, cost: imageModeCost(studioState, m.id, lang, imagePricing) };
+      return { ...m, cost: imageModeCost(studioState, m.id, lang, imagePricing, promptRefineCredits) };
     });
-  }, [lang, t.cr, carouselCosts.perLabel, isPro, studioState, imagePricing]);
+  }, [lang, t.cr, carouselCosts.perLabel, isPro, studioState, imagePricing, promptRefineCredits]);
   const curMode = modes.find((m) => m.id === s.imgMode) || modes[0];
   const generateCostLabel =
     s.imgMode === 'carousel'

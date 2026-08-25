@@ -118,6 +118,66 @@ export function quoteStudioImageCredits(
   return Math.max(1, total)
 }
 
+/** Режимы кабинета с Anchor pipeline (wardrobe prep + финальный кадр). */
+export function cabinetModeUsesAnchorPipeline(modeId: string | null | undefined): boolean {
+  const m = (modeId || '').trim().toLowerCase()
+  return m === 'ref' || m === 'swap'
+}
+
+function grokPipelineForCabinetMode(modeId: string): GrokPipelineKind {
+  const m = (modeId || '').trim().toLowerCase()
+  if (m === 'swap') return 'light'
+  if (m === 'location' || m === 'outfit') return 'workflow'
+  return 'standard'
+}
+
+/**
+ * Полная цена генерации в кабинете «Картинки»: модель + Grok + prompt refine (+ anchor prep при ref/swap).
+ * Совпадает с backend _refine_prompt_billing_quote (worst-case для anchor — prep не из кэша).
+ */
+export function quoteCabinetImageGenerationCredits(
+  params: {
+    waveModelId?: string | null
+    waveProfile?: WaveProfile | string | null
+    wanEditTier?: WanEditTier | string | null
+    modeId?: string | null
+    extraReferenceCount?: number
+  },
+  health?: StudioImagePricingHealth | null,
+  opts?: { promptRefineCredits?: number | null },
+): number {
+  const modeId = (params.modeId || 'ref').trim().toLowerCase()
+  const waveParams = {
+    waveModelId: params.waveModelId,
+    waveProfile: params.waveProfile,
+    wanEditTier: params.wanEditTier,
+    grokPipeline: grokPipelineForCabinetMode(modeId),
+    studioMode: MODE_STUDIO_MODE[modeId] || 'model_scene',
+    workflow: modeId === 'location' || modeId === 'outfit',
+    extraReferenceCount: params.extraReferenceCount,
+  }
+  const imageCore = quoteStudioImageCredits(waveParams, health)
+  const promptRefine = Math.max(0, Number(opts?.promptRefineCredits ?? 2) || 2)
+  let total = imageCore + promptRefine
+  if (cabinetModeUsesAnchorPipeline(modeId)) {
+    total += quoteStudioImageCredits(
+      { ...waveParams, grokPipeline: 'none' },
+      health,
+    )
+  }
+  return Math.max(1, total)
+}
+
+const MODE_STUDIO_MODE: Record<string, string> = {
+  ref: 'model_scene',
+  swap: 'model',
+  outfit: 'model_scene',
+  location: 'model_scene',
+  prompt: 'model_scene',
+  edit: 'photo_edit',
+  carousel: 'photo_edit',
+}
+
 export function studioGenerationUsesDemo(params: {
   billingPlan?: string | null
   demoRemaining: number

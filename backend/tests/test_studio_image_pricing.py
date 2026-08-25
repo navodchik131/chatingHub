@@ -39,3 +39,43 @@ def test_nano_banana_2_cheaper_than_pro_model():
         wave_model_id="nano-banana-pro", grok_pipeline="light"
     )
     assert nb2 <= nbp
+
+
+def test_refine_billing_includes_anchor_prep():
+    from app.services.studio_refine_billing import refine_prompt_billing_quote
+
+    _, base, _ = refine_prompt_billing_quote(
+        "credits",
+        mask_bytes=False,
+        billing_wave_model="wan-2.7",
+        wan_tier_n="standard",
+        grok_pipeline="standard",
+        include_anchor_prep=False,
+    )
+    _, with_prep, _ = refine_prompt_billing_quote(
+        "credits",
+        mask_bytes=False,
+        billing_wave_model="wan-2.7",
+        wan_tier_n="standard",
+        grok_pipeline="standard",
+        include_anchor_prep=True,
+    )
+    assert with_prep > base
+
+
+def test_anchor_pipeline_eligible_params():
+    from app.services.studio_refine_billing import anchor_pipeline_eligible_from_params
+
+    assert anchor_pipeline_eligible_from_params(
+        {"studio_mode": "face_swap", "model_id": "12", "generate_wavespeed": "1"},
+        has_scene_image=True,
+    )
+    assert not anchor_pipeline_eligible_from_params(
+        {"studio_mode": "photo_edit", "model_id": "12", "generate_wavespeed": "1"},
+        has_scene_image=True,
+        mask_bytes=True,
+    )
+    assert not anchor_pipeline_eligible_from_params(
+        {"studio_mode": "model_scene", "model_id": "", "generate_wavespeed": "1"},
+        has_scene_image=True,
+    )
