@@ -334,6 +334,7 @@ Seedance 2.0 — 1a — 0.0–10.0s
 Start frame: her mid-step, phone at chest height, storefront light on her left cheek.
 
 - Order: all Seedance 2.0 pieces first, then all Seedance 2.5 pieces.
+- **Always output both versions:** at least one Seedance 2.0 piece and at least one Seedance 2.5 piece, even when the duration fits in a single piece for each. Never answer with 2.0 only.
 - If anything in my brief was missing and you had to choose, one final line at the very end of the whole answer, and only then:
 
 Assumed: time of day from image 1 · she is alone · she stops rather than keeps walking
@@ -360,3 +361,4 @@ Fix anything that fails. Do not report the checklist and do not mention that you
 12. The eye-line, the framing logic and the audio balance all match that mode
 13. The Setting has at least one line of background life, unless the brief said the space is empty
 14. No beat holds a pose or hesitates beyond what the scenario actually called for
+15. At least one Seedance 2.0 piece and at least one Seedance 2.5 piece are present

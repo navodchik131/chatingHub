@@ -474,14 +474,36 @@ export default function SeedanceDirector() {
               </NoteBlock>
             ) : null}
 
-            {[
-              { title: 'Seedance 2.0', list: pieces20 },
-              { title: 'Seedance 2.5', list: pieces25 },
-            ].map((group) =>
-              group.list.length ? (
-                <Panel key={group.title} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14 }}>{group.title}</div>
-                  {group.list.map((p) => {
+            {compose
+              ? [
+                  {
+                    title: 'Seedance 2.0',
+                    hintRu: 'Генерация с фото → Seedance 2.0 Fast',
+                    hintEn: 'With photo refs → Seedance 2.0 Fast',
+                    list: pieces20,
+                  },
+                  {
+                    title: 'Seedance 2.5',
+                    hintRu: 'Генерация → Seedance 2.5 (обычный T2V)',
+                    hintEn: 'Generation → Seedance 2.5 (standard T2V)',
+                    list: pieces25,
+                  },
+                ].map((group) => (
+                  <Panel key={group.title} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14 }}>{group.title}</div>
+                      <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 4 }}>
+                        {lang === 'ru' ? group.hintRu : group.hintEn}
+                      </div>
+                    </div>
+                    {!group.list.length ? (
+                      <div style={{ fontSize: 13, color: color.textDim }}>
+                        {lang === 'ru'
+                          ? 'Grok не вернул промпты для этой версии. Нажмите «Собрать промпты» ещё раз.'
+                          : 'Grok did not return prompts for this version. Run compose again.'}
+                      </div>
+                    ) : null}
+                    {group.list.map((p) => {
                     const key = `${p.version}_${p.piece_id}`;
                     const genBusy = busyGen === key;
                     return (
@@ -564,11 +586,10 @@ export default function SeedanceDirector() {
                           </div>
                         ) : null}
                       </div>
-                    );
-                  })}
-                </Panel>
-              ) : null,
-            )}
+                    })}
+                  </Panel>
+                ))
+              : null}
 
             {compose && !(pieces20.length || pieces25.length) ? (
               <Panel>
