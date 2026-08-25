@@ -23,6 +23,7 @@ import {
 } from '../../studioMotionPricing';
 import { videoNoteDownloadPath, videoNoteSendPayload } from '../../studioArchive';
 import SeedanceSaleLabel from '../components/SeedanceSaleLabel';
+import SeedanceDirector from './SeedanceDirector';
 
 const vidModeIcons = { film: IcoFilm, text: IcoText };
 
@@ -358,6 +359,7 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
         })}
       </div>
 
+      {motionControl ? (
       <div style={studioGrid}>
         {/* form */}
         <div
@@ -705,194 +707,6 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
           </>
           )}
 
-          {!motionControl && (
-            <>
-              <div>
-                <Eyebrow>{t.character}</Eyebrow>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {(cabinet.models || []).map((m) => (
-                    <SelectPill
-                      key={m.id}
-                      accent="pink"
-                      on={sameStudioModelId(cabinet.selectedModelId, m.id)}
-                      onClick={() => cabinet.setSelectedModelId(m.id)}
-                    >
-                      {m.name || `#${m.id}`}
-                    </SelectPill>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.format}</Eyebrow>
-                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                  {vfmtOpts.map((v) => (
-                    <Chip key={v} on={s.vidFormat === v} onClick={() => setS({ vidFormat: v })}>{v}</Chip>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <Eyebrow>{t.sourceFrame}</Eyebrow>
-                <input
-                  ref={frameRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) onFrameFilePicked(file);
-                    e.target.value = '';
-                  }}
-                />
-                <Hoverable
-                  style={{
-                    position: 'relative',
-                    borderRadius: 12, padding: 16,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer',
-                    ...refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).base,
-                    ...(ffPreviewUrl && !cabinet.uploadFiles['motion-frame']
-                      ? { background: `center/cover url(${ffPreviewUrl})`, minHeight: 140 }
-                      : {}),
-                    ...(hasFrameUpload && cabinet.uploadPreviewUrls?.['motion-frame']
-                      ? { background: `center/cover url(${cabinet.uploadPreviewUrls['motion-frame']})`, minHeight: 140 }
-                      : {}),
-                  }}
-                  hover={refUploadStyle(Boolean(cabinet.uploadFiles['motion-frame'] || ffPreviewUrl)).hover}
-                  onClick={() => frameRef.current?.click()}
-                >
-                  {hasFrameUpload
-                    ? uploadClearBtn(() => cabinet.setUploadFile('motion-frame', null), t.clearUpload)
-                    : null}
-                  {!hasFrameUpload && (
-                    <span style={{ display: 'flex', width: 22, height: 22, color: color.textMuted }}><IcoUpload /></span>
-                  )}
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, textAlign: 'center' }}>
-                    {cabinet.uploadFiles['motion-frame']?.name || (lang === 'ru' ? 'Загрузите первый кадр' : 'Upload first frame')}
-                  </span>
-                </Hoverable>
-                {(cabinet.archiveImages || []).length > 0 && (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>{t.srcArchive}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, width: '100%' }}>
-                      <Hoverable
-                        style={{
-                          aspectRatio: '9/16',
-                          borderRadius: 8,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: pickedArchiveId == null && !hasFrameUpload
-                            ? '2px solid rgba(215,244,82,.7)'
-                            : '1px dashed rgba(255,255,255,.18)',
-                          background: color.bgPanel,
-                          color: color.textDim,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          textAlign: 'center',
-                          padding: 4,
-                        }}
-                        hover={{ borderColor: 'rgba(215,244,82,.5)' }}
-                        onClick={clearArchiveFramePick}
-                      >
-                        {t.archiveNone}
-                      </Hoverable>
-                      {(cabinet.archiveImages || []).slice(0, 3).map((item, i) => {
-                        const thumb = archiveThumbUrl(item);
-                        const picked = Number(pickedArchiveId) === Number(item.id);
-                        const pickSt = refThumbStyle(picked);
-                        return (
-                          <Hoverable
-                            key={item.id}
-                            style={{
-                              ...pickSt.base,
-                              width: '100%',
-                              minWidth: 0,
-                              background: thumb ? `center/cover url(${thumb})` : G[i % 6],
-                            }}
-                            hover={pickSt.hover}
-                            onClick={() => pickArchiveFrame(item)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Eyebrow>{t.motionPrompt}</Eyebrow>
-                <textarea
-                  rows={3}
-                  value={s.motionPrompt || ''}
-                  onChange={(e) => setS({ motionPrompt: e.target.value })}
-                  placeholder={t.motionHint}
-                  style={{
-                    width: '100%', background: color.bgPanel, border: `1px solid ${line.soft}`,
-                    borderRadius: 10, padding: '10px 12px', color: color.text,
-                    fontFamily: font.body, fontSize: 12.5, resize: 'vertical', outline: 'none', boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div>
-                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidModel}</Eyebrow>
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    {seedanceModelOpts.map((m) => (
-                      <Chip key={m.v} on={s.vidSeedanceVariant === m.v} onClick={() => setS({ vidSeedanceVariant: m.v })}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          {m.l}
-                          {m.hot ? (
-                            <span style={{
-                              fontFamily: font.mono, fontSize: 8, fontWeight: 800, letterSpacing: '0.5px',
-                              background: 'rgba(255,120,80,.18)', color: '#ffb088', borderRadius: 4, padding: '2px 5px',
-                            }}
-                            >
-                              {t.vidHot}
-                            </span>
-                          ) : null}
-                        </span>
-                      </Chip>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.vidQuality}</Eyebrow>
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    {qualityOpts.map((q) => (
-                      <Chip key={q.v} on={s.vidQuality === q.v} onClick={() => setS({ vidQuality: q.v })}>{q.l}</Chip>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Eyebrow size={9} spacing="1.4px" style={{ marginBottom: 7 }}>{t.duration}</Eyebrow>
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    {vtimeOpts.map((v) => (
-                      <Chip key={v.v} on={s.vidTime === v.v} onClick={() => setS({ vidTime: v.v })}>{v.l}</Chip>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <Hoverable
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12, background: color.lime,
-                  borderRadius: 12, padding: '12px 16px', cursor: 'pointer',
-                }}
-                hover={{ background: color.limeHi }}
-                onClick={handleGenerateVideo}
-              >
-                <span style={{ display: 'flex', width: 17, height: 17, color: color.limeInk }}><IcoFilm /></span>
-                <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: color.limeInk }}>{t.generateVideo}</span>
-                <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, color: color.limeInkSoft }}>
-                  {vidCostLabel}
-                </span>
-              </Hoverable>
-            </>
-          )}
-
           {motionControl && (
           <>
           {/* quality / duration / audio */}
@@ -1127,6 +941,135 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
           )}
         </div>
       </div>
+      ) : (
+        <>
+          <SeedanceDirector embedded backend={isEvolink ? 'evolink' : 'wavespeed'} />
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10 }}>{t.archive}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
+              {(pageArchiveVideos || []).map((item, i) => {
+                const poster = archiveThumbUrl(item);
+                const videoUrl = archiveVideoUrl(item);
+                const downloadUrl = archiveDownloadUrl(item) || videoUrl;
+                const videoNotePath = videoNoteDownloadPath(item);
+                const pending = isArchivePending(item);
+                const failed = (item.status || '').trim() === 'failed';
+                const model = (cabinet.models || []).find((m) => m.id === item.studio_model_id);
+                const ratio = item.output_aspect || '9:16';
+                return (
+                <Hoverable
+                  key={item.id || i}
+                  style={{
+                    borderRadius: 12, overflow: 'hidden', background: color.surface,
+                    border: `1px solid ${failed ? 'rgba(248,113,113,.45)' : line.hair}`,
+                    cursor: pending || failed || !videoUrl ? 'default' : 'pointer',
+                    opacity: pending ? 0.88 : 1,
+                  }}
+                  hover={pending || failed || !videoUrl ? {} : { borderColor: borderHoverOff }}
+                  onClick={() => {
+                    if (!pending && !failed && videoUrl) {
+                      setS({
+                        vidLightbox: {
+                          url: videoUrl,
+                          poster: poster || '',
+                          who: model?.name || '—',
+                          ratio,
+                          metaLine: buildVideoMetaLine({
+                            quality: vidQualityLabel(s.vidQuality),
+                            ratio,
+                            durationSec: Number(s.vidTime) || null,
+                            lang,
+                          }),
+                          downloadUrl,
+                          id: item.id,
+                          videoNotePath,
+                          videoNotePayload: videoNoteSendPayload(item),
+                        },
+                      });
+                    }
+                  }}
+                >
+                  <div
+                    style={{
+                      aspectRatio: '9/16', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      position: 'relative', overflow: 'hidden',
+                      background: (!videoUrl && poster) ? `url(${poster}) center/cover` : G[(i + 2) % 6],
+                    }}
+                  >
+                    {videoUrl && !pending && !failed && (
+                      <video
+                        src={videoUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        style={{
+                          position: 'absolute', inset: 0, width: '100%', height: '100%',
+                          objectFit: 'cover', display: 'block', pointerEvents: 'none',
+                        }}
+                        onLoadedMetadata={(e) => {
+                          try { e.currentTarget.currentTime = 0.05; } catch { /* ignore */ }
+                        }}
+                      />
+                    )}
+                    {pending && (
+                      <div
+                        style={{
+                          position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontFamily: font.mono, fontSize: 9, fontWeight: 700, color: color.orange,
+                        }}
+                      >
+                        {lang === 'ru' ? 'ГЕНЕРАЦИЯ…' : 'GENERATING…'}
+                      </div>
+                    )}
+                    {failed && (
+                      <div
+                        style={{
+                          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center', gap: 6,
+                          background: 'rgba(40,10,12,.82)', padding: '10px 8px',
+                        }}
+                        title={formatArchiveErrorMessage(item.error_message, lang)}
+                      >
+                        <span style={{ fontFamily: font.mono, fontSize: 8, fontWeight: 800, color: color.red }}>
+                          {lang === 'ru' ? 'ОШИБКА' : 'FAILED'}
+                        </span>
+                      </div>
+                    )}
+                    {!pending && !failed && (
+                    <div
+                      style={{
+                        position: 'relative', zIndex: 1,
+                        width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,.45)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <span style={{ display: 'flex', width: 14, height: 14, color: '#fff', marginLeft: 2 }}><IcoPlay /></span>
+                    </div>
+                    )}
+                  </div>
+                  <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
+                  </div>
+                </Hoverable>
+              );})}
+            </div>
+            {pageArchiveHasMore && (
+              <Hoverable
+                style={{
+                  marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8,
+                  fontSize: 12.5, fontWeight: 700, color: color.lime, cursor: 'pointer',
+                  border: '1px solid rgba(215,244,82,.35)', borderRadius: 10, padding: '8px 16px',
+                }}
+                hover={{ background: 'rgba(215,244,82,.08)' }}
+                onClick={() => void loadMoreArchiveVideos?.()}
+              >
+                {t.showMore}
+              </Hoverable>
+            )}
+          </div>
+        </>
+      )}
 
       {s.ffPreviewOpen && ffPreviewUrl && (
         <Overlay onClose={() => setS({ ffPreviewOpen: false })}>

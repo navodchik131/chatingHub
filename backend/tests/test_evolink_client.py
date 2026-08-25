@@ -48,6 +48,12 @@ def test_resolve_evolink_model_variants():
         has_reference_images=True,
         image_to_video=True,
     ) == "seedance-2.5-image-to-video"
+    assert resolve_evolink_model(
+        variant="standard",
+        has_reference_video=False,
+        has_reference_images=True,
+        image_to_video=True,
+    ) == "seedance-2-0-fast-image-to-video"
 
 
 def test_evolink_aspect_and_duration_normalization():

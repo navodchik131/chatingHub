@@ -1606,6 +1606,12 @@ async def api_studio_seedance_director_compose(
     if not refs:
         raise HTTPException(status_code=400, detail="Загрузите хотя бы одно фото")
 
+    from app.services.studio_seedance_director_pricing import seedance_director_compose_credit_cost
+    from app.services.studio_keys import apply_studio_credit_cost
+
+    compose_cost = apply_studio_credit_cost(plan, seedance_director_compose_credit_cost(image_count=len(refs)))
+    billing = await ensure_can_consume_credits(session, user, compose_cost)
+
     try:
         result = await compose_seedance_director_prompts(
             images=refs,
@@ -1621,12 +1627,27 @@ async def api_studio_seedance_director_compose(
         log.exception("seedance-director compose failed")
         raise HTTPException(status_code=502, detail=str(e) or "compose failed") from e
 
+    await record_usage(
+        session,
+        user,
+        billing,
+        "studio_seedance_director_compose",
+        compose_cost,
+        {
+            "image_count": len(refs),
+            "duration_seconds": max(1, int(duration_seconds)),
+            "camera_mode": normalize_camera_mode(camera_mode),
+        },
+    )
+    await session.commit()
+
     return JSONResponse(
         {
             "image_count": result.image_count,
             "instruction_chars": result.instruction_chars,
             "assumed": result.assumed,
             "raw_text": result.raw_text,
+            "compose_credit_cost": compose_cost,
             "pieces": [
                 {
                     "version": p.version,
@@ -1645,7 +1666,10 @@ async def api_studio_seedance_director_compose(
     )
 
 
-@router.post("/studio/debug/seedance-director/generate")
+@router.post(
+    "/studio/debug/seedance-director/generate",
+    responses={202: {"model": StudioJobAcceptedOut}},
+)
 async def api_studio_seedance_director_generate(
     images: list[UploadFile] = File(...),
     prompt: str = Form(...),
@@ -1654,10 +1678,13 @@ async def api_studio_seedance_director_generate(
     aspect_ratio: str = Form("9:16"),
     resolution: str = Form("720p"),
     generate_audio: str = Form("1"),
+    video_backend: str = Form("wavespeed"),
+    image_roles: str = Form("[]"),
+    piece_id: str = Form(""),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
-    """Hidden tool: send director prompt + images to WaveSpeed Seedance T2V."""
+    """Seedance Director: промпт + фото → фоновая задача WaveSpeed T2V / EvoLink I2V (202, без 504)."""
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     sub_b, _llm_row, ws_row, plan, _credits, _demo = await load_owner_studio_billing(
@@ -1666,12 +1693,11 @@ async def api_studio_seedance_director_generate(
     _require_studio_subscription(
         user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo
     )
-    ws_key = studio_wavespeed_api_key(
-        plan=plan,
-        ws_row=ws_row,
-        owner_subscription=sub_b,
-        demo_generations_remaining=_demo,
-    )
+    vb = (video_backend or "wavespeed").strip().lower()
+    is_evolink = vb == "evolink"
+    if is_evolink and not settings.evolink_video_enabled:
+        raise HTTPException(status_code=503, detail="Seedance Sale (EvoLink) временно недоступен")
+
     prompt_text = (prompt or "").strip()
     if not prompt_text:
         raise HTTPException(status_code=400, detail="Пустой промпт")
@@ -1683,15 +1709,26 @@ async def api_studio_seedance_director_generate(
             detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для reference_images.",
         )
 
+    try:
+        roles = json.loads(image_roles or "[]")
+        if not isinstance(roles, list):
+            roles = []
+    except json.JSONDecodeError:
+        roles = []
+
     from app.services.studio_pose_reference import save_pose_reference_bytes
     from app.services.studio_seedance_director import (
         duration_from_span,
         variant_for_piece_version,
     )
-    from app.services.wavespeed_client import seedance_20_text_to_video_url
+    from app.services.studio_seedance_director_pricing import seedance_director_piece_credit_cost
+    from app.services.studio_keys import apply_studio_credit_cost
+    from app.services.studio_evolink_motion_pricing import apply_seedance_sale_credit_cost
 
-    image_urls: list[str] = []
-    for i, up in enumerate(images or []):
+    # Читаем файлы один раз — дальше кладём в job dir, не держим HTTP-соединение.
+    image_files: list[tuple[bytes, str]] = []
+    preview_url: str | None = None
+    for up in images or []:
         if up is None or not (up.filename or "").strip():
             continue
         raw = await up.read()
@@ -1700,10 +1737,12 @@ async def api_studio_seedance_director_generate(
         if len(raw) > MAX_IMAGE_BYTES:
             raise HTTPException(status_code=400, detail="Слишком большой файл изображения")
         mime = (up.content_type or "image/jpeg").split(";")[0].strip()
-        fid = save_pose_reference_bytes(owner_id=oid, raw=raw, content_type=mime)
-        tok = create_pose_reference_access_token(user_id=oid, file_id=fid)
-        image_urls.append(f"{pub}/api/studio/public-pose-reference?t={quote(tok, safe='')}")
-    if not image_urls:
+        image_files.append((raw, mime))
+        if preview_url is None:
+            fid = save_pose_reference_bytes(owner_id=oid, raw=raw, content_type=mime)
+            tok = create_pose_reference_access_token(user_id=oid, file_id=fid)
+            preview_url = f"{pub}/api/studio/public-pose-reference?t={quote(tok, safe='')}"
+    if not image_files:
         raise HTTPException(status_code=400, detail="Нужны фотографии для reference_images")
 
     ver = (version or "2.0").strip()
@@ -1715,41 +1754,93 @@ async def api_studio_seedance_director_generate(
         fallback=int(duration_seconds),
         version=ver,
     )
-    # Prefer explicit duration from form when span not used
     try:
         dur = int(duration_seconds)
     except (TypeError, ValueError):
         pass
     dur = duration_from_span(f"0-{dur}s", fallback=dur, version=ver)
 
-    def _truthy(raw: str | None) -> bool:
-        return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
-
-    try:
-        video_url = await seedance_20_text_to_video_url(
-            api_key=ws_key,
-            prompt=prompt_text,
-            reference_images=image_urls,
-            aspect_ratio=(aspect_ratio or "9:16").strip() or "9:16",
-            resolution=(resolution or "720p").strip() or "720p",
-            duration=dur,
-            generate_audio=_truthy(generate_audio),
-            variant=variant,
-        )
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
-
-    return JSONResponse(
-        {
-            "video_url": video_url,
-            "variant": variant,
-            "version": ver,
-            "duration_seconds": dur,
-            "aspect_ratio": aspect_ratio,
-            "resolution": resolution,
-            "image_count": len(image_urls),
-        }
+    res_norm = (resolution or "720p").strip() or "720p"
+    gen_cost_raw = seedance_director_piece_credit_cost(
+        version=ver,
+        duration_seconds=dur,
+        resolution=res_norm,
+        video_backend=vb,
     )
+    gen_cost = (
+        apply_seedance_sale_credit_cost(plan, gen_cost_raw)
+        if is_evolink
+        else apply_studio_credit_cost(plan, gen_cost_raw)
+    )
+    await ensure_can_consume_credits(session, user, gen_cost)
+
+    if is_evolink:
+        from app.services.evolink_client import evolink_platform_api_key
+
+        try:
+            evolink_platform_api_key()
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+    else:
+        try:
+            studio_wavespeed_api_key(
+                plan=plan,
+                ws_row=ws_row,
+                owner_subscription=sub_b,
+                demo_generations_remaining=_demo,
+            )
+        except HTTPException:
+            raise
+
+    job_files = {f"image_{i}": (raw, mime) for i, (raw, mime) in enumerate(image_files)}
+    try:
+        return await _accept_studio_job(
+            session,
+            user,
+            job_type="seedance_director_generate",
+            params={
+                "prompt": prompt_text,
+                "version": ver,
+                "variant": variant,
+                "duration_seconds": str(dur),
+                "aspect_ratio": (aspect_ratio or "9:16").strip() or "9:16",
+                "resolution": res_norm,
+                "generate_audio": (generate_audio or "1").strip(),
+                "video_backend": vb,
+                "image_roles": json.dumps(roles, ensure_ascii=False),
+                "image_count": len(image_files),
+                "piece_id": (piece_id or "").strip(),
+                "gen_cost_raw": gen_cost_raw,
+                "gen_cost": gen_cost,
+            },
+            placeholder={
+                "studio_model_id": None,
+                "output_aspect": (aspect_ratio or "9:16").strip() or "9:16",
+                "content_type": "video/mp4",
+                "prompt_excerpt": prompt_text[:2000] or None,
+                "preview_source_url": preview_url,
+                "video_backend": vb,
+            },
+            job_files=job_files,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("seedance-director generate accept failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Не удалось создать задачу генерации: {e}",
+        ) from e
+
+
+async def _studio_job_execute_seedance_director_generate(
+    session: AsyncSession,
+    job: StudioJob,
+    user: User,
+) -> dict[str, Any]:
+    from app.services.studio_seedance_director_generate import execute_seedance_director_generate_job
+
+    return await execute_seedance_director_generate_job(session, job, user)
 
 
 @router.post("/studio/debug/shot-batch-plan")

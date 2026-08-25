@@ -26,6 +26,7 @@ async def execute_studio_job(session: AsyncSession, job: StudioJob, user: User) 
         "model_bootstrap_face_merge": sr._studio_job_execute_model_bootstrap_face_merge,
         "model_bootstrap_body_compose": sr._studio_job_execute_model_bootstrap_body_compose,
         "model_bootstrap_sheet": sr._studio_job_execute_model_bootstrap_sheet,
+        "seedance_director_generate": sr._studio_job_execute_seedance_director_generate,
     }
     fn = handlers.get(job.job_type)
     if fn is None:

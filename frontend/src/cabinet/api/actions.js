@@ -680,7 +680,7 @@ export async function composeSeedanceDirector(params) {
   return data
 }
 
-export async function generateSeedanceDirectorVideo(params) {
+export async function generateSeedanceDirectorVideo(params, opts = {}) {
   const fd = new FormData()
   for (const file of params.images || []) {
     fd.append('images', file, file.name || 'image.jpg')
@@ -691,14 +691,29 @@ export async function generateSeedanceDirectorVideo(params) {
   fd.append('aspect_ratio', String(params.aspectRatio || '9:16'))
   fd.append('resolution', String(params.resolution || '720p'))
   fd.append('generate_audio', params.generateAudio ? '1' : '0')
-  const res = await apiFetch('/api/studio/debug/seedance-director/generate', {
+  fd.append('video_backend', params.videoBackend === 'evolink' ? 'evolink' : 'wavespeed')
+  fd.append('image_roles', JSON.stringify(params.roles || []))
+  if (params.pieceId != null && String(params.pieceId).trim()) {
+    fd.append('piece_id', String(params.pieceId))
+  }
+  // 202 сразу после загрузки — nginx не ждёт 15 мин генерации.
+  const accepted = await postStudioJobStart('/api/studio/debug/seedance-director/generate', {
     method: 'POST',
     body: fd,
-    timeoutMs: 900_000,
+    timeoutMs: 180_000,
   })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Seedance director generate failed')
-  return data
+  if (opts.wait === false) {
+    return { accepted }
+  }
+  const result = accepted?.job_id
+    ? await waitForStudioJobResult(accepted.job_id, {
+      maxWaitMs: 45 * 60 * 1000,
+      pollMs: 2500,
+      onStatus: opts.onStatus,
+      signal: opts.signal,
+    })
+    : null
+  return { accepted, ...(result || {}) }
 }
 
 export async function runShotBatchPlan(params) {

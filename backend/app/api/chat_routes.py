@@ -132,6 +132,7 @@ from app.services.billing_credits import billing_credits_pricing_public
 from app.services.studio_operation_pricing import studio_operations_pricing_public
 from app.services.studio_provider_pricing import provider_pricing_public
 from app.services.studio_evolink_motion_pricing import evolink_video_pricing_public
+from app.services.studio_seedance_director_pricing import seedance_director_pricing_public
 from app.services.studio_motion_pricing import (
     motion_video_credit_cost,
     motion_video_duration_seconds,
@@ -281,6 +282,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "studio_generations_retention_interval_hours": settings.studio_generations_retention_interval_hours,
         "studio_motion_video_pricing": motion_video_pricing_public(),
         "studio_evolink_video_pricing": evolink_video_pricing_public(),
+        "studio_seedance_director_pricing": seedance_director_pricing_public(),
         "evolink_video_enabled": bool(settings.evolink_video_enabled),
         "studio_motion_control_credit_cost": motion_video_credit_cost(
             motion_video_duration_seconds(None),

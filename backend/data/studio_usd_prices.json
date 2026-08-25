@@ -21,7 +21,8 @@
     "model_profile_generate": 0.02,
     "carousel_shot": 0.05,
     "upscale": 0.03,
-    "inpaint": 0.05
+    "inpaint": 0.05,
+    "seedance_director_compose": 0.03
   },
   "video": {
     "wavespeed": {

@@ -72,3 +72,25 @@ def test_variant_and_duration():
     assert variant_for_piece_version("2.0") == "standard"
     assert duration_from_span("0.0–12.0s", fallback=10, version="2.0") == 12
     assert duration_from_span("0-40s", fallback=10, version="2.5") == 30
+
+
+def test_director_pricing():
+    from app.services.studio_seedance_director_pricing import (
+        seedance_director_compose_credit_cost,
+        seedance_director_piece_credit_cost,
+    )
+
+    assert seedance_director_compose_credit_cost(image_count=1) >= 1
+    assert seedance_director_compose_credit_cost(image_count=3) >= seedance_director_compose_credit_cost(image_count=1)
+    assert seedance_director_piece_credit_cost(
+        version="2.0", duration_seconds=10, resolution="720p", video_backend="wavespeed"
+    ) >= 1
+    assert seedance_director_piece_credit_cost(
+        version="2.5", duration_seconds=15, resolution="720p", video_backend="evolink"
+    ) >= 1
+
+
+def test_director_generate_job_type_registered() -> None:
+    from app.services.studio_jobs import STUDIO_JOB_TYPES
+
+    assert "seedance_director_generate" in STUDIO_JOB_TYPES

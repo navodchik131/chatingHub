@@ -1,9 +1,16 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Fade } from '../components/ui';
 import Hoverable from '../components/Hoverable';
 import { useApp } from '../hooks/useApp';
 import { composeSeedanceDirector, generateSeedanceDirectorVideo } from '../api/actions';
+import { mergeEvolinkVideoPricing } from '../../studioMotionPricing';
+import {
+  computeDirectorComposeCreditCost,
+  computeDirectorPieceCreditCost,
+  estimateDirectorTotalCredits,
+  formatDirectorCreditLabel,
+} from '../../seedanceDirectorPricing';
 import { color, font, line } from '../styles/tokens';
 import SeedanceDirectorPicker from './SeedanceDirectorPicker';
 import {
@@ -13,7 +20,6 @@ import {
   ROLE_SUGGESTIONS,
   cycleRole,
   clampDuration,
-  estimateCredits,
   DURATION_MAX,
   DURATION_MIN,
   parseAssumedTags,
@@ -65,9 +71,19 @@ function cardBorder(version, { genBusy, hasVideo }) {
   return line.soft;
 }
 
-export default function SeedanceDirector() {
+export default function SeedanceDirector({ embedded = false, backend = 'wavespeed' } = {}) {
   const { lang, go, isNarrow, cabinet } = useApp();
   const models = cabinet.models || [];
+  const isEvolink = backend === 'evolink';
+  const motionPricing = cabinet.health?.studio_motion_video_pricing;
+  const evolinkPricing = mergeEvolinkVideoPricing(cabinet.health?.studio_evolink_video_pricing);
+  const directorPricing = cabinet.health?.studio_seedance_director_pricing;
+  const pricingOpts = useMemo(() => ({
+    backend: isEvolink ? 'evolink' : 'wavespeed',
+    motionPricing,
+    evolinkPricing,
+    directorPricing,
+  }), [isEvolink, motionPricing, evolinkPricing, directorPricing]);
 
   const [refs, setRefs] = useState([]);
   const [brief, setBrief] = useState('');
@@ -99,13 +115,51 @@ export default function SeedanceDirector() {
 
   const canCompose = refs.length > 0 && brief.trim() && !busyCompose && !busyGen;
   const phase = busyCompose ? 'writing' : compose ? 'ready' : 'idle';
-  const stacked = isNarrow;
+  const stacked = isNarrow || embedded;
+
+  const composeCreditCost = useMemo(
+    () => computeDirectorComposeCreditCost(refs.length || 1, directorPricing),
+    [refs.length, directorPricing],
+  );
+
+  const headerEstimate = useMemo(
+    () => estimateDirectorTotalCredits(duration, refs.length || 1, pieceCount, {
+      ...pricingOpts,
+      resolution: resolution === '480p' || resolution === '720p' ? resolution : '720p',
+    }),
+    [duration, refs.length, pieceCount, resolution, pricingOpts, directorPricing],
+  );
+
+  const pieceDuration = useCallback((piece) => {
+    const span = String(piece?.span || '');
+    let dur = clampDuration(duration);
+    const m = span.replace(/[–—]/g, '-').match(/([\d.]+)\s*-\s*([\d.]+)/);
+    if (m) dur = Math.max(DURATION_MIN, Math.round(Number(m[2]) - Number(m[1])));
+    if (piece?.version === '2.5') dur = Math.min(DURATION_MAX, Math.max(DURATION_MIN, dur));
+    else dur = Math.min(15, Math.max(DURATION_MIN, dur));
+    return dur;
+  }, [duration]);
+
+  const pieceCreditCost = useCallback((piece) => {
+    const ver = piece?.version === '2.5' ? '2.5' : '2.0';
+    const res = resolution === '480p' || resolution === '720p' ? resolution : '720p';
+    return computeDirectorPieceCreditCost(pieceDuration(piece), ver, {
+      ...pricingOpts,
+      resolution: res,
+    });
+  }, [pieceDuration, pricingOpts, resolution]);
 
   const flash = useCallback((msg) => {
     setToast(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   }, []);
+
+  // EvoLink Sale: только 480p / 720p.
+  useEffect(() => {
+    if (!isEvolink) return;
+    if (resolution !== '480p' && resolution !== '720p') setResolution('720p');
+  }, [isEvolink, resolution]);
 
   const addUploadFiles = useCallback((fileList) => {
     const files = Array.from(fileList || []);
@@ -204,14 +258,19 @@ export default function SeedanceDirector() {
       if (piece.version === '2.5') dur = Math.min(DURATION_MAX, Math.max(DURATION_MIN, dur));
       else dur = Math.min(15, Math.max(DURATION_MIN, dur));
 
+      // Задача уходит в фон — карточка в архиве появится сразу, результат подтянется poll'ом.
+      void cabinet.refreshArchivePending?.();
       const data = await generateSeedanceDirectorVideo({
         images: refs.map((r) => r.file),
+        roles: refs.map((r, i) => (r.role || '').trim() || `reference ${i + 1}`),
         prompt: piece.prompt,
         version: piece.version,
         durationSeconds: dur,
         aspectRatio: aspect,
         resolution,
         generateAudio,
+        videoBackend: isEvolink ? 'evolink' : 'wavespeed',
+        pieceId: piece.piece_id,
       });
       setCompose((prev) => {
         if (!prev) return prev;
@@ -219,14 +278,34 @@ export default function SeedanceDirector() {
           ...prev,
           pieces: (prev.pieces || []).map((p) =>
             p.version === piece.version && p.piece_id === piece.piece_id
-              ? { ...p, video_url: data.video_url, last_generate: data }
+              ? {
+                ...p,
+                video_url: data.video_url,
+                last_generate: data,
+                job_id: data.accepted?.job_id ?? data.job_id ?? p.job_id,
+                generation_id: data.generation_id ?? data.accepted?.generation_id ?? p.generation_id,
+              }
               : p,
           ),
         };
       });
+      void cabinet.refreshArchivePending?.();
+      void cabinet.refreshArchiveFull?.();
       flash(lang === 'ru' ? 'Видео готово' : 'Video ready');
     } catch (e) {
-      cabinet.setError(e?.message || String(e));
+      // При таймауте poll видео могло уже сохраниться на сервере.
+      void cabinet.refreshArchivePending?.();
+      void cabinet.refreshArchiveFull?.();
+      const msg = e?.message || String(e);
+      if (/превышено время ожидания|timeout|504|gateway/i.test(msg)) {
+        cabinet.setError(
+          lang === 'ru'
+            ? 'Генерация заняла слишком много времени, но видео могло уже сохраниться — проверьте «Последние видео».'
+            : 'Generation took too long, but the video may already be saved — check Latest videos.',
+        );
+      } else {
+        cabinet.setError(msg);
+      }
     } finally {
       setBusyGen(null);
     }
@@ -530,9 +609,15 @@ export default function SeedanceDirector() {
                 color: color.limeInk,
                 cursor: genBusy || busyCompose ? 'not-allowed' : 'pointer',
                 opacity: genBusy || busyCompose ? 0.55 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
-              {lang === 'ru' ? 'Сгенерировать видео' : 'Generate video'}
+              <span>{lang === 'ru' ? 'Сгенерировать видео' : 'Generate video'}</span>
+              <span style={{ fontFamily: font.mono, fontSize: 10, fontWeight: 600, opacity: 0.85 }}>
+                {formatDirectorCreditLabel(pieceCreditCost(p), lang === 'ru' ? 'ru' : 'en')}
+              </span>
             </Hoverable>
             <Hoverable onClick={() => copyText(p.prompt)} style={ghostBtn()}>
               {lang === 'ru' ? 'Копировать' : 'Copy'}
@@ -540,12 +625,20 @@ export default function SeedanceDirector() {
             <div style={{ flex: 1 }} />
             <div style={{ fontFamily: font.mono, fontSize: 10, color: color.textMuted }}>
               {version === '2.0'
-                ? lang === 'ru'
-                  ? 'Fast · WaveSpeed'
-                  : 'Fast · WaveSpeed'
-                : lang === 'ru'
-                  ? '2.5 T2V · WaveSpeed'
-                  : '2.5 T2V · WaveSpeed'}{' '}
+                ? isEvolink
+                  ? lang === 'ru'
+                    ? 'Fast I2V · EvoLink'
+                    : 'Fast I2V · EvoLink'
+                  : lang === 'ru'
+                    ? 'Fast · WaveSpeed'
+                    : 'Fast · WaveSpeed'
+                : isEvolink
+                  ? lang === 'ru'
+                    ? '2.5 I2V · EvoLink'
+                    : '2.5 I2V · EvoLink'
+                  : lang === 'ru'
+                    ? '2.5 T2V · WaveSpeed'
+                    : '2.5 T2V · WaveSpeed'}{' '}
               · {lang === 'ru' ? 'лимит' : 'limit'} {limit}s
             </div>
           </div>
@@ -607,11 +700,12 @@ export default function SeedanceDirector() {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          minHeight: 'calc(100vh - 48px)',
-          margin: stacked ? 0 : '-24px -28px 0',
+          minHeight: embedded ? 'auto' : 'calc(100vh - 48px)',
+          margin: embedded ? 0 : stacked ? 0 : '-24px -28px 0',
         }}
       >
-        {/* Верхняя шапка страницы */}
+        {/* Верхняя шапка страницы — скрыта при встраивании в Video / Seedance Sale */}
+        {!embedded && (
         <div
           style={{
             flex: 'none',
@@ -680,7 +774,7 @@ export default function SeedanceDirector() {
                 {lang === 'ru' ? 'ОЦЕНКА' : 'EST.'}
               </span>
               <span style={{ fontFamily: font.display, fontWeight: 600, fontSize: 13, color: color.lime }}>
-                {estimateCredits(duration)}
+              {formatDirectorCreditLabel(headerEstimate, lang === 'ru' ? 'ru' : 'en')}
               </span>
               <span style={{ fontSize: 10.5, color: color.textGhost }}>{lang === 'ru' ? 'кр.' : 'cr.'}</span>
             </div>
@@ -766,6 +860,7 @@ export default function SeedanceDirector() {
             })}
           </div>
         </div>
+        )}
 
         {/* Две колонки */}
         <div
@@ -1196,7 +1291,7 @@ export default function SeedanceDirector() {
                     {lang === 'ru' ? 'Разрешение' : 'Resolution'}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    {['480p', '720p', '1080p'].map((r) => (
+                    {['480p', '720p', ...(isEvolink ? [] : ['1080p'])].map((r) => (
                       <Hoverable key={r} onClick={() => setResolution(r)} style={pillStyle(resolution === r)}>
                         {r}
                       </Hoverable>
@@ -1269,6 +1364,10 @@ export default function SeedanceDirector() {
                     !canCompose ? line.hair : busyCompose ? 'rgba(192,132,252,.34)' : color.lime
                   }`,
                   color: !canCompose ? color.textGhost : busyCompose ? color.purple : color.limeInk,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
                 }}
               >
                 {busyCompose
@@ -1282,6 +1381,11 @@ export default function SeedanceDirector() {
                     : lang === 'ru'
                       ? 'Собрать промпты'
                       : 'Compose prompts'}
+                {!busyCompose && canCompose && (
+                  <span style={{ marginLeft: 8, fontFamily: font.mono, fontSize: 10.5, fontWeight: 600, opacity: 0.85 }}>
+                    {formatDirectorCreditLabel(composeCreditCost, lang === 'ru' ? 'ru' : 'en')}
+                  </span>
+                )}
               </Hoverable>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 9 }}>
                 <div style={{ fontSize: 10.5, color: color.textMuted }}>
