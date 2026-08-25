@@ -12,7 +12,10 @@ import {
   GROK_WRITE_STEPS,
   ROLE_SUGGESTIONS,
   cycleRole,
+  clampDuration,
   estimateCredits,
+  DURATION_MAX,
+  DURATION_MIN,
   parseAssumedTags,
   splitNote,
   uid,
@@ -170,7 +173,7 @@ export default function SeedanceDirector() {
         images: refs.map((r) => r.file),
         roles: refs.map((r, i) => (r.role || '').trim() || `reference ${i + 1}`),
         brief: brief.trim(),
-        durationSeconds: Number(duration) || 15,
+        durationSeconds: clampDuration(duration),
         aspectRatio: aspect,
         cameraMode,
       });
@@ -195,11 +198,11 @@ export default function SeedanceDirector() {
     cabinet.setError(null);
     try {
       const span = String(piece.span || '');
-      let dur = Number(duration) || 15;
+      let dur = clampDuration(duration);
       const m = span.replace(/[–—]/g, '-').match(/([\d.]+)\s*-\s*([\d.]+)/);
-      if (m) dur = Math.max(1, Math.round(Number(m[2]) - Number(m[1])));
-      if (piece.version === '2.5') dur = Math.min(30, Math.max(5, dur));
-      else dur = Math.min(15, Math.max(5, dur));
+      if (m) dur = Math.max(DURATION_MIN, Math.round(Number(m[2]) - Number(m[1])));
+      if (piece.version === '2.5') dur = Math.min(DURATION_MAX, Math.max(DURATION_MIN, dur));
+      else dur = Math.min(15, Math.max(DURATION_MIN, dur));
 
       const data = await generateSeedanceDirectorVideo({
         images: refs.map((r) => r.file),
@@ -1139,8 +1142,12 @@ export default function SeedanceDirector() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                     <Hoverable
-                      onClick={() => setDuration((d) => Math.max(5, d - 3))}
-                      style={stepBtn()}
+                      onClick={() => setDuration((d) => clampDuration(d - 1))}
+                      style={{
+                        ...stepBtn(),
+                        opacity: duration <= DURATION_MIN ? 0.35 : 1,
+                        pointerEvents: duration <= DURATION_MIN ? 'none' : 'auto',
+                      }}
                     >
                       −
                     </Hoverable>
@@ -1150,12 +1157,19 @@ export default function SeedanceDirector() {
                           height: '100%',
                           borderRadius: 4,
                           background: `linear-gradient(90deg, ${color.lime}, ${color.limeOlive})`,
-                          width: `${Math.round(Math.min(60, duration) / 60 * 100)}%`,
+                          width: `${Math.round(((clampDuration(duration) - DURATION_MIN) / (DURATION_MAX - DURATION_MIN)) * 100)}%`,
                           transition: 'width .25s ease',
                         }}
                       />
                     </div>
-                    <Hoverable onClick={() => setDuration((d) => Math.min(60, d + 3))} style={stepBtn()}>
+                    <Hoverable
+                      onClick={() => setDuration((d) => clampDuration(d + 1))}
+                      style={{
+                        ...stepBtn(),
+                        opacity: duration >= DURATION_MAX ? 0.35 : 1,
+                        pointerEvents: duration >= DURATION_MAX ? 'none' : 'auto',
+                      }}
+                    >
                       +
                     </Hoverable>
                   </div>

@@ -398,5 +398,5 @@ def duration_from_span(span: str, *, fallback: int, version: str) -> int:
     else:
         dur = int(fallback)
     if (version or "").strip() == "2.5":
-        return max(5, min(30, dur))
-    return max(5, min(15, dur))
+        return max(4, min(30, dur))
+    return max(4, min(15, dur))

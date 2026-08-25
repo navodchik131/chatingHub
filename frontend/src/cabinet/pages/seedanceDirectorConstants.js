@@ -1,5 +1,15 @@
 /** Константы Seedance Director — роли, типы съёмки, подсказки брифа. */
 
+export const DURATION_MIN = 4;
+export const DURATION_MAX = 30;
+
+/** Ограничиваем длительность диапазоном Seedance Director (4–30 с). */
+export function clampDuration(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 15;
+  return Math.min(DURATION_MAX, Math.max(DURATION_MIN, Math.round(n)));
+}
+
 export const CAMERA_MODES = [
   {
     id: 'A',
