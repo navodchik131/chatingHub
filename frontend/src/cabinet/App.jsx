@@ -11,6 +11,7 @@ import Dialogs from './pages/Dialogs';
 import Images, { Lightbox } from './pages/Images';
 import Video from './pages/Video';
 import SeedanceProbe from './pages/SeedanceProbe';
+import SeedanceDirector from './pages/SeedanceDirector';
 import ShotBatchPlan from './pages/ShotBatchPlan';
 import ShotBatchRender from './pages/ShotBatchRender';
 import ShotBatchWizard from './pages/ShotBatchWizard';
@@ -33,6 +34,7 @@ const pages = {
   images: Images,
   video: Video,
   'seedance-probe': SeedanceProbe,
+  'seedance-director': SeedanceDirector,
   'shot-batch-plan': ShotBatchPlan,
   'shot-batch-render': ShotBatchRender,
   'shot-batch-wizard': ShotBatchWizard,

@@ -39,6 +39,7 @@ export const CABINET_PAGES = new Set([
   'shot-batch-render',
   'shot-batch-wizard',
   'seedance-probe',
+  'seedance-director',
   'seedance-sale',
   'characters',
   'donations',

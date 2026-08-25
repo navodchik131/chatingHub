@@ -1549,6 +1549,206 @@ async def api_studio_seedance_probe(
     )
 
 
+@router.post("/studio/debug/seedance-director/compose")
+async def api_studio_seedance_director_compose(
+    images: list[UploadFile] = File(...),
+    image_roles: str = Form("[]"),
+    brief: str = Form(""),
+    duration_seconds: int = Form(15),
+    aspect_ratio: str = Form("9:16"),
+    camera_mode: str = Form("A"),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Hidden tool: Grok director instruction → Seedance 2.0 / 2.5 prompt pieces."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    sub_b, llm_row, _ws_row, plan, _credits, _demo = await load_owner_studio_billing(
+        session, oid
+    )
+    _require_studio_subscription(
+        user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo
+    )
+    llm_creds = studio_llm_credentials(plan=plan, llm_row=llm_row)
+
+    from app.services.studio_seedance_director import (
+        DirectorImageRef,
+        compose_seedance_director_prompts,
+        normalize_camera_mode,
+    )
+
+    try:
+        roles = json.loads(image_roles or "[]")
+        if not isinstance(roles, list):
+            roles = []
+    except json.JSONDecodeError:
+        roles = []
+
+    refs: list[DirectorImageRef] = []
+    for i, up in enumerate(images or []):
+        if up is None or not (up.filename or "").strip():
+            continue
+        raw = await up.read()
+        if len(raw) < 64:
+            continue
+        if len(raw) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=400, detail="Слишком большой файл изображения")
+        mime = (up.content_type or "image/jpeg").split(";")[0].strip()
+        role = str(roles[i] if i < len(roles) else "").strip() or f"reference {i + 1}"
+        refs.append(
+            DirectorImageRef(
+                role=role,
+                filename=(up.filename or f"image_{i + 1}.jpg").strip(),
+                data=raw,
+                mime=mime,
+            )
+        )
+    if not refs:
+        raise HTTPException(status_code=400, detail="Загрузите хотя бы одно фото")
+
+    try:
+        result = await compose_seedance_director_prompts(
+            images=refs,
+            what_happens=brief,
+            duration_seconds=max(1, int(duration_seconds)),
+            aspect_ratio=aspect_ratio,
+            camera_mode=normalize_camera_mode(camera_mode),
+            credentials=llm_creds,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    return JSONResponse(
+        {
+            "image_count": result.image_count,
+            "instruction_chars": result.instruction_chars,
+            "assumed": result.assumed,
+            "raw_text": result.raw_text,
+            "pieces": [
+                {
+                    "version": p.version,
+                    "piece_id": p.piece_id,
+                    "span": p.span,
+                    "start_frame": p.start_frame,
+                    "prompt": p.prompt,
+                    "label": f"Seedance {p.version} — {p.piece_id} — {p.span}",
+                }
+                for p in result.pieces
+            ],
+            "camera_mode": normalize_camera_mode(camera_mode),
+            "duration_seconds": max(1, int(duration_seconds)),
+            "aspect_ratio": aspect_ratio,
+        }
+    )
+
+
+@router.post("/studio/debug/seedance-director/generate")
+async def api_studio_seedance_director_generate(
+    images: list[UploadFile] = File(...),
+    prompt: str = Form(...),
+    version: str = Form("2.0"),
+    duration_seconds: int = Form(10),
+    aspect_ratio: str = Form("9:16"),
+    resolution: str = Form("720p"),
+    generate_audio: str = Form("1"),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Hidden tool: send director prompt + images to WaveSpeed Seedance T2V."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    sub_b, _llm_row, ws_row, plan, _credits, _demo = await load_owner_studio_billing(
+        session, oid
+    )
+    _require_studio_subscription(
+        user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo
+    )
+    ws_key = studio_wavespeed_api_key(
+        plan=plan,
+        ws_row=ws_row,
+        owner_subscription=sub_b,
+        demo_generations_remaining=_demo,
+    )
+    prompt_text = (prompt or "").strip()
+    if not prompt_text:
+        raise HTTPException(status_code=400, detail="Пустой промпт")
+
+    pub = (settings.public_app_url or "").strip().rstrip("/")
+    if not pub.lower().startswith("https://"):
+        raise HTTPException(
+            status_code=400,
+            detail="Нужен публичный HTTPS (PUBLIC_APP_URL) для reference_images.",
+        )
+
+    from app.services.studio_pose_reference import save_pose_reference_bytes
+    from app.services.studio_seedance_director import (
+        duration_from_span,
+        variant_for_piece_version,
+    )
+    from app.services.wavespeed_client import seedance_20_text_to_video_url
+
+    image_urls: list[str] = []
+    for i, up in enumerate(images or []):
+        if up is None or not (up.filename or "").strip():
+            continue
+        raw = await up.read()
+        if len(raw) < 64:
+            continue
+        if len(raw) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=400, detail="Слишком большой файл изображения")
+        mime = (up.content_type or "image/jpeg").split(";")[0].strip()
+        fid = save_pose_reference_bytes(owner_id=oid, raw=raw, content_type=mime)
+        tok = create_pose_reference_access_token(user_id=oid, file_id=fid)
+        image_urls.append(f"{pub}/api/studio/public-pose-reference?t={quote(tok, safe='')}")
+    if not image_urls:
+        raise HTTPException(status_code=400, detail="Нужны фотографии для reference_images")
+
+    ver = (version or "2.0").strip()
+    if ver not in ("2.0", "2.5"):
+        ver = "2.0"
+    variant = variant_for_piece_version(ver)
+    dur = duration_from_span(
+        "",
+        fallback=int(duration_seconds),
+        version=ver,
+    )
+    # Prefer explicit duration from form when span not used
+    try:
+        dur = int(duration_seconds)
+    except (TypeError, ValueError):
+        pass
+    dur = duration_from_span(f"0-{dur}s", fallback=dur, version=ver)
+
+    def _truthy(raw: str | None) -> bool:
+        return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    try:
+        video_url = await seedance_20_text_to_video_url(
+            api_key=ws_key,
+            prompt=prompt_text,
+            reference_images=image_urls,
+            aspect_ratio=(aspect_ratio or "9:16").strip() or "9:16",
+            resolution=(resolution or "720p").strip() or "720p",
+            duration=dur,
+            generate_audio=_truthy(generate_audio),
+            variant=variant,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    return JSONResponse(
+        {
+            "video_url": video_url,
+            "variant": variant,
+            "version": ver,
+            "duration_seconds": dur,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "image_count": len(image_urls),
+        }
+    )
+
+
 @router.post("/studio/debug/shot-batch-plan")
 async def api_studio_shot_batch_plan(
     motion_video: UploadFile = File(...),

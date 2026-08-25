@@ -660,6 +660,47 @@ export async function runSeedanceProbe(params) {
   return data
 }
 
+export async function composeSeedanceDirector(params) {
+  const fd = new FormData()
+  for (const file of params.images || []) {
+    fd.append('images', file, file.name || 'image.jpg')
+  }
+  fd.append('image_roles', JSON.stringify(params.roles || []))
+  fd.append('brief', String(params.brief || ''))
+  fd.append('duration_seconds', String(params.durationSeconds || 15))
+  fd.append('aspect_ratio', String(params.aspectRatio || '9:16'))
+  fd.append('camera_mode', String(params.cameraMode || 'A'))
+  const res = await apiFetch('/api/studio/debug/seedance-director/compose', {
+    method: 'POST',
+    body: fd,
+    timeoutMs: 360_000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Seedance director compose failed')
+  return data
+}
+
+export async function generateSeedanceDirectorVideo(params) {
+  const fd = new FormData()
+  for (const file of params.images || []) {
+    fd.append('images', file, file.name || 'image.jpg')
+  }
+  fd.append('prompt', String(params.prompt || ''))
+  fd.append('version', String(params.version || '2.0'))
+  fd.append('duration_seconds', String(params.durationSeconds || 10))
+  fd.append('aspect_ratio', String(params.aspectRatio || '9:16'))
+  fd.append('resolution', String(params.resolution || '720p'))
+  fd.append('generate_audio', params.generateAudio ? '1' : '0')
+  const res = await apiFetch('/api/studio/debug/seedance-director/generate', {
+    method: 'POST',
+    body: fd,
+    timeoutMs: 900_000,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'Seedance director generate failed')
+  return data
+}
+
 export async function runShotBatchPlan(params) {
   const fd = new FormData()
   fd.append('motion_video', params.motionVideo, params.motionVideo.name || 'motion.mp4')
