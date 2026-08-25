@@ -1586,7 +1586,7 @@ async def seedance_20_text_to_video_url(
 ) -> str:
     """
     ByteDance Seedance 2.0 Text-to-Video: prompt + reference_images (@ImageN в тексте).
-    variant=standard → …/seedance-2.0/text-to-video (или …/seedance-2.0-fast при reference_videos)
+    variant=standard → …/seedance-2.0/text-to-video (или …/seedance-2.0-fast при reference_images / reference_videos)
     variant=mini → …/seedance-2.0-mini/text-to-video
     Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-text-to-video
     """
@@ -1604,10 +1604,12 @@ async def seedance_20_text_to_video_url(
         default=settings.wavespeed_seedance_20_t2v_duration,
     )
     vids = [u.strip() for u in (reference_videos or []) if (u or "").strip()]
+    imgs = [u.strip() for u in (reference_images or []) if (u or "").strip()]
     from app.services.studio_motion_pricing import normalize_seedance_t2v_variant
 
     v_norm = normalize_seedance_t2v_variant(variant)
-    use_fast = v_norm == "standard" and bool(vids)
+    # С референсами (фото или видео) — fast T2V, как в seedance-probe / motion swap.
+    use_fast = v_norm == "standard" and (bool(vids) or bool(imgs))
     path = _seedance_20_t2v_post_path(variant=variant, use_fast=use_fast)
     url = f"{_wavespeed_base()}{path}"
     body: dict[str, Any] = {
@@ -1625,7 +1627,6 @@ async def seedance_20_text_to_video_url(
     ar = (aspect_ratio or "").strip()
     if ar:
         body["aspect_ratio"] = ar
-    imgs = [u.strip() for u in (reference_images or []) if (u or "").strip()]
     if imgs:
         body["reference_images"] = imgs[:9]
     if vids:

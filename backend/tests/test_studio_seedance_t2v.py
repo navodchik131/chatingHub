@@ -376,12 +376,39 @@ def test_seedance_t2v_post_path_fast_with_reference_videos():
     assert _seedance_20_t2v_post_path(variant="standard", use_fast=True) == (
         "/api/v3/bytedance/seedance-2.0-fast/text-to-video"
     )
+    assert _seedance_20_t2v_post_path(variant="standard", use_fast=False) == (
+        "/api/v3/bytedance/seedance-2.0/text-to-video"
+    )
     assert _seedance_20_t2v_post_path(variant="mini", use_fast=False) == (
         "/api/v3/bytedance/seedance-2.0-mini/text-to-video"
     )
     assert _seedance_20_t2v_post_path(variant="seedance_25", use_fast=False) == (
         "/api/v3/bytedance/seedance-2.5/text-to-video"
     )
+
+
+def test_seedance_t2v_uses_fast_path_with_reference_images(monkeypatch):
+    from app.services import wavespeed_client as wc
+
+    captured: dict = {}
+
+    async def _fake_post(*, full_post_url, **kwargs):
+        captured["url"] = full_post_url
+        return "https://cdn.example/v.mp4"
+
+    monkeypatch.setattr(wc, "_wavespeed_post_json_and_resolve_video_url", _fake_post)
+
+    import asyncio
+
+    asyncio.run(
+        wc.seedance_20_text_to_video_url(
+            api_key="k",
+            prompt="test prompt",
+            reference_images=["https://example.com/a.jpg"],
+            variant="standard",
+        )
+    )
+    assert "/seedance-2.0-fast/text-to-video" in captured["url"]
 
 
 def test_seedance_optional_user_notes_skips_placeholder():
