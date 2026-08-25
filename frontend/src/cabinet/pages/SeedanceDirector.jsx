@@ -115,7 +115,8 @@ export default function SeedanceDirector({ embedded = false, backend = 'wavespee
 
   const canCompose = refs.length > 0 && brief.trim() && !busyCompose && !busyGen;
   const phase = busyCompose ? 'writing' : compose ? 'ready' : 'idle';
-  const stacked = isNarrow || embedded;
+  // В embedded (Video / Sale) на десктопе сохраняем две колонки; стек только на узком экране.
+  const stacked = isNarrow;
 
   const composeCreditCost = useMemo(
     () => computeDirectorComposeCreditCost(refs.length || 1, directorPricing),
@@ -700,7 +701,7 @@ export default function SeedanceDirector({ embedded = false, backend = 'wavespee
         style={{
           display: 'flex',
           flexDirection: 'column',
-          minHeight: embedded ? 'auto' : 'calc(100vh - 48px)',
+          minHeight: embedded ? (stacked ? 'auto' : 'min(72vh, 780px)') : 'calc(100vh - 48px)',
           margin: embedded ? 0 : stacked ? 0 : '-24px -28px 0',
         }}
       >
