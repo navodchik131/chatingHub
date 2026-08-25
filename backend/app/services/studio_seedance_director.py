@@ -46,16 +46,36 @@ CAMERA_MODES: dict[str, dict[str, str]] = {
     },
 }
 
-_INSTRUCTION_PATH = BACKEND_DIR / "data" / "prompts" / "seedance_director_instruction.txt"
+_INSTRUCTION_NAME = "seedance_director_instruction.txt"
+
+
+def _director_instruction_candidates() -> list[Path]:
+    """data/prompts (Docker volume) → _bundled_prompts (образ) — как у Grok compose."""
+    ordered = [
+        (BACKEND_DIR / "data" / "prompts" / _INSTRUCTION_NAME).resolve(),
+        (BACKEND_DIR / "_bundled_prompts" / _INSTRUCTION_NAME).resolve(),
+    ]
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for path in ordered:
+        if path in seen:
+            continue
+        seen.add(path)
+        out.append(path)
+    return out
 
 
 def load_seedance_director_instruction() -> str:
-    raw = _INSTRUCTION_PATH.read_text(encoding="utf-8")
-    if "{{MY_BRIEF_BLOCK}}" not in raw:
-        raise RuntimeError(
-            f"seedance director instruction missing {{{{MY_BRIEF_BLOCK}}}}: {_INSTRUCTION_PATH}"
-        )
-    return raw
+    for path in _director_instruction_candidates():
+        if path.is_file():
+            raw = path.read_text(encoding="utf-8")
+            if "{{MY_BRIEF_BLOCK}}" not in raw:
+                raise RuntimeError(
+                    f"seedance director instruction missing {{{{MY_BRIEF_BLOCK}}}}: {path}"
+                )
+            return raw
+    tried = ", ".join(str(p) for p in _director_instruction_candidates())
+    raise RuntimeError(f"seedance director instruction not found (tried: {tried})")
 
 
 def normalize_camera_mode(raw: str | None) -> str:

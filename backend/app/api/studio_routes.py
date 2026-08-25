@@ -1617,6 +1617,9 @@ async def api_studio_seedance_director_compose(
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception as e:
+        log.exception("seedance-director compose failed")
+        raise HTTPException(status_code=502, detail=str(e) or "compose failed") from e
 
     return JSONResponse(
         {

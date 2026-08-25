@@ -1,9 +1,28 @@
+from pathlib import Path
+
+from app.config import BACKEND_DIR
 from app.services.studio_seedance_director import (
+    _director_instruction_candidates,
     assemble_director_instruction,
     duration_from_span,
     parse_director_response,
     variant_for_piece_version,
 )
+
+
+def test_instruction_loads_from_bundled_prompts() -> None:
+    bundled = (BACKEND_DIR / "_bundled_prompts" / "seedance_director_instruction.txt").resolve()
+    assert bundled.is_file(), f"missing bundled prompt: {bundled}"
+    paths = _director_instruction_candidates()
+    assert any("_bundled_prompts" in str(p) for p in paths)
+    text = assemble_director_instruction(
+        what_happens="test",
+        duration_seconds=10,
+        aspect_ratio="9:16",
+        camera_mode="C",
+        image_roles=["first frame"],
+    )
+    assert "{{MY_BRIEF_BLOCK}}" not in text
 
 
 def test_assemble_injects_brief_and_roles():
