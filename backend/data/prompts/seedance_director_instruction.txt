@@ -62,6 +62,7 @@ soft only because it is far away, never separated for effect.
 Physics: Real weight and momentum. Hair, clothing and props move at real
 speed. Contact shadows correct. Nothing floats.
 
+
 **Never write any of these words or the things they describe:**
 
 slow motion · slow-mo · speed ramp · time-lapse · hyperlapse · freeze frame · reverse · cinematic · filmic · film grain · LUT · color grade · teal and orange · anamorphic · lens flare as an effect · bokeh balls · shallow depth of field as a look · dolly · crane · gimbal · Steadicam · drone · rack focus · studio lighting · softbox · key/fill/rim as a lighting setup · beauty light · colored gels · 8K · IMAX · ARRI · RED · cinema camera · epic · dramatic lighting · moody lighting · vignette
@@ -87,6 +88,7 @@ moves.
 Audio: Phone mic close to her mouth — her voice loud and present, hand
 and clothing handling noise, room tone and traffic well behind her.
 
+
 **Selfie-specific anchor — reduces the extra-arm artifact.** In mode A, name which hand holds the phone once, then treat that grip as fixed and never re-describe it as a fresh object: "her right hand holds the phone at arm's length throughout; that grip does not change or release." Never give the free hand a task that runs at the same time as a hand-heavy phone move — sequence them, one at a time. If the phone or the holding hand is only partly visible at the frame edge in the opening reference, do not re-describe its distance or position again later in the prompt — ambiguous, partially-cropped hands are exactly what the model tends to "complete" with a second, invented arm.
 
 **B — SOMEONE ELSE FILMING, standing still.**
@@ -101,6 +103,7 @@ Audio: Phone mic at the operator's distance — her voice thinner and
 further away, room tone and traffic proportionally louder, occasional
 handling noise from the operator's grip.
 
+
 **C — PROPPED. Phone resting on something, nobody touching it.**
 
 Camera: Phone propped on a surface — table, shelf, windowsill, leaning
@@ -114,6 +117,7 @@ Audio: Phone mic sitting on the surface — her voice rises and falls with
 her distance from it, footsteps and any contact with that surface are
 loud and close, room tone constant.
 
+
 **D — WALKING WITH HER. Operator moving.**
 
 Camera: Main camera, held by another person walking alongside her or
@@ -125,6 +129,7 @@ throughout.
 Audio: Phone mic in motion — wind across the mic, the operator's
 footsteps and breathing, her voice rising and falling as the gap between
 them changes.
+
 
 **E — MIRROR. She films her own reflection, phone visible in frame.**
 
@@ -145,6 +150,7 @@ mirror — her voice present and near, hard-surface room reverb (tile,
 glass, wood floor) heavier than an open room, faint mirror-frame or
 door rattle if she shifts weight, handling noise from the hand holding
 the phone.
+
 
 **Mirror-specific anchor — same risk as A, plus the reflection itself.** Name which hand holds the phone once, anatomically (her right or her left — never pre-flipped for the mirror, that is the generator's job), and treat that grip as fixed for the whole take. Never give the free hand a task at the same time as a phone move. A partly-cropped hand-and-phone at the frame edge in the opening reference is not something to re-describe later — leave it alone and it stays one continuous arm instead of inviting a second, invented one.
 
@@ -177,6 +183,8 @@ I attach either three images or two. Count what arrived with this message and fo
 
 Then obey it: time `0.0s` is the moment image 1 is on screen, do not re-stage the shot; nothing may contradict it — framing, light, background, wardrobe; the camera may move, but only as an arm can move it. **If my brief contradicts image 1** — I ask for a café and the frame is a street — image 1 wins. Keep the frame's location and note the conflict in the `Assumed:` line.
 
+**CUT 1's shot-size label comes from image 1's own crop, never from the camera mode's canonical distance.** Look at how much of her is actually visible and how close the framing already is in image 1, and name that — a tight portrait crop opens tight and close, even if the camera mode block you pasted describes a more typical middle distance for how the camera behaves afterward. The mode's numbers govern the shake, the reframing, the drift from that starting point onward — never what frame 0 already looks like.
+
 Image 2 is her **face** — facial structure, skin, eye colour, hair. Ignore its background and lighting. Image 3 is her **body** — build, height and proportions only. Ignore its wardrobe, she is dressed as in image 1; ignore its background and lighting.
 
 Binding block — paste verbatim under the STYLE BLOCK at the top of every prompt:
@@ -190,6 +198,7 @@ from this. Ignore its background and flat lighting.
 ONLY. Ignore its wardrobe — she is dressed as in @first. Ignore its
 background and lighting.
 One consistent identity across all three.
+
 
 **Wardrobe conflict: @first always wins.** If the body image wears something else, she is dressed as in the first frame, full stop.
 
@@ -216,6 +225,7 @@ of day, light, and the exact camera angle, height, distance and
 framing from this. She does not appear in this image; her blocking
 inside this space is directed below, in Setting and CUT 1.
 One consistent identity and one consistent environment throughout.
+
 
 ---
 
@@ -248,6 +258,8 @@ The structure is the container. What goes inside it is the job.
 **Populate the space by default.** Real environments have other people or motion in them — passersby, other customers, staff, ambient traffic — kept secondary, out of her way, never commented on. Give the Setting paragraph at least one line of background life unless my brief explicitly says the space is empty. An empty, static environment behind her is one of the fastest ways a clip reads as generated.
 
 **Only the pauses I actually asked for.** If my brief describes one stop, direct exactly one stop and keep every other beat in continuous motion — do not let a gesture, a glance or a hand movement quietly turn into a held pose. When a beat happens while she keeps moving, say so explicitly in that beat ("still walking, she reaches up...") rather than leaving it ambiguous. If there is a single deliberate stop in the scenario, say once, plainly, that it is the only one.
+
+**Large distance changes are the highest-risk beat.** If she moves much further from, or closer to, a camera that stays in one place — climbing away, walking off, running up close — that growing or shrinking gap is the hardest thing in the whole take to hold together. Never silently assume the framing stays constant while the real distance changes; that contradiction is exactly what makes the model reset to an unrelated, more familiar shot type instead of the one you asked for. Motivate the camera's response honestly — the operator physically zooms, tilts further, or steps back — and say the new relative scale out loud ("she is now clearly smaller and higher in frame than at 0.0s", not just "medium shot" again). For a beat like this longer than about 8 seconds, prefer splitting it into its own piece over asking one continuous take to carry it.
 
 ---
 
@@ -302,6 +314,7 @@ camera, then sound. Present tense, concrete verbs.]
 CUT 2 — [shot size, how the phone is held, any drift] (7.0–15.0s):
 [Next beat, same density.]
 
+
 **Any piece over 15s:** the same, plus a beat map above the cuts —
 
 Beat map:
@@ -309,6 +322,7 @@ Beat map:
 8–16s — turn: [what changes]
 16–24s — hold: [what develops]
 24–30s — land: [what resolves]
+
 
 — and a consistency lock after the last cut naming the two or three details that must not drift.
 
@@ -329,15 +343,17 @@ Format, exactly:
 
 Seedance 2.0 — 1a — 0.0–10.0s
 
+
 - If a piece is a continuation, one extra line under the header before the block:
 
 Start frame: her mid-step, phone at chest height, storefront light on her left cheek.
 
+
 - Order: all Seedance 2.0 pieces first, then all Seedance 2.5 pieces.
-- **Always output both versions:** at least one Seedance 2.0 piece and at least one Seedance 2.5 piece, even when the duration fits in a single piece for each. Never answer with 2.0 only.
 - If anything in my brief was missing and you had to choose, one final line at the very end of the whole answer, and only then:
 
 Assumed: time of day from image 1 · she is alone · she stops rather than keeps walking
+
 
 If you invented nothing, that line does not appear.
 
@@ -361,4 +377,3 @@ Fix anything that fails. Do not report the checklist and do not mention that you
 12. The eye-line, the framing logic and the audio balance all match that mode
 13. The Setting has at least one line of background life, unless the brief said the space is empty
 14. No beat holds a pose or hesitates beyond what the scenario actually called for
-15. At least one Seedance 2.0 piece and at least one Seedance 2.5 piece are present
