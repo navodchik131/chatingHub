@@ -47,15 +47,19 @@ def legacy_to_cent_credits(
 
 
 def credit_units_public() -> dict[str, float | int | str]:
+    from app.services.billing_credits import purchase_rub_per_usd
     from app.services.fx_rate import cached_cbr_rub_per_usd_sync
 
     cbr = cached_cbr_rub_per_usd_sync()
-    rub_per_credit = cbr / CREDITS_PER_USD
+    sell = purchase_rub_per_usd()
+    # UI «₽/кредит» = курс продажи (с полом), не сырой ЦБ
+    rub_per_credit = sell / CREDITS_PER_USD
     return {
         "model": "usd_cent",
         "credits_per_usd": CREDITS_PER_USD,
         "usd_per_credit": 0.01,
         "rub_per_credit": round(rub_per_credit, 4),
         "rub_per_usd_cbr": round(cbr, 4),
+        "rub_per_usd_sell": round(sell, 4),
         "operation_markup_usd": float(settings.studio_operation_markup_usd),
     }

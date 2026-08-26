@@ -34,6 +34,8 @@ DEMO_ELIGIBLE_USAGE_KINDS = frozenset(
         STUDIO_IMAGE_USAGE_KIND,
         "studio_prompt_refine",
         "studio_inpaint",
+        # Первый кадр video = полноценная image-генерация (Grok + WaveSpeed).
+        "studio_motion_first_frame",
         # Bootstrap kinds: demo only for non-Credits plans; Credits uses free onboarding or paid credits.
         "studio_model_bootstrap_face_merge",
         "studio_model_bootstrap_body_compose",

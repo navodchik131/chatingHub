@@ -6783,8 +6783,49 @@ async def _studio_job_execute_motion_first_frame(
         marker = _GROK_MOTION_MARKER if settings.studio_grok_motion_timeline_enabled else _CLIP_MOTION_MARKER
         motion_auto_for_db += "\n\n" + marker + "\n" + motion_clip_summary.strip()
 
-    cost = apply_studio_credit_cost(plan, studio_prompt_refine_credit_cost())
-    billing = await ensure_can_consume_credits(session, user, cost)
+    # Биллинг: без WaveSpeed — только Grok-compose; с WS — полный image quote (+ wardrobe prep при cache miss).
+    from app.services.studio_refine_billing import anchor_prep_credit_cost
+
+    billing_wave = (
+        workflow_wave_model
+        if workflow_wave_model
+        else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
+    )
+    gp = grok_pipeline_for_studio_mode(mode_n, workflow=workflow_first_frame)
+    used_demo = False
+    if skip_ws:
+        cost = apply_studio_credit_cost(plan, studio_prompt_refine_credit_cost())
+        billing = await ensure_can_consume_credits(session, user, cost)
+    else:
+        quoted = resolve_image_credit_cost(
+            plan,
+            wave_model_id=billing_wave,
+            wan_edit_tier=wan_tier_n,
+            grok_pipeline=gp,
+        )
+        # Wardrobe prep — отдельный WaveSpeed, если anchor реально генерил dress (не cache).
+        if (
+            anchor_result is not None
+            and not bool(getattr(anchor_result, "dressed_from_cache", True))
+        ):
+            quoted += anchor_prep_credit_cost(
+                plan,
+                billing_wave_model=billing_wave,
+                wan_tier_n=wan_tier_n,
+            )
+        billing, cost, used_demo = await prepare_studio_image_billing(
+            session,
+            user,
+            user,
+            plan=plan,
+            base_cost=quoted,
+            usage_kind="studio_motion_first_frame",
+            quoted_cost=quoted,
+            wave_model_id=billing_wave,
+            grok_pipeline=gp,
+            wave_profile=wave_profile_n,
+            wan_edit_tier=wan_tier_n,
+        )
 
     arch_base = _public_app_base(None)
     pub = (settings.public_app_url or "").strip().rstrip("/")
@@ -7119,13 +7160,14 @@ async def _studio_job_execute_motion_first_frame(
                 wavespeed_message or "WaveSpeed не вернул изображение"
             )
 
-    await record_usage(
+    await record_studio_image_billing(
         session,
         user,
         billing,
-        "studio_motion_first_frame",
-        cost,
-        {
+        usage_kind="studio_motion_first_frame",
+        cost=cost,
+        used_demo=used_demo,
+        meta={
             "motion_video_file_id": motion_video_file_id,
             "studio_model_id": eff_mid,
             "generation_id": generation_id,
@@ -7133,6 +7175,7 @@ async def _studio_job_execute_motion_first_frame(
             "studio_wave_profile": wave_profile_n,
             "workflow_wave_model": workflow_wave_model or None,
             "wan_edit_tier": wan_tier_n,
+            "skip_wavespeed": bool(skip_ws),
         },
     )
     await session.commit()

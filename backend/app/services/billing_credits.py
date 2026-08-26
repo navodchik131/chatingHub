@@ -1,6 +1,7 @@
 """Расчёт суммы покупки кредитов для ЮKassa и оплаты подписки кредитами.
 
-1 credit = 1 USD cent. Покупка: credits × CBR/100 ₽.
+1 credit = 1 USD cent. Покупка: credits × max(CBR, floor)/100 ₽.
+Floor закрывает разницу с реальным обменом (дороже ЦБ).
 """
 
 from __future__ import annotations
@@ -12,9 +13,16 @@ from app.services.credit_units import CREDITS_PER_USD, credits_to_usd, rub_per_c
 from app.services.fx_rate import cached_cbr_rub_per_usd_sync
 
 
+def purchase_rub_per_usd() -> float:
+    """₽ за $1 для продажи/конвертации кредитов: не ниже floor, иначе ЦБ."""
+    cbr = float(cached_cbr_rub_per_usd_sync())
+    floor = float(settings.billing_credits_rub_per_usd_floor)
+    return max(cbr, floor) if cbr > 0 else floor
+
+
 def rub_per_credit_purchase() -> Decimal:
-    """₽ за 1 cent-credit по курсу ЦБ."""
-    return Decimal(str(rub_per_credit_from_cbr(cached_cbr_rub_per_usd_sync())))
+    """₽ за 1 cent-credit по курсу продажи (ЦБ с полом)."""
+    return Decimal(str(rub_per_credit_from_cbr(purchase_rub_per_usd())))
 
 
 def credit_unit_price_rub() -> Decimal:
@@ -24,11 +32,11 @@ def credit_unit_price_rub() -> Decimal:
 
 def rub_to_credits_ceil(amount_rub: int | Decimal) -> int:
     """Сколько кредитов списать за сумму в рублях (подписка, пересчёт рефералки)."""
-    cbr = Decimal(cached_cbr_rub_per_usd_sync())
-    if cbr <= 0:
-        raise ValueError("invalid CBR rate")
+    rate = Decimal(str(purchase_rub_per_usd()))
+    if rate <= 0:
+        raise ValueError("invalid purchase RUB/USD rate")
     amt = Decimal(amount_rub)
-    return int((amt * Decimal(CREDITS_PER_USD) / cbr).to_integral_value(rounding=ROUND_UP))
+    return int((amt * Decimal(CREDITS_PER_USD) / rate).to_integral_value(rounding=ROUND_UP))
 
 
 def standard_subscription_monthly_credits(
@@ -37,7 +45,7 @@ def standard_subscription_monthly_credits(
     share: float = 0.5,
     round_to: int = 50,
 ) -> int:
-    """Cent-credits в Standard: ~share от цены подписки по курсу ЦБ (округление вниз)."""
+    """Cent-credits в Standard: ~share от цены подписки по курсу продажи (округление вниз)."""
     if price_rub <= 0 or share <= 0:
         return 0
     half_rub = int(Decimal(price_rub) * Decimal(str(share)))
@@ -110,12 +118,15 @@ def legacy_pack_total_rub() -> Decimal:
 
 def billing_credits_pricing_public() -> dict:
     cbr = cached_cbr_rub_per_usd_sync()
+    sell = purchase_rub_per_usd()
     unit = float(rub_per_credit_purchase())
     return {
         "model": "usd_cent",
         "credits_per_usd": CREDITS_PER_USD,
         "usd_per_credit": 0.01,
         "rub_per_usd_cbr": round(cbr, 4),
+        "rub_per_usd_floor": round(float(settings.billing_credits_rub_per_usd_floor), 4),
+        "rub_per_usd_sell": round(sell, 4),
         "unit_price_rub": unit,
         "bulk_unit_price_rub": unit,
         "min_quantity": int(settings.billing_credits_min_purchase),

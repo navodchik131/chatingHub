@@ -578,9 +578,15 @@ class Settings(BaseSettings):
     billing_credits_bonus_from_rub_15pct: int = Field(default=4000, ge=0)
     billing_credits_unit_price_rub: Decimal = Field(
         default=Decimal("0.9"),
-        description="Legacy fallback; покупка считается от CBR/100 ₽ за кредит.",
+        description="Legacy fallback; покупка считается от max(CBR, floor)/100 ₽ за кредит.",
     )
     billing_credits_bulk_unit_price_rub: Decimal = Field(default=Decimal("0.9"))
+    # Пол USD дороже ЦБ (обмен/карты) — не продаём кредиты ниже этого курса.
+    billing_credits_rub_per_usd_floor: float = Field(
+        default=97.0,
+        ge=1.0,
+        description="Мин. ₽/USD для продажи кредитов и конвертации ₽→кредиты (даже если ЦБ ниже).",
+    )
     billing_credits_max_purchase: int = Field(default=500_000)
     billing_subscription_period_days: int = Field(default=30)
 
