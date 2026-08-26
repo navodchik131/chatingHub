@@ -359,10 +359,10 @@ async def prepare_studio_image_billing(
     if cost <= 0:
         return billing, 0, False
 
-    acc = billing.credit_account
+    # Не трогаем billing.credit_account лениво — async session + greenlet_spawn.
     if lock_account:
         acc = await _credit_account_for_update(session, billing.id)
-    elif acc is None:
+    else:
         acc = await session.get(CreditAccount, billing.id)
     demo_rem = int(acc.demo_generations_remaining) if acc is not None else 0
 

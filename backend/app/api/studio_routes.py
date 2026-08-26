@@ -6813,10 +6813,11 @@ async def _studio_job_execute_motion_first_frame(
                 billing_wave_model=billing_wave,
                 wan_tier_n=wan_tier_n,
             )
+        billing_owner = await resolve_billing_user(session, user)
         billing, cost, used_demo = await prepare_studio_image_billing(
             session,
             user,
-            user,
+            billing_owner,
             plan=plan,
             base_cost=quoted,
             usage_kind="studio_motion_first_frame",
