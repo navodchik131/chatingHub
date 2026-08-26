@@ -998,14 +998,14 @@ async def wizard_render_batch(
     src_path, td = _load_source_video_path(p)
     out_dir = studio_job_dir(int(job.id))
     try:
-        # Edge-outline like motion control: @Video1 carries silhouette/motion only,
-        # so Seedance cannot keep the reference actor (opening stays @Image1 identity).
+        # Оригинальный цветной кусок референса (без edge-outline / силуэта).
         mv_id_eff, _vpath_eff, _raw_color, motion_outlined = await prepare_shot_batch_motion_ref(
             owner_id=oid,
             src_video_path=src_path,
             t_start=eff_start,
             t_end=eff_end,
             target_sec=ds_effective,
+            apply_outline=False,
         )
         vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
         motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
