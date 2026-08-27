@@ -5,7 +5,7 @@ import { Eyebrow, Chip, SelectPill } from './ui';
 import MotionTrimTimeline from './MotionTrimTimeline';
 import { color, line, font } from '../styles/tokens';
 import { refUploadStyle, cardPickStyle } from '../styles/mixins';
-import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
+import { sameStudioModelId, enginesForNsfw, isUiSimplified, normalizeWaveModel } from '../api/studioHelpers';
 import { photoKindShortLabel, normalizePhotoKind } from '../api/helpers';
 import { quoteStudioImageCredits, formatImageCostBadge } from '../../studioImagePricing';
 import {
@@ -103,27 +103,35 @@ export default function MotionControlWizard({
   }, [cabinet.selectedModelId, cabinet.motionVideoFileId, outfitRoute, baseImageId]);
 
   const dressWaveProfile = s.contentMode === 'sfw' ? 'regular' : 'nsfw';
+  const dressWave = useMemo(
+    () => normalizeWaveModel(dressModelId, s.contentMode === 'nsfw'),
+    [dressModelId, s.contentMode],
+  );
   const dressCredits = useMemo(
     () => quoteStudioImageCredits({
-      waveModelId: dressModelId,
+      waveModelId: dressWave.apiId,
       waveProfile: dressWaveProfile,
-      wanEditTier: dressModelId === 'wan-2.7-pro' ? 'pro' : 'standard',
+      wanEditTier: dressWave.tier,
       grokPipeline: 'none',
       studioMode: 'photo_edit',
       workflow: false,
     }, imagePricing),
-    [dressModelId, dressWaveProfile, imagePricing],
+    [dressWave, dressWaveProfile, imagePricing],
+  );
+  const turnWave = useMemo(
+    () => normalizeWaveModel(turnModelId, s.contentMode === 'nsfw'),
+    [turnModelId, s.contentMode],
   );
   const turnCredits = useMemo(
     () => quoteStudioImageCredits({
-      waveModelId: turnModelId,
+      waveModelId: turnWave.apiId,
       waveProfile: dressWaveProfile,
-      wanEditTier: 'standard',
+      wanEditTier: turnWave.tier,
       grokPipeline: 'none',
       studioMode: 'photo_edit',
       workflow: false,
     }, imagePricing),
-    [turnModelId, dressWaveProfile, imagePricing],
+    [turnWave, dressWaveProfile, imagePricing],
   );
 
   const clipDuration = trimMode === 'part'
@@ -153,8 +161,17 @@ export default function MotionControlWizard({
     + videoCredits;
 
   const engineModels = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
-  const dressModels = engineModels.filter((m) => m.id !== 'gpt-image-2');
-  const turnModels = [{ id: 'gpt-image-2', name: 'GPT Image 2', note: lang === 'ru' ? 'развёртка' : 'turnaround' }];
+  const dressModels = engineModels;
+  const turnModels = engineModels;
+
+  useEffect(() => {
+    if (!dressModels.some((m) => m.id === dressModelId) && dressModels[0]?.id) {
+      setDressModelId(dressModels[0].id);
+    }
+    if (!turnModels.some((m) => m.id === turnModelId) && turnModels[0]?.id) {
+      setTurnModelId(turnModels[0].id);
+    }
+  }, [dressModels, turnModels, dressModelId, turnModelId]);
 
   const onDrivingVideoPicked = (file) => {
     void cabinet.uploadDrivingVideo(file);
@@ -177,12 +194,14 @@ export default function MotionControlWizard({
     setOutfitState('loading');
     cabinet.setError(null);
     try {
+      const dressWave = normalizeWaveModel(dressModelId, s.contentMode === 'nsfw');
       const { result } = await cabinet.runMotionControlDress({
         modelId: cabinet.selectedModelId,
         baseImageId,
         outfitRoute,
         motionVideoFileId: cabinet.motionVideoFileId,
-        waveModelId: dressModelId,
+        waveModelId: dressWave.apiId,
+        wanEditTier: dressWave.tier,
         studioWaveProfile: dressWaveProfile,
         outputAspect: s.vidFormat || '9:16',
         clothingFile: clothFile,
@@ -198,7 +217,7 @@ export default function MotionControlWizard({
       setOutfitState('idle');
       cabinet.setError(e?.message || String(e));
     }
-  }, [cabinet, baseImageId, outfitRoute, dressModelId, dressWaveProfile, s.vidFormat, lang]);
+  }, [cabinet, baseImageId, outfitRoute, dressModelId, dressWaveProfile, s.vidFormat, s.contentMode, lang]);
 
   const runTurnaround = useCallback(async () => {
     if (!outfitGenId || !faceImageId) {
@@ -212,7 +231,9 @@ export default function MotionControlWizard({
         modelId: cabinet.selectedModelId,
         outfitGenerationId: outfitGenId,
         faceImageId,
-        waveModelId: turnModelId,
+        waveModelId: turnWave.apiId,
+        wanEditTier: turnWave.tier,
+        studioWaveProfile: dressWaveProfile,
       });
       const gid = result?.generation_id;
       const url = result?.generated_image_url || '';
@@ -225,7 +246,7 @@ export default function MotionControlWizard({
       setTurnState('idle');
       cabinet.setError(e?.message || String(e));
     }
-  }, [cabinet, outfitGenId, faceImageId, turnModelId, lang]);
+  }, [cabinet, outfitGenId, faceImageId, turnWave, dressWaveProfile, lang]);
 
   const handleGenerateVideo = () => {
     if (!cabinet.motionVideoFileId) {

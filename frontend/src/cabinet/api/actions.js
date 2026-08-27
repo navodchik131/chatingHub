@@ -629,6 +629,7 @@ export async function runMotionControlDress(params) {
   fd.append('outfit_route', params.outfitRoute || 'video')
   if (params.motionVideoFileId) fd.append('motion_video_file_id', params.motionVideoFileId)
   if (params.waveModelId) fd.append('wave_model_id', params.waveModelId)
+  if (params.wanEditTier) fd.append('wan_edit_tier', params.wanEditTier)
   if (params.studioWaveProfile) fd.append('studio_wave_profile', params.studioWaveProfile)
   if (params.outputAspect) fd.append('output_aspect', params.outputAspect)
   if (params.clothingFile) fd.append('clothing_image', params.clothingFile, params.clothingFile.name || 'cloth.jpg')
@@ -646,6 +647,8 @@ export async function runMotionControlTurnaround(params) {
   fd.append('outfit_generation_id', String(params.outfitGenerationId))
   fd.append('face_image_id', String(params.faceImageId))
   if (params.waveModelId) fd.append('wave_model_id', params.waveModelId)
+  if (params.wanEditTier) fd.append('wan_edit_tier', params.wanEditTier)
+  if (params.studioWaveProfile) fd.append('studio_wave_profile', params.studioWaveProfile)
   const accepted = await postStudioJobStart('/api/studio/motion-control/turnaround', { method: 'POST', body: fd })
   if (accepted.job_id) {
     const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })

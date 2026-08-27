@@ -232,6 +232,8 @@ async def api_motion_control_turnaround(
     outfit_generation_id: str = Form(...),
     face_image_id: str = Form(...),
     wave_model_id: str = Form("gpt-image-2"),
+    studio_wave_profile: str = Form("nsfw"),
+    wan_edit_tier: str = Form("standard"),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioModelBootstrapOut | JSONResponse:
@@ -250,18 +252,25 @@ async def api_motion_control_turnaround(
     if not outfit_row or outfit_row.user_id != oid:
         raise HTTPException(status_code=404, detail="Образ (outfit) не найден")
     wave_model = (wave_model_id or "gpt-image-2").strip().lower()
+    if wave_model == "wan-2.7-pro":
+        wave_model = "wan-2.7"
+        wan_edit_tier = "pro"
+    wave_profile = (studio_wave_profile or "nsfw").strip().lower()
+    wan_tier = (wan_edit_tier or "standard").strip().lower()
     await _preflight_image_job_cost(
         session,
         user,
         plan=plan,
         usage_kind="studio_motion_control_turnaround",
-        wave_model_id=wave_model,
+        wave_model_id=wave_model if wan_tier != "pro" else "wan-2.7-pro",
     )
     params = {
         "model_id": mid,
         "outfit_generation_id": outfit_gid,
         "face_image_id": face_id,
         "wave_model_id": wave_model,
+        "wan_edit_tier": wan_tier,
+        "studio_wave_profile": wave_profile,
         "prompt": MOTION_CONTROL_TURNAROUND_PROMPT,
         "output_aspect": MOTION_CONTROL_SHEET_ASPECT,
     }
@@ -401,7 +410,7 @@ async def execute_motion_control_turnaround(
     from app.api.studio_routes import _public_app_base, _studio_archive_image_url
     from app.services.studio_seedance_t2v import generation_still_public_url
     from app.services.studio_image_token import create_generation_image_access_token
-    from app.services.wavespeed_client import gpt_image_2_edit_image_url
+    from app.services.wavespeed_client import workflow_edit_image_url
     from app.services.workspace_model_access import require_studio_model_access
     p = studio_jobs.job_params(job)
     oid = workspace_owner_id(user)
@@ -427,22 +436,26 @@ async def execute_motion_control_turnaround(
     prompt = str(p.get("prompt") or MOTION_CONTROL_TURNAROUND_PROMPT)
     aspect = str(p.get("output_aspect") or MOTION_CONTROL_SHEET_ASPECT)
     wave_model = str(p.get("wave_model_id") or "gpt-image-2").strip().lower()
+    wan_tier = str(p.get("wan_edit_tier") or "standard").strip().lower()
+    wave_profile = str(p.get("studio_wave_profile") or "nsfw").strip().lower()
+    if wave_model == "wan-2.7-pro":
+        wave_model = "wan-2.7"
+        wan_tier = "pro"
     gen_row = await find_studio_generation_by_job_id(session, job.id)
     async def _on_task(task_id: str) -> None:
         if gen_row is not None:
             await attach_studio_generation_wavespeed_task(session, gen_row, task_id=task_id)
             await session.commit()
     try:
-        ws_res = await gpt_image_2_edit_image_url(
+        ws_res = await workflow_edit_image_url(
             api_key=ws_key,
+            wave_model_id=wave_model,
             image_urls=[face_url, outfit_url],
             prompt=prompt,
             aspect_ratio=aspect,
+            wan_edit_tier=wan_tier,
+            wave_profile=wave_profile,
             resolution="1k",
-            quality="medium",
-            output_format="png",
-            max_polls=300,
-            poll_interval=2.5,
             on_task_submitted=_on_task,
         )
     except RuntimeError as e:

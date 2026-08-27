@@ -21,6 +21,7 @@ function resolveSlot(mode, index, uploadFiles, slotArchivePicks) {
   }
 }
 export const FALLBACK_GEN_MODELS = [
+  { id: 'nano-banana-2', label: 'Nano Banana', nsfw: false, note: '' },
   { id: 'nano-banana-pro', label: 'Nano Banana Pro', nsfw: false, note: '' },
   { id: 'gpt-image-2', label: 'GPT Image 2', nsfw: false, note: '' },
   { id: 'seedream-v5.0-pro', label: 'Seedream 5 Pro', nsfw: false, note: '' },
@@ -28,7 +29,9 @@ export const FALLBACK_GEN_MODELS = [
   { id: 'wan-2.7-pro', label: 'Wan 2.7 Pro', nsfw: true, note: '' },
 ]
 
-export const REGULAR_ENGINE_IDS = ['nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
+/** Как backend WORKFLOW_REGULAR_MODELS — все обычные движки WaveSpeed. */
+export const REGULAR_ENGINE_IDS = ['nano-banana-2', 'nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
+/** NSFW + Seedream (cross-profile), как в workflow и mm-os-bridge. */
 export const NSFW_ENGINE_IDS = ['seedream-v5.0-pro', 'wan-2.7', 'wan-2.7-pro']
 
 export const SIMPLIFIED_CONTENT_MODE = 'nsfw'
