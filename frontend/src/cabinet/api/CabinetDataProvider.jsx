@@ -88,7 +88,8 @@ function reuseModelImageUrls(prevModels, nextModels) {
 export function CabinetDataProvider({ children }) {
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [videoGenerating, setVideoGenerating] = useState(false)
+  /** null | 'wavespeed' | 'evolink' — только кнопка «Сгенерировать видео» на своей вкладке. */
+  const [videoSubmitting, setVideoSubmitting] = useState(null)
   const [error, setError] = useState(null)
   const [me, setMe] = useState(null)
   const [health, setHealth] = useState(null)
@@ -1258,8 +1259,9 @@ export function CabinetDataProvider({ children }) {
       })
       setArchive((prev) => prependOptimisticStudioArchive(prev, item))
       setError(null)
-      setVideoGenerating(true)
-      setBusy(true)
+      const submitBackend = isEvolink ? 'evolink' : 'wavespeed'
+      setVideoSubmitting(submitBackend)
+      let accepted = null
       try {
         if (!ffGenId && frameFile && motionControl) {
           const { result } = await actions.runMotionFirstFrame({
@@ -1273,7 +1275,7 @@ export function CabinetDataProvider({ children }) {
           ffGenId = result?.generation_id || null
           if (!ffGenId) throw new Error('Не удалось загрузить первый кадр')
         }
-        const accepted = await actions.runMotionVideo({
+        accepted = await actions.runMotionVideo({
           modelId: selectedModelId,
           prompt: motionControl && !mcWizard ? '' : prompt,
           aspect: appState.vidFormat || selectedAspect,
@@ -1294,14 +1296,15 @@ export function CabinetDataProvider({ children }) {
           trimEndSec: wizard?.trimEndSec,
         })
         setArchive((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
-        await refreshArchiveFull()
-        setMe(await apiJson('/api/auth/me'))
       } catch (e) {
         setArchive((prev) => removeOptimisticStudioArchive(prev, tempId))
         setError(e?.message || String(e))
       } finally {
-        setVideoGenerating(false)
-        setBusy(false)
+        setVideoSubmitting(null)
+      }
+      if (accepted) {
+        void refreshArchiveFull()
+        void apiJson('/api/auth/me').then(setMe).catch(() => {})
       }
     },
     [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull, me, health],
@@ -1722,7 +1725,7 @@ export function CabinetDataProvider({ children }) {
     () => ({
       ready,
       busy,
-      videoGenerating,
+      videoSubmitting,
       error,
       setError,
       clearBusy,
@@ -1857,7 +1860,7 @@ export function CabinetDataProvider({ children }) {
     [
       ready,
       busy,
-      videoGenerating,
+      videoSubmitting,
       error,
       me,
       health,

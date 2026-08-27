@@ -443,7 +443,7 @@ export default function MotionControlWizard({
   }, [cabinet, lang]);
 
   const handleGenerateVideo = async () => {
-    if (cabinet.videoGenerating) return;
+    if (cabinet.videoSubmitting === wizardBackend) return;
     if (!cabinet.motionVideoFileId) {
       cabinet.setError(lang === 'ru' ? 'Загрузите референс-видео' : 'Upload reference video');
       return;
@@ -467,7 +467,7 @@ export default function MotionControlWizard({
     }
   };
 
-  const videoBusy = Boolean(cabinet.videoGenerating);
+  const videoBusy = cabinet.videoSubmitting === wizardBackend;
 
   const stepBlock = {
     background: color.surface,
