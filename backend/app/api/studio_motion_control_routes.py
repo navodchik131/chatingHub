@@ -336,7 +336,7 @@ async def execute_motion_control_dress(
     from app.services.studio_image_token import create_pose_reference_access_token
     scene_id = save_pose_reference_bytes(owner_id=oid, raw=scene_bytes, content_type=scene_mime)
     body_url = _model_image_public_url(oid, int(body_im.id), pub)
-    scene_tok = create_pose_reference_access_token(user_id=oid, ref_id=scene_id)
+    scene_tok = create_pose_reference_access_token(user_id=oid, file_id=scene_id)
     scene_url = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
     wave_profile = str(p.get("studio_wave_profile") or "nsfw")
     wan_tier = str(p.get("wan_edit_tier") or "standard")
