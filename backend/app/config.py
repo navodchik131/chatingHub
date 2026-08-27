@@ -364,7 +364,7 @@ class Settings(BaseSettings):
         default="/api/v3/bytedance/seedance-2.5/text-to-video",
     )
     wavespeed_seedance_25_video_edit_path: str = Field(
-        default="/api/v3/bytedance/seedance-2.5/video-edit-turbo",
+        default="/api/v3/bytedance/seedance-2.5/video-edit",
     )
     wavespeed_seedance_20_t2v_resolution: str = Field(default="720p")
     # WaveSpeed Seedance T2V принимает duration только 4–15 с (см. доки API).
@@ -448,12 +448,12 @@ class Settings(BaseSettings):
     studio_grok_imagine_i2v_duration_min: int = Field(default=1, ge=1, le=15)
     # ByteDance Seedance 2.0 / Mini Video Edit (BoardStory + motion ref)
     wavespeed_seedance_20_video_edit_path: str = Field(
-        default="/api/v3/bytedance/seedance-2.0/video-edit-turbo",
+        default="/api/v3/bytedance/seedance-2.0-fast/video-edit",
     )
     wavespeed_seedance_20_mini_video_edit_path: str = Field(
         default="/api/v3/bytedance/seedance-2.0-mini/video-edit-turbo",
     )
-    # Legacy override для standard video-edit (пусто = seedance-2.0/video-edit-turbo)
+    # Legacy override для standard video-edit (пусто = seedance-2.0-fast/video-edit)
     wavespeed_studio_video_edit_path: str = Field(
         default="",
     )

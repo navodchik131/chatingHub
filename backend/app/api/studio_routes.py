@@ -8812,16 +8812,21 @@ async def _studio_job_execute_motion_render_video(
                         if video_res in ("720p", "1080p")
                         else settings.wavespeed_studio_video_edit_resolution or "720p"
                     )
+                    # Motion wizard: клип на WaveSpeed Media, без aspect_ratio/duration — API берёт из видео.
+                    wizard_video_bytes: bytes | None = None
+                    if motion_control_wizard and vpath is not None and vpath.is_file():
+                        wizard_video_bytes = vpath.read_bytes()
                     video_url = await seedance_studio_video_edit_video_url(
                         api_key=ws_key,
-                        video_url=motion_vid_url,
+                        video_url=motion_vid_url or "",
                         reference_image_urls=ref_images,
                         prompt=seed_prompt,
-                        aspect_ratio=ar_edit,
+                        aspect_ratio=None if motion_control_wizard else ar_edit,
                         resolution=video_res_edit,
                         duration=None if motion_control_wizard else ds_effective,
                         keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
                         variant=seedance_v,
+                        upload_video_bytes=wizard_video_bytes,
                     )
                     motion_provider = "seedance_video_edit"
                 else:

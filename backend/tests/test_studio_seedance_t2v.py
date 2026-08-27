@@ -143,8 +143,48 @@ def test_seedance_video_edit_post_path_variant():
         "/api/v3/bytedance/seedance-2.0-mini/video-edit-turbo"
     )
     assert _seedance_20_video_edit_post_path(variant="standard") == (
-        "/api/v3/bytedance/seedance-2.0/video-edit-turbo"
+        "/api/v3/bytedance/seedance-2.0-fast/video-edit"
     )
+    assert _seedance_20_video_edit_post_path(variant="seedance_25") == (
+        "/api/v3/bytedance/seedance-2.5/video-edit"
+    )
+
+
+def test_seedance_video_edit_body_v25_omits_duration_and_aspect():
+    from app.services.wavespeed_client import _build_seedance_video_edit_body
+
+    body = _build_seedance_video_edit_body(
+        path="/api/v3/bytedance/seedance-2.5/video-edit",
+        prompt="Replace character",
+        video_url="https://example.com/in.mp4",
+        reference_images=["https://example.com/ref.jpg"],
+        resolution="720p",
+        duration=8,
+        aspect_ratio="16:9",
+        keep_original_sound=True,
+    )
+    assert "duration" not in body
+    assert "aspect_ratio" not in body
+    assert "enable_web_search" not in body
+    assert body["generate_audio"] is False
+
+
+def test_seedance_video_edit_body_v20_fast_auto_duration():
+    from app.services.wavespeed_client import _build_seedance_video_edit_body
+
+    body = _build_seedance_video_edit_body(
+        path="/api/v3/bytedance/seedance-2.0-fast/video-edit",
+        prompt="Replace character",
+        video_url="https://example.com/in.mp4",
+        reference_images=["https://example.com/ref.jpg"],
+        resolution="720p",
+        duration=None,
+        aspect_ratio=None,
+        keep_original_sound=False,
+    )
+    assert "duration" not in body
+    assert "aspect_ratio" not in body
+    assert body["generate_audio"] is True
 
 
 def test_filter_model_images_for_video_excludes_body():

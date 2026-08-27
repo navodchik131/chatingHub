@@ -701,22 +701,22 @@ async def seedream_v50_pro_edit_image_url(
     )
 
 
-async def wavespeed_upload_image_bytes(
+async def wavespeed_upload_media_bytes(
     *,
     api_key: str,
     data: bytes,
-    filename: str = "image.jpg",
-    content_type: str = "image/jpeg",
+    filename: str = "file.bin",
+    content_type: str = "application/octet-stream",
     timeout: float = 120.0,
 ) -> str:
-    """Загрузка в WaveSpeed Media; URL для полей images/image в моделях."""
+    """Загрузка произвольного медиа в WaveSpeed Media; URL для полей video/images/image."""
     if not data:
-        raise RuntimeError("empty image bytes")
+        raise RuntimeError("empty media bytes")
     base = _wavespeed_base()
     url = f"{base}{WAVESPEED_MEDIA_UPLOAD_PATH}"
     headers = {"Authorization": f"Bearer {api_key}"}
-    ct = (content_type or "image/jpeg").strip() or "image/jpeg"
-    fname = (filename or "image.jpg").strip() or "image.jpg"
+    ct = (content_type or "application/octet-stream").strip() or "application/octet-stream"
+    fname = (filename or "file.bin").strip() or "file.bin"
     async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.post(
             url,
@@ -753,6 +753,26 @@ async def wavespeed_upload_image_bytes(
             if isinstance(u, str) and u.strip().startswith("http"):
                 return u.strip()
     raise RuntimeError("WaveSpeed upload: нет download_url в ответе")
+
+
+async def wavespeed_upload_image_bytes(
+    *,
+    api_key: str,
+    data: bytes,
+    filename: str = "image.jpg",
+    content_type: str = "image/jpeg",
+    timeout: float = 120.0,
+) -> str:
+    """Загрузка в WaveSpeed Media; URL для полей images/image в моделях."""
+    if not data:
+        raise RuntimeError("empty image bytes")
+    return await wavespeed_upload_media_bytes(
+        api_key=api_key,
+        data=data,
+        filename=filename,
+        content_type=content_type,
+        timeout=timeout,
+    )
 
 
 async def seedream_v45_bootstrap_edit_image_url(
@@ -1790,7 +1810,7 @@ def _seedance_20_video_edit_post_path(*, variant: str = "standard") -> str:
     v = normalize_seedance_t2v_variant(variant)
     if v == "seedance_25":
         p = (settings.wavespeed_seedance_25_video_edit_path or "").strip()
-        p = p or "/api/v3/bytedance/seedance-2.5/video-edit-turbo"
+        p = p or "/api/v3/bytedance/seedance-2.5/video-edit"
     elif v == "mini":
         p = (settings.wavespeed_seedance_20_mini_video_edit_path or "").strip()
         p = p or "/api/v3/bytedance/seedance-2.0-mini/video-edit-turbo"
@@ -1800,8 +1820,20 @@ def _seedance_20_video_edit_post_path(*, variant: str = "standard") -> str:
             p = legacy
         else:
             p = (settings.wavespeed_seedance_20_video_edit_path or "").strip()
-            p = p or "/api/v3/bytedance/seedance-2.0/video-edit-turbo"
+            p = p or "/api/v3/bytedance/seedance-2.0-fast/video-edit"
     return p if p.startswith("/") else f"/{p}"
+
+
+def _video_edit_api_profile(path: str) -> str:
+    """Профиль API video-edit по пути модели (turbo / 2.0-fast / 2.5)."""
+    p = (path or "").lower()
+    if "seedance-2.5" in p and "video-edit" in p and "turbo" not in p:
+        return "v25"
+    if "seedance-2.0-fast" in p and "video-edit" in p:
+        return "v20_fast"
+    if "turbo" in p:
+        return "turbo"
+    return "legacy"
 
 
 def _studio_video_edit_post_path(*, variant: str = "standard") -> str:
@@ -1810,11 +1842,52 @@ def _studio_video_edit_post_path(*, variant: str = "standard") -> str:
 
 def _normalize_video_edit_resolution(res: str, *, path: str) -> str:
     r = (res or "720p").strip().lower()
-    if "turbo" in path.lower() and r not in ("720p", "1080p"):
+    profile = _video_edit_api_profile(path)
+    # Legacy turbo endpoints принимают только 720p/1080p.
+    if profile == "turbo" and r not in ("720p", "1080p"):
         return "720p"
     if r in ("480p", "720p", "1080p", "4k"):
         return r
     return "720p"
+
+
+def _build_seedance_video_edit_body(
+    *,
+    path: str,
+    prompt: str,
+    video_url: str,
+    reference_images: list[str],
+    resolution: str,
+    duration: int | None,
+    aspect_ratio: str | None,
+    keep_original_sound: bool,
+) -> dict[str, Any]:
+    """Собирает JSON body под конкретный video-edit endpoint WaveSpeed."""
+    profile = _video_edit_api_profile(path)
+    body: dict[str, Any] = {
+        "prompt": prompt,
+        "video": video_url,
+        "reference_images": reference_images[:9],
+        "resolution": resolution,
+        # false = сохранить звук входного видео; true = сгенерировать новое аудио
+        "generate_audio": not bool(keep_original_sound),
+    }
+    if profile == "v25":
+        # 2.5 video-edit: длительность и aspect ratio берутся из входного видео.
+        return body
+    if profile in ("v20_fast", "legacy"):
+        body["enable_web_search"] = False
+    else:
+        # turbo
+        body["enable_web_search"] = False
+    if duration is not None and profile != "v25":
+        from app.services.studio_motion_pricing import motion_video_duration_seconds
+
+        body["duration"] = motion_video_duration_seconds(duration)
+    ar = (aspect_ratio or "").strip()
+    if ar and profile != "v25":
+        body["aspect_ratio"] = ar
+    return body
 
 
 async def seedance_studio_video_edit_video_url(
@@ -1829,19 +1902,20 @@ async def seedance_studio_video_edit_video_url(
     duration: int | None = None,
     keep_original_sound: bool = True,
     variant: str = "standard",
+    upload_video_bytes: bytes | None = None,
     timeout_submit: float = 900.0,
     poll_interval: float = 3.0,
     max_polls: int = 180,
 ) -> str:
     """
     ByteDance Seedance Video-Edit: входное video + prompt + reference_images.
-    variant=standard → …/seedance-2.0/video-edit-turbo (или legacy env)
+    variant=standard → …/seedance-2.0-fast/video-edit
+    variant=seedance_25 → …/seedance-2.5/video-edit
     variant=mini → …/seedance-2.0-mini/video-edit-turbo
-    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-mini-video-edit-turbo
     """
     vid = (video_url or "").strip()
     ptxt = (prompt or "").strip()
-    if not vid:
+    if not vid and not upload_video_bytes:
         raise RuntimeError("video URL required for video edit")
     if not ptxt:
         raise RuntimeError("prompt required for video edit")
@@ -1858,30 +1932,37 @@ async def seedance_studio_video_edit_video_url(
         resolution or settings.wavespeed_studio_video_edit_resolution or "720p",
         path=path,
     )
-    body: dict[str, Any] = {
-        "prompt": ptxt,
-        "video": vid,
-        "reference_images": imgs[:9],
-        "resolution": res,
-        "enable_web_search": False,
-        # false = сохранить звуковую дорожку входного видео; true = сгенерировать новое аудио
-        "generate_audio": not bool(keep_original_sound),
-    }
-    if duration is not None:
-        from app.services.studio_motion_pricing import motion_video_duration_seconds
-
-        body["duration"] = motion_video_duration_seconds(duration)
-    ar = (aspect_ratio or "").strip()
-    if ar:
-        body["aspect_ratio"] = ar
+    # Для motion wizard загружаем клип в WaveSpeed Media — JWT URL с нашего сервера
+    # иногда не читается (Could not measure the duration of the provided media).
+    if upload_video_bytes:
+        vid = await wavespeed_upload_media_bytes(
+            api_key=api_key,
+            data=upload_video_bytes,
+            filename="motion_ref.mp4",
+            content_type="video/mp4",
+            timeout=max(120.0, timeout_submit / 4),
+        )
+    body = _build_seedance_video_edit_body(
+        path=path,
+        prompt=ptxt,
+        video_url=vid,
+        reference_images=imgs,
+        resolution=res,
+        duration=duration,
+        aspect_ratio=aspect_ratio,
+        keep_original_sound=keep_original_sound,
+    )
     _apply_wavespeed_extra_body(body)
     log.debug(
-        "wavespeed seedance video edit variant=%s path=%s resolution=%s imgs=%s dur=%s",
+        "wavespeed seedance video edit variant=%s path=%s profile=%s resolution=%s imgs=%s dur=%s ar=%s upload=%s",
         variant,
         path,
+        _video_edit_api_profile(path),
         res,
         len(body["reference_images"]),
         body.get("duration"),
+        body.get("aspect_ratio"),
+        bool(upload_video_bytes),
     )
     return await _wavespeed_post_json_and_resolve_video_url(
         api_key=api_key,
