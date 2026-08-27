@@ -7873,6 +7873,11 @@ async def api_seedance_sale_render_video(
     video_resolution: str = Form(""),
     auto_motion_prompt: str = Form("0"),
     prompt_only_mode: str = Form("0"),
+    motion_control_wizard: str = Form("0"),
+    trim_mode: str = Form("full"),
+    trim_start_sec: str = Form(""),
+    trim_end_sec: str = Form(""),
+    turnaround_generation_id: str = Form(""),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut | JSONResponse:
@@ -7897,6 +7902,11 @@ async def api_seedance_sale_render_video(
         video_provider="seedance_t2v",
         prompt_only_mode=prompt_only_mode,
         video_backend="evolink",
+        motion_control_wizard=motion_control_wizard,
+        trim_mode=trim_mode,
+        trim_start_sec=trim_start_sec,
+        trim_end_sec=trim_end_sec,
+        turnaround_generation_id=turnaround_generation_id,
         session=session,
         user=user,
     )

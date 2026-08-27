@@ -1220,7 +1220,7 @@ export function CabinetDataProvider({ children }) {
         return
       }
       if (mcWizard && !wizard?.turnaroundGenerationId) {
-        setError('Сначала сгенерируйте развёртку')
+        setError('Подготовьте развёртку (сгенерируйте или загрузите фото)')
         return
       }
       const prompt = (appState.motionPrompt || appState.studioPrompt || '').trim()
@@ -1337,6 +1337,15 @@ export function CabinetDataProvider({ children }) {
     },
     [run, setUploadFile],
   )
+
+  /** Восстановить ref-видео из sessionStorage после возврата на вкладку Video. */
+  const restoreMotionVideoSession = useCallback((fileId, durationSec) => {
+    const id = (fileId || '').trim()
+    if (!id) return
+    setMotionVideoFileId(id)
+    const d = Number(durationSec)
+    setMotionVideoDurationSec(Number.isFinite(d) && d > 0 ? d : null)
+  }, [])
 
   const runMotionControlDress = useCallback(
     (params) => actions.runMotionControlDress(params),
@@ -1815,6 +1824,7 @@ export function CabinetDataProvider({ children }) {
       runMotionControlTurnaround,
       uploadMotionControlOutfit,
       uploadMotionControlTurnaround,
+      restoreMotionVideoSession,
       refreshMe,
       createCharacter,
       saveCharacterProfile,
@@ -1938,6 +1948,7 @@ export function CabinetDataProvider({ children }) {
       runMotionControlTurnaround,
       uploadMotionControlOutfit,
       uploadMotionControlTurnaround,
+      restoreMotionVideoSession,
       refreshMe,
       createCharacter,
       saveCharacterProfile,

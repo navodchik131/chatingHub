@@ -15,6 +15,14 @@ import {
   mergeEvolinkVideoPricing,
 } from '../../studioMotionPricing';
 import SeedanceSaleLabel from './SeedanceSaleLabel';
+import { archiveThumbUrl } from '../api/actions';
+import { loadMcWizardState, mcWizardStorageKey, saveMcWizardState } from '../api/motionControlWizardStorage';
+
+function genArchivePreviewUrl(genId, archiveImages) {
+  if (genId == null) return '';
+  const hit = (archiveImages || []).find((x) => Number(x.id) === Number(genId));
+  return hit ? archiveThumbUrl(hit) : '';
+}
 
 function vidQualityToResolution(vidQuality) {
   const v = String(vidQuality || '1080').toLowerCase();
@@ -55,6 +63,9 @@ export default function MotionControlWizard({
   const clothingRef = useRef(null);
   const outfitUploadRef = useRef(null);
   const turnaroundUploadRef = useRef(null);
+  const skipPersistRef = useRef(false);
+  const wizardBackend = isEvolink ? 'evolink' : 'wavespeed';
+  const wizardStorageKey = mcWizardStorageKey(wizardBackend, cabinet.selectedModelId);
 
   const model = (cabinet.models || []).find((m) => sameStudioModelId(m.id, cabinet.selectedModelId));
   const modelImages = model?.images || [];
@@ -97,16 +108,53 @@ export default function MotionControlWizard({
     if (faceImageId == null && faceImages[0]?.id != null) setFaceImageId(Number(faceImages[0].id));
   }, [cabinet.selectedModelId, basePhotos, faceImages, baseImageId, faceImageId]);
 
+  /** Восстановление шагов wizard из sessionStorage при возврате на вкладку. */
   useEffect(() => {
+    skipPersistRef.current = true;
+    const saved = loadMcWizardState(wizardStorageKey);
+    if (saved) {
+      if (saved.baseImageId != null) setBaseImageId(Number(saved.baseImageId));
+      if (saved.faceImageId != null) setFaceImageId(Number(saved.faceImageId));
+      if (saved.outfitRoute) setOutfitRoute(saved.outfitRoute);
+      if (saved.outfitSource) setOutfitSource(saved.outfitSource);
+      if (saved.turnSource) setTurnSource(saved.turnSource);
+      if (saved.dressModelId) setDressModelId(saved.dressModelId);
+      if (saved.turnModelId) setTurnModelId(saved.turnModelId);
+      if (saved.outfitGenId != null) setOutfitGenId(Number(saved.outfitGenId));
+      if (saved.turnaroundGenId != null) setTurnaroundGenId(Number(saved.turnaroundGenId));
+      setOutfitState(saved.outfitState === 'done' ? 'done' : 'idle');
+      setTurnState(saved.turnState === 'done' ? 'done' : 'idle');
+      setOutfitPreviewUrl(
+        saved.outfitPreviewUrl
+        || genArchivePreviewUrl(saved.outfitGenId, cabinet.archiveImages),
+      );
+      setTurnaroundPreviewUrl(
+        saved.turnaroundPreviewUrl
+        || genArchivePreviewUrl(saved.turnaroundGenId, cabinet.archiveImages),
+      );
+      if (saved.trimMode) setTrimMode(saved.trimMode);
+      if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
+      if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
+      if (saved.motionVideoFileId) {
+        cabinet.restoreMotionVideoSession?.(saved.motionVideoFileId, saved.motionVideoDurationSec);
+      }
+    }
+    const t = window.setTimeout(() => { skipPersistRef.current = false; }, 0);
+    return () => window.clearTimeout(t);
+  }, [wizardStorageKey, cabinet.archiveImages, cabinet.restoreMotionVideoSession]);
+
+  useEffect(() => {
+    if (skipPersistRef.current) return;
     setOutfitGenId(null);
     setOutfitPreviewUrl('');
     setOutfitState('idle');
     setTurnaroundGenId(null);
     setTurnaroundPreviewUrl('');
     setTurnState('idle');
-  }, [cabinet.selectedModelId, cabinet.motionVideoFileId, outfitRoute, baseImageId]);
+  }, [outfitRoute, baseImageId]);
 
   useEffect(() => {
+    if (skipPersistRef.current) return;
     setOutfitGenId(null);
     setOutfitPreviewUrl('');
     setOutfitState('idle');
@@ -114,11 +162,74 @@ export default function MotionControlWizard({
   }, [outfitSource, cabinet.setUploadFile]);
 
   useEffect(() => {
+    if (skipPersistRef.current) return;
     setTurnaroundGenId(null);
     setTurnaroundPreviewUrl('');
     setTurnState('idle');
     cabinet.setUploadFile('mc-turnaround-upload', null);
   }, [turnSource, cabinet.setUploadFile]);
+
+  const prevMotionVideoIdRef = useRef(cabinet.motionVideoFileId);
+  useEffect(() => {
+    if (skipPersistRef.current) {
+      prevMotionVideoIdRef.current = cabinet.motionVideoFileId;
+      return;
+    }
+    if (prevMotionVideoIdRef.current === cabinet.motionVideoFileId) return;
+    prevMotionVideoIdRef.current = cabinet.motionVideoFileId;
+    setOutfitGenId(null);
+    setOutfitPreviewUrl('');
+    setOutfitState('idle');
+    setTurnaroundGenId(null);
+    setTurnaroundPreviewUrl('');
+    setTurnState('idle');
+  }, [cabinet.motionVideoFileId]);
+
+  useEffect(() => {
+    if (skipPersistRef.current) return;
+    saveMcWizardState(wizardStorageKey, {
+      modelId: cabinet.selectedModelId,
+      baseImageId,
+      faceImageId,
+      outfitRoute,
+      outfitSource,
+      turnSource,
+      dressModelId,
+      turnModelId,
+      outfitGenId,
+      outfitPreviewUrl,
+      outfitState,
+      turnaroundGenId,
+      turnaroundPreviewUrl,
+      turnState,
+      trimMode,
+      trimIn,
+      trimOut,
+      motionVideoFileId: cabinet.motionVideoFileId,
+      motionVideoDurationSec: cabinet.motionVideoDurationSec,
+    });
+  }, [
+    wizardStorageKey,
+    cabinet.selectedModelId,
+    cabinet.motionVideoFileId,
+    cabinet.motionVideoDurationSec,
+    baseImageId,
+    faceImageId,
+    outfitRoute,
+    outfitSource,
+    turnSource,
+    dressModelId,
+    turnModelId,
+    outfitGenId,
+    outfitPreviewUrl,
+    outfitState,
+    turnaroundGenId,
+    turnaroundPreviewUrl,
+    turnState,
+    trimMode,
+    trimIn,
+    trimOut,
+  ]);
 
   const dressWaveProfile = s.contentMode === 'sfw' ? 'regular' : 'nsfw';
   const dressWave = useMemo(
@@ -424,8 +535,18 @@ export default function MotionControlWizard({
           >
             <span style={{ display: 'flex', width: 22, height: 22, color: color.textMuted }}><IcoFilm /></span>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, textAlign: 'center' }}>
-              {cabinet.uploadFiles['motion-video']?.name || t.dropVideo}
+              {cabinet.uploadFiles['motion-video']?.name
+                || (cabinet.motionVideoFileId
+                  ? (lang === 'ru' ? 'Реф-видео сохранено' : 'Reference video saved')
+                  : t.dropVideo)}
             </span>
+            {cabinet.motionVideoFileId && !cabinet.uploadFiles['motion-video'] && (
+              <span style={{ fontFamily: font.mono, fontSize: 9.5, color: color.textGhost, textAlign: 'center' }}>
+                {lang === 'ru'
+                  ? 'Превью недоступно после переключения вкладок — видео на сервере сохранено.'
+                  : 'Preview unavailable after tab switch — video is still on the server.'}
+              </span>
+            )}
             {cabinet.motionVideoFileId && (
               <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textGhost }}>
                 {durationSec.toFixed(1)}s · {s.vidFormat || '9:16'}
