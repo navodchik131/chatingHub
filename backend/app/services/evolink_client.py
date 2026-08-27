@@ -117,7 +117,8 @@ def resolve_evolink_model(
     if has_reference_video or (has_reference_images and not image_to_video):
         return "seedance-2.0-fast-reference-to-video"
     if image_to_video:
-        return "seedance-2-0-fast-image-to-video"
+        # EvoLink API: точка в версии (2.0), не дефис (2-0).
+        return "seedance-2.0-fast-image-to-video"
     return "seedance-2.0-text-to-video"
 
 
