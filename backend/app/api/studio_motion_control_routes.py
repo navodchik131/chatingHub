@@ -19,10 +19,11 @@ from app.services.demo_generations import (
     prepare_bootstrap_image_billing,
     record_studio_image_billing,
 )
-from app.services.studio_generation_placeholders import reserve_studio_generation_for_job
+from app.services.studio_generation_placeholders import (
+    find_studio_generation_by_job_id,
+)
 from app.services.studio_generation_storage import (
     attach_studio_generation_wavespeed_task,
-    find_studio_generation_by_job_id,
     mark_studio_generation_failed,
     studio_finish_image_generation,
     try_recover_studio_generation_from_wavespeed,
