@@ -196,11 +196,16 @@ async def execute_evolink_motion_render_video(
     vpath = None
     ref_video_duration: int | None = None
     if mv_id:
-        if settings.motion_outline_enabled:
+        from app.services.studio_motion_video import (
+            resolve_motion_video_file,
+            resolve_motion_video_source,
+        )
+
+        if settings.motion_outline_enabled and not motion_control_wizard:
             from app.services.motion_video_outline import ensure_motion_outline_ready
 
             await ensure_motion_outline_ready(oid, mv_id)
-        vpath = resolve_motion_video_file(oid, mv_id)
+        vpath = resolve_motion_video_source(oid, mv_id) or resolve_motion_video_file(oid, mv_id)
         if vpath is None or not vpath.is_file():
             raise RuntimeError("Референс-видео не найдено.")
         from app.services.studio_motion_video import prepare_motion_video_file_for_duration, save_motion_video_bytes

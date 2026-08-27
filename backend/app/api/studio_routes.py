@@ -8184,11 +8184,17 @@ async def _studio_job_execute_motion_render_video(
     motion_summary: str | None = motion_timeline or None
     vpath = None
     if mv_id:
-        if settings.motion_outline_enabled:
+        # Motion Control wizard → video-edit по цветному клипу, без contour/silhouette.
+        if settings.motion_outline_enabled and not motion_control_wizard:
             from app.services.motion_video_outline import ensure_motion_outline_ready
 
             await ensure_motion_outline_ready(oid, mv_id)
-        vpath = resolve_motion_video_file(oid, mv_id)
+        from app.services.studio_motion_video import (
+            resolve_motion_video_file,
+            resolve_motion_video_source,
+        )
+
+        vpath = resolve_motion_video_source(oid, mv_id) or resolve_motion_video_file(oid, mv_id)
         if vpath is not None and vpath.is_file():
             from app.services.studio_motion_pricing import motion_video_duration_seconds
             from app.services.studio_motion_video import (

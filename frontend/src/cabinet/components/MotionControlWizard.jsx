@@ -77,7 +77,7 @@ export default function MotionControlWizard({
   const [trimMode, setTrimMode] = useState('full');
   const [trimIn, setTrimIn] = useState(0);
   const [trimOut, setTrimOut] = useState(5);
-  const [trimEdge, setTrimEdge] = useState('in');
+  const motionVideoPreviewUrl = cabinet.uploadPreviewUrls?.['motion-video'] || '';
 
   const durationSec = cabinet.motionVideoDurationSec || 5;
   const imagePricing = cabinet.health?.studio_image_pricing;
@@ -346,13 +346,12 @@ export default function MotionControlWizard({
               </div>
               {trimMode === 'part' && (
                 <MotionTrimTimeline
+                  videoSrc={motionVideoPreviewUrl}
                   durationSec={durationSec}
                   trimIn={trimIn}
                   trimOut={trimOut}
-                  activeEdge={trimEdge}
                   onTrimIn={setTrimIn}
                   onTrimOut={setTrimOut}
-                  onActiveEdgeChange={setTrimEdge}
                   lang={lang}
                 />
               )}

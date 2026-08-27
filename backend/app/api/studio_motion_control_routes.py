@@ -40,7 +40,6 @@ from app.services.studio_motion_control import (
 )
 from app.services.studio_motion_video import (
     extract_first_frame_jpeg,
-    resolve_motion_video_uploaded,
 )
 from app.services.studio_openai import MAX_IMAGE_BYTES
 from app.services.workspace import PERM_STUDIO_GENERATE, assert_permission, resolve_billing_user, workspace_owner_id
@@ -311,7 +310,12 @@ async def execute_motion_control_dress(
         scene_mime = str(p.get("clothing_mime") or "image/jpeg")
     else:
         mv_id = str(p.get("motion_video_file_id") or "").strip()
-        vpath = resolve_motion_video_uploaded(oid, mv_id)
+        from app.services.studio_motion_video import (
+            resolve_motion_video_file,
+            resolve_motion_video_source,
+        )
+        # Для одежды берём исходный цветной кадр, не outline/silhouette.
+        vpath = resolve_motion_video_source(oid, mv_id) or resolve_motion_video_file(oid, mv_id)
         if vpath is None:
             raise RuntimeError("Референс-видео не найдено")
         scene_bytes = await anyio.to_thread.run_sync(
@@ -321,7 +325,7 @@ async def execute_motion_control_dress(
             raise RuntimeError("Не удалось извлечь кадр из видео")
     from app.services.studio_pose_reference import save_pose_reference_bytes
     from app.services.studio_image_token import create_pose_reference_access_token
-    scene_id = save_pose_reference_bytes(owner_id=oid, raw=scene_bytes, mime=scene_mime)
+    scene_id = save_pose_reference_bytes(owner_id=oid, raw=scene_bytes, content_type=scene_mime)
     body_url = _model_image_public_url(oid, int(body_im.id), pub)
     scene_tok = create_pose_reference_access_token(user_id=oid, ref_id=scene_id)
     scene_url = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
