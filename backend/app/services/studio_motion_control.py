@@ -20,14 +20,14 @@ MOTION_CONTROL_VIDEO_EDIT_PROMPT = (
     "appearance. Keep all movements, poses, camera trajectory, and timing from the video intact."
 )
 
-# Turnaround sheet для Motion Control (9:16, face + outfit из шага «Образ»).
+# Turnaround sheet для Motion Control (16:9, face + outfit из шага «Образ»).
 MOTION_CONTROL_TURNAROUND_PROMPT = (
     "Create a character turnaround reference sheet based on the attached face photo, "
-    "in a 9:16 vertical layout with the following arrangement:\n\n"
-    "Left side (narrow column):\n"
+    "in a 16:9 horizontal layout with the following arrangement:\n\n"
+    "Left third:\n"
     "One large close-up of the face, front view only (facing camera)\n"
     "Tight crop on head/face, same lighting and skin tone as the reference photo\n\n"
-    "Remaining space (rest of the canvas):\n"
+    "Right two-thirds:\n"
     "Full body, front view (facing camera)\n"
     "Full body, 3/4 view (turned ~45°)\n"
     "Full body, side/profile view (90°)\n"
@@ -41,13 +41,13 @@ MOTION_CONTROL_TURNAROUND_PROMPT = (
     "Photorealistic style, consistent skin tone and texture throughout\n"
     "Face identity, hairstyle and features must exactly match the attached reference photo\n"
     "No text, no watermarks, no borders/dividers between sections\n"
-    "Layout should fit naturally into a 9:16 canvas: face close-up occupies the left portion, "
-    "the four full-body views share the remaining space evenly, arranged in a way that keeps "
-    "each view clearly separated and fully visible"
+    "Layout should fit naturally into a 16:9 canvas: face close-up occupies the left third, "
+    "the four full-body views share the right two-thirds evenly, arranged so each view is "
+    "clearly separated and fully visible"
 )
 
-# Развёртка Motion Control — вертикальный лист 9:16 (не bootstrap 16:9).
-MOTION_CONTROL_SHEET_ASPECT = "9:16"
+# Развёртка Motion Control — горизонтальный лист 16:9.
+MOTION_CONTROL_SHEET_ASPECT = "16:9"
 
 
 def _ffmpeg_bin() -> str:

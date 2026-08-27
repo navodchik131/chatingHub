@@ -22,17 +22,19 @@ from app.services.demo_generations import (
 from app.services.studio_generation_placeholders import (
     find_studio_generation_by_job_id,
 )
-from app.services.studio_generation_storage import (
-    attach_studio_generation_wavespeed_task,
-    mark_studio_generation_failed,
-    studio_finish_image_generation,
-    try_recover_studio_generation_from_wavespeed,
-)
 from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_image_token import create_model_image_access_token
 from app.services.studio_keys import (
     load_owner_studio_billing,
     studio_wavespeed_api_key,
+)
+from app.services.studio_aspect import normalize_aspect_key
+from app.services.studio_generation_storage import (
+    attach_studio_generation_wavespeed_task,
+    mark_studio_generation_failed,
+    persist_studio_generation_from_uploaded_bytes,
+    studio_finish_image_generation,
+    try_recover_studio_generation_from_wavespeed,
 )
 from app.services.studio_motion_control import (
     MOTION_CONTROL_SHEET_ASPECT,
@@ -124,6 +126,128 @@ async def _preflight_image_job_cost(
     )
     if cost > 0:
         await ensure_can_consume_credits(session, user, cost)
+
+
+async def _persist_motion_control_upload(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    model_id: int,
+    raw: bytes,
+    content_type: str,
+    output_aspect: str,
+    prompt_excerpt: str,
+) -> dict[str, Any]:
+    """Сохраняем загруженное пользователем фото в архив без генерации и списания кредитов."""
+    from app.api.studio_routes import _public_app_base, _studio_archive_image_url
+
+    aspect = normalize_aspect_key(output_aspect)
+    gen_row = await persist_studio_generation_from_uploaded_bytes(
+        session,
+        owner_id=owner_id,
+        data=raw,
+        content_type=content_type,
+        output_aspect=aspect,
+        studio_model_id=model_id,
+        refined_prompt=prompt_excerpt,
+        motion_video_prompt_auto=None,
+    )
+    if gen_row is None:
+        raise HTTPException(status_code=500, detail="Не удалось сохранить загруженное фото.")
+    await session.commit()
+    arch = _public_app_base(None)
+    gid = gen_row.id
+    out_url = _studio_archive_image_url(owner_id, gid, arch) if gid else None
+    return {
+        "generation_id": gid,
+        "generated_image_url": out_url,
+        "refined_prompt": prompt_excerpt,
+        "status": "ready",
+    }
+
+
+async def _read_upload_image(upload: UploadFile, *, field_label: str) -> tuple[bytes, str]:
+    if upload is None or not (upload.filename or "").strip():
+        raise HTTPException(status_code=400, detail=f"Загрузите {field_label}.")
+    raw = await upload.read()
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=400, detail=f"Файл «{field_label}» слишком большой.")
+    if len(raw) < 64:
+        raise HTTPException(status_code=400, detail=f"Пустой файл «{field_label}».")
+    mime = "image/jpeg"
+    ct = (upload.content_type or "").strip().lower()
+    if ct.startswith("image/"):
+        mime = ct.split(";")[0]
+    return raw, mime
+
+
+@router.post("/studio/motion-control/upload-outfit", response_model=StudioModelBootstrapOut)
+async def api_motion_control_upload_outfit(
+    model_id: str = Form(...),
+    output_aspect: str = Form("9:16"),
+    outfit_image: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioModelBootstrapOut:
+    """Загрузить готовый образ вместо AI-генерации на шаге «Образ»."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    mid = _parse_int(model_id, field="model_id")
+    if mid is None:
+        raise HTTPException(status_code=400, detail="Укажите model_id")
+    sm = await session.get(UserStudioModel, mid)
+    if not sm or sm.user_id != oid:
+        raise HTTPException(status_code=404, detail="Модель не найдена")
+    raw, mime = await _read_upload_image(outfit_image, field_label="фото образа")
+    result = await _persist_motion_control_upload(
+        session,
+        owner_id=oid,
+        model_id=mid,
+        raw=raw,
+        content_type=mime,
+        output_aspect=output_aspect,
+        prompt_excerpt="Motion Control · образ (upload)",
+    )
+    return StudioModelBootstrapOut(
+        refined_prompt=result["refined_prompt"],
+        generated_image_url=result.get("generated_image_url"),
+        generation_id=result.get("generation_id"),
+    )
+
+
+@router.post("/studio/motion-control/upload-turnaround", response_model=StudioModelBootstrapOut)
+async def api_motion_control_upload_turnaround(
+    model_id: str = Form(...),
+    turnaround_image: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioModelBootstrapOut:
+    """Загрузить готовую развёртку вместо AI-генерации на шаге «Развёртка»."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    mid = _parse_int(model_id, field="model_id")
+    if mid is None:
+        raise HTTPException(status_code=400, detail="Укажите model_id")
+    sm = await session.get(UserStudioModel, mid)
+    if not sm or sm.user_id != oid:
+        raise HTTPException(status_code=404, detail="Модель не найдена")
+    raw, mime = await _read_upload_image(turnaround_image, field_label="фото развёртки")
+    result = await _persist_motion_control_upload(
+        session,
+        owner_id=oid,
+        model_id=mid,
+        raw=raw,
+        content_type=mime,
+        output_aspect=MOTION_CONTROL_SHEET_ASPECT,
+        prompt_excerpt="Motion Control · развёртка (upload)",
+    )
+    return StudioModelBootstrapOut(
+        refined_prompt=result["refined_prompt"],
+        generated_image_url=result.get("generated_image_url"),
+        generation_id=result.get("generation_id"),
+    )
+
+
 @router.post(
     "/studio/motion-control/dress-outfit",
     response_model=StudioModelBootstrapOut,

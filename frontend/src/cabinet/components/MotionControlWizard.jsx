@@ -53,6 +53,8 @@ export default function MotionControlWizard({
   const simplifiedUi = isUiSimplified(cabinet.me);
   const videoRef = useRef(null);
   const clothingRef = useRef(null);
+  const outfitUploadRef = useRef(null);
+  const turnaroundUploadRef = useRef(null);
 
   const model = (cabinet.models || []).find((m) => sameStudioModelId(m.id, cabinet.selectedModelId));
   const modelImages = model?.images || [];
@@ -66,6 +68,8 @@ export default function MotionControlWizard({
   const [baseImageId, setBaseImageId] = useState(null);
   const [faceImageId, setFaceImageId] = useState(null);
   const [outfitRoute, setOutfitRoute] = useState('video');
+  const [outfitSource, setOutfitSource] = useState('generate');
+  const [turnSource, setTurnSource] = useState('generate');
   const [dressModelId, setDressModelId] = useState(s.aiModel || 'wan-2.7');
   const [turnModelId, setTurnModelId] = useState('gpt-image-2');
   const [outfitState, setOutfitState] = useState('idle');
@@ -101,6 +105,20 @@ export default function MotionControlWizard({
     setTurnaroundPreviewUrl('');
     setTurnState('idle');
   }, [cabinet.selectedModelId, cabinet.motionVideoFileId, outfitRoute, baseImageId]);
+
+  useEffect(() => {
+    setOutfitGenId(null);
+    setOutfitPreviewUrl('');
+    setOutfitState('idle');
+    cabinet.setUploadFile('mc-outfit-upload', null);
+  }, [outfitSource, cabinet.setUploadFile]);
+
+  useEffect(() => {
+    setTurnaroundGenId(null);
+    setTurnaroundPreviewUrl('');
+    setTurnState('idle');
+    cabinet.setUploadFile('mc-turnaround-upload', null);
+  }, [turnSource, cabinet.setUploadFile]);
 
   const dressWaveProfile = s.contentMode === 'sfw' ? 'regular' : 'nsfw';
   const dressWave = useMemo(
@@ -156,8 +174,8 @@ export default function MotionControlWizard({
     });
   }, [isEvolink, evolinkPricing, cabinet.health, cabinet.motionVideoFileId, clipDuration, s.vidQuality, s.vidSeedanceVariant]);
 
-  const totalCredits = (outfitState === 'done' ? 0 : dressCredits)
-    + (turnState === 'done' ? 0 : turnCredits)
+  const totalCredits = (outfitSource === 'generate' && outfitState !== 'done' ? dressCredits : 0)
+    + (turnSource === 'generate' && turnState !== 'done' ? turnCredits : 0)
     + videoCredits;
 
   const engineModels = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
@@ -178,6 +196,7 @@ export default function MotionControlWizard({
   };
 
   const runDress = useCallback(async () => {
+    if (outfitSource !== 'generate') return;
     if (!cabinet.selectedModelId || !baseImageId) {
       cabinet.setError(lang === 'ru' ? 'Выберите персонажа и фото для образа' : 'Pick character and base photo');
       return;
@@ -217,9 +236,38 @@ export default function MotionControlWizard({
       setOutfitState('idle');
       cabinet.setError(e?.message || String(e));
     }
-  }, [cabinet, baseImageId, outfitRoute, dressModelId, dressWaveProfile, s.vidFormat, s.contentMode, lang]);
+  }, [cabinet, baseImageId, outfitRoute, dressModelId, dressWaveProfile, s.vidFormat, s.contentMode, lang, outfitSource]);
+
+  const uploadOutfit = useCallback(async () => {
+    if (!cabinet.selectedModelId) {
+      cabinet.setError(lang === 'ru' ? 'Выберите персонажа' : 'Pick a character');
+      return;
+    }
+    const file = cabinet.uploadFiles['mc-outfit-upload'];
+    if (!file) {
+      cabinet.setError(lang === 'ru' ? 'Загрузите фото образа' : 'Upload outfit photo');
+      return;
+    }
+    setOutfitState('loading');
+    cabinet.setError(null);
+    try {
+      const result = await cabinet.uploadMotionControlOutfit({
+        modelId: cabinet.selectedModelId,
+        file,
+        outputAspect: s.vidFormat || '9:16',
+      });
+      setOutfitGenId(result?.generation_id ?? null);
+      setOutfitPreviewUrl(result?.generated_image_url || '');
+      setOutfitState('done');
+      await cabinet.refreshArchiveFull();
+    } catch (e) {
+      setOutfitState('idle');
+      cabinet.setError(e?.message || String(e));
+    }
+  }, [cabinet, s.vidFormat, lang]);
 
   const runTurnaround = useCallback(async () => {
+    if (turnSource !== 'generate') return;
     if (!outfitGenId || !faceImageId) {
       cabinet.setError(lang === 'ru' ? 'Сначала соберите образ и выберите лицо' : 'Build outfit and pick face');
       return;
@@ -246,7 +294,34 @@ export default function MotionControlWizard({
       setTurnState('idle');
       cabinet.setError(e?.message || String(e));
     }
-  }, [cabinet, outfitGenId, faceImageId, turnWave, dressWaveProfile, lang]);
+  }, [cabinet, outfitGenId, faceImageId, turnWave, dressWaveProfile, lang, turnSource]);
+
+  const uploadTurnaround = useCallback(async () => {
+    if (!cabinet.selectedModelId) {
+      cabinet.setError(lang === 'ru' ? 'Выберите персонажа' : 'Pick a character');
+      return;
+    }
+    const file = cabinet.uploadFiles['mc-turnaround-upload'];
+    if (!file) {
+      cabinet.setError(lang === 'ru' ? 'Загрузите фото развёртки' : 'Upload turnaround photo');
+      return;
+    }
+    setTurnState('loading');
+    cabinet.setError(null);
+    try {
+      const result = await cabinet.uploadMotionControlTurnaround({
+        modelId: cabinet.selectedModelId,
+        file,
+      });
+      setTurnaroundGenId(result?.generation_id ?? null);
+      setTurnaroundPreviewUrl(result?.generated_image_url || '');
+      setTurnState('done');
+      await cabinet.refreshArchiveFull();
+    } catch (e) {
+      setTurnState('idle');
+      cabinet.setError(e?.message || String(e));
+    }
+  }, [cabinet, lang]);
 
   const handleGenerateVideo = () => {
     if (!cabinet.motionVideoFileId) {
@@ -254,7 +329,7 @@ export default function MotionControlWizard({
       return;
     }
     if (!turnaroundGenId) {
-      cabinet.setError(lang === 'ru' ? 'Сгенерируйте развёртку перед видео' : 'Generate turnaround first');
+      cabinet.setError(lang === 'ru' ? 'Подготовьте развёртку перед видео' : 'Prepare turnaround before video');
       return;
     }
     void onGenerate({
@@ -386,56 +461,145 @@ export default function MotionControlWizard({
             <Eyebrow>{lang === 'ru' ? '3 · ОБРАЗ' : '3 · OUTFIT'}</Eyebrow>
             <div style={{ flex: 1 }} />
             <div style={{ display: 'flex', gap: 5 }}>
-              <Chip on={outfitRoute === 'video'} onClick={() => setOutfitRoute('video')}>
-                {lang === 'ru' ? 'С видео' : 'From video'}
+              <Chip on={outfitSource === 'generate'} onClick={() => setOutfitSource('generate')}>
+                {lang === 'ru' ? 'Сгенерировать' : 'Generate'}
               </Chip>
-              <Chip on={outfitRoute === 'own'} onClick={() => setOutfitRoute('own')}>
-                {lang === 'ru' ? 'Своя одежда' : 'Own clothing'}
+              <Chip on={outfitSource === 'upload'} onClick={() => setOutfitSource('upload')}>
+                {lang === 'ru' ? 'Своё фото' : 'Own photo'}
               </Chip>
             </div>
           </div>
-          <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 8, lineHeight: 1.5 }}>
-            {outfitRoute === 'video'
-              ? (lang === 'ru'
-                ? 'Берём одежду с первого кадра реф-видео и одеваем выбранное фото модели.'
-                : 'Dress selected model photo using clothing from the first video frame.')
-              : (lang === 'ru'
-                ? 'Загрузите фото одежды и выберите фото персонажа.'
-                : 'Upload clothing reference and pick character photo.')}
-          </div>
 
-          <div style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: 1.2, color: color.textGhost, margin: '14px 0 8px' }}>
-            {lang === 'ru' ? 'ФОТО ПЕРСОНАЖА, КОТОРОЕ ОДЕВАЕМ' : 'CHARACTER PHOTO TO DRESS'}
-          </div>
-          <div style={{ display: 'flex', gap: 9, overflowX: 'auto', paddingBottom: 4 }}>
-            {basePhotos.map((im) => (
-              <div
-                key={im.id}
-                style={photoPickStyle(Number(baseImageId) === Number(im.id))}
-                onClick={() => setBaseImageId(Number(im.id))}
-              >
-                <img src={im.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                <span style={{
-                  position: 'absolute', left: 5, bottom: 5, fontFamily: font.mono, fontSize: 8,
-                  color: '#fff', background: 'rgba(10,11,13,.76)', borderRadius: 5, padding: '1px 5px',
-                }}
+          {outfitSource === 'generate' ? (
+            <>
+              <div style={{ display: 'flex', gap: 5, marginTop: 10, justifyContent: 'flex-end' }}>
+                <Chip on={outfitRoute === 'video'} onClick={() => setOutfitRoute('video')}>
+                  {lang === 'ru' ? 'С видео' : 'From video'}
+                </Chip>
+                <Chip on={outfitRoute === 'own'} onClick={() => setOutfitRoute('own')}>
+                  {lang === 'ru' ? 'Своя одежда' : 'Own clothing'}
+                </Chip>
+              </div>
+              <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 8, lineHeight: 1.5 }}>
+                {outfitRoute === 'video'
+                  ? (lang === 'ru'
+                    ? 'Берём одежду с первого кадра реф-видео и одеваем выбранное фото модели.'
+                    : 'Dress selected model photo using clothing from the first video frame.')
+                  : (lang === 'ru'
+                    ? 'Загрузите фото одежды и выберите фото персонажа.'
+                    : 'Upload clothing reference and pick character photo.')}
+              </div>
+
+              <div style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: 1.2, color: color.textGhost, margin: '14px 0 8px' }}>
+                {lang === 'ru' ? 'ФОТО ПЕРСОНАЖА, КОТОРОЕ ОДЕВАЕМ' : 'CHARACTER PHOTO TO DRESS'}
+              </div>
+              <div style={{ display: 'flex', gap: 9, overflowX: 'auto', paddingBottom: 4 }}>
+                {basePhotos.map((im) => (
+                  <div
+                    key={im.id}
+                    style={photoPickStyle(Number(baseImageId) === Number(im.id))}
+                    onClick={() => setBaseImageId(Number(im.id))}
+                  >
+                    <img src={im.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <span style={{
+                      position: 'absolute', left: 5, bottom: 5, fontFamily: font.mono, fontSize: 8,
+                      color: '#fff', background: 'rgba(10,11,13,.76)', borderRadius: 5, padding: '1px 5px',
+                    }}
+                    >
+                      {photoKindShortLabel(lang, im.kind)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {outfitRoute === 'own' && (
+                <>
+                  <input
+                    ref={clothingRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) cabinet.setUploadFile('mc-clothing', file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Hoverable
+                    style={{
+                      marginTop: 12,
+                      borderRadius: 12,
+                      padding: 16,
+                      cursor: 'pointer',
+                      ...refUploadStyle(Boolean(cabinet.uploadFiles['mc-clothing'])).base,
+                    }}
+                    hover={refUploadStyle(Boolean(cabinet.uploadFiles['mc-clothing'])).hover}
+                    onClick={() => clothingRef.current?.click()}
+                  >
+                    <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: color.textDim }}>
+                      {cabinet.uploadFiles['mc-clothing']?.name || (lang === 'ru' ? 'Загрузить одежду' : 'Upload clothing')}
+                    </span>
+                  </Hoverable>
+                </>
+              )}
+
+              {!simplifiedUi && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
+                    {lang === 'ru' ? 'МОДЕЛЬ ФОТО' : 'IMAGE MODEL'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {dressModels.map((m) => {
+                      const on = dressModelId === m.id;
+                      const st = cardPickStyle(on);
+                      return (
+                        <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setDressModelId(m.id)}>
+                          <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
+                        </Hoverable>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                <Hoverable
+                  style={{
+                    background: color.lime,
+                    color: color.limeInk,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    borderRadius: 11,
+                    padding: '10px 16px',
+                    cursor: outfitState === 'loading' ? 'wait' : 'pointer',
+                    opacity: outfitState === 'loading' ? 0.7 : 1,
+                  }}
+                  hover={{ filter: 'brightness(1.05)' }}
+                  onClick={() => { if (outfitState !== 'loading') void runDress(); }}
                 >
-                  {photoKindShortLabel(lang, im.kind)}
+                  {lang === 'ru' ? 'Одеть в одежду' : 'Dress outfit'}
+                </Hoverable>
+                <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textDim }}>
+                  −{formatImageCostBadge(dressCredits, lang)}
                 </span>
               </div>
-            ))}
-          </div>
-
-          {outfitRoute === 'own' && (
+            </>
+          ) : (
             <>
+              <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 8, lineHeight: 1.5 }}>
+                {lang === 'ru'
+                  ? 'Загрузите готовое фото образа — генерация не нужна, кредиты не списываются.'
+                  : 'Upload a ready outfit photo — no generation, no credits charged.'}
+              </div>
               <input
-                ref={clothingRef}
+                ref={outfitUploadRef}
                 type="file"
                 accept="image/*"
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) cabinet.setUploadFile('mc-clothing', file);
+                  if (file) cabinet.setUploadFile('mc-outfit-upload', file);
                   e.target.value = '';
                 }}
               />
@@ -445,41 +609,54 @@ export default function MotionControlWizard({
                   borderRadius: 12,
                   padding: 16,
                   cursor: 'pointer',
-                  ...refUploadStyle(Boolean(cabinet.uploadFiles['mc-clothing'])).base,
+                  ...refUploadStyle(Boolean(cabinet.uploadFiles['mc-outfit-upload'])).base,
                 }}
-                hover={refUploadStyle(Boolean(cabinet.uploadFiles['mc-clothing'])).hover}
-                onClick={() => clothingRef.current?.click()}
+                hover={refUploadStyle(Boolean(cabinet.uploadFiles['mc-outfit-upload'])).hover}
+                onClick={() => outfitUploadRef.current?.click()}
               >
                 <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: color.textDim }}>
-                  {cabinet.uploadFiles['mc-clothing']?.name || (lang === 'ru' ? 'Загрузить одежду' : 'Upload clothing')}
+                  {cabinet.uploadFiles['mc-outfit-upload']?.name || (lang === 'ru' ? 'Загрузить фото образа' : 'Upload outfit photo')}
                 </span>
               </Hoverable>
+              {cabinet.uploadPreviewUrls?.['mc-outfit-upload'] && outfitState !== 'done' && (
+                <div style={{ marginTop: 12 }}>
+                  <img
+                    src={cabinet.uploadPreviewUrls['mc-outfit-upload']}
+                    alt=""
+                    style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}` }}
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                <Hoverable
+                  style={{
+                    background: color.lime,
+                    color: color.limeInk,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    borderRadius: 11,
+                    padding: '10px 16px',
+                    cursor: outfitState === 'loading' ? 'wait' : 'pointer',
+                    opacity: outfitState === 'loading' ? 0.7 : 1,
+                  }}
+                  hover={{ filter: 'brightness(1.05)' }}
+                  onClick={() => { if (outfitState !== 'loading') void uploadOutfit(); }}
+                >
+                  {lang === 'ru' ? 'Использовать фото' : 'Use photo'}
+                </Hoverable>
+                <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textDim }}>
+                  {lang === 'ru' ? 'бесплатно' : 'free'}
+                </span>
+              </div>
             </>
-          )}
-
-          {!simplifiedUi && (
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
-                {lang === 'ru' ? 'МОДЕЛЬ ФОТО' : 'IMAGE MODEL'}
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {dressModels.map((m) => {
-                  const on = dressModelId === m.id;
-                  const st = cardPickStyle(on);
-                  return (
-                    <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setDressModelId(m.id)}>
-                      <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
-                    </Hoverable>
-                  );
-                })}
-              </div>
-            </div>
           )}
 
           {outfitState === 'loading' && (
             <div style={{ marginTop: 12, fontSize: 11, color: '#38BDF8' }}>
-              {lang === 'ru' ? 'Собираем образ…' : 'Building outfit…'}
+              {outfitSource === 'upload'
+                ? (lang === 'ru' ? 'Загружаем образ…' : 'Uploading outfit…')
+                : (lang === 'ru' ? 'Собираем образ…' : 'Building outfit…')}
             </div>
           )}
           {outfitState === 'done' && outfitPreviewUrl && (
@@ -487,72 +664,158 @@ export default function MotionControlWizard({
               <img src={outfitPreviewUrl} alt="" style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}` }} />
             </div>
           )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            <Hoverable
-              style={{
-                background: color.lime,
-                color: color.limeInk,
-                fontWeight: 800,
-                fontSize: 13,
-                borderRadius: 11,
-                padding: '10px 16px',
-                cursor: outfitState === 'loading' ? 'wait' : 'pointer',
-                opacity: outfitState === 'loading' ? 0.7 : 1,
-              }}
-              hover={{ filter: 'brightness(1.05)' }}
-              onClick={() => { if (outfitState !== 'loading') void runDress(); }}
-            >
-              {lang === 'ru' ? 'Одеть в одежду' : 'Dress outfit'}
-            </Hoverable>
-            <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textDim }}>
-              −{formatImageCostBadge(dressCredits, lang)}
-            </span>
-          </div>
         </div>
 
         {/* 4 · Развёртка */}
         <div style={stepBlock}>
-          <Eyebrow>{lang === 'ru' ? '4 · РАЗВЁРТКА' : '4 · TURNAROUND'}</Eyebrow>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Eyebrow>{lang === 'ru' ? '4 · РАЗВЁРТКА' : '4 · TURNAROUND'}</Eyebrow>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', gap: 5 }}>
+              <Chip on={turnSource === 'generate'} onClick={() => setTurnSource('generate')}>
+                {lang === 'ru' ? 'Сгенерировать' : 'Generate'}
+              </Chip>
+              <Chip on={turnSource === 'upload'} onClick={() => setTurnSource('upload')}>
+                {lang === 'ru' ? 'Своё фото' : 'Own photo'}
+              </Chip>
+            </div>
+          </div>
           <div style={{ fontSize: 11, color: color.textDim, marginTop: 6, lineHeight: 1.45 }}>
-            {lang === 'ru' ? 'Образ + лицо (face) → character sheet 9:16' : 'Outfit + face tag → 9:16 character sheet'}
+            {lang === 'ru' ? 'Character sheet 16:9 для video-edit' : '16:9 character sheet for video-edit'}
           </div>
 
-          <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, margin: '12px 0 8px' }}>
-            {lang === 'ru' ? 'ЛИЦО ПЕРСОНАЖА (FACE)' : 'FACE PHOTO'}
-          </div>
-          <div style={{ display: 'flex', gap: 9, overflowX: 'auto', paddingBottom: 4 }}>
-            {(faceImages.length ? faceImages : modelImages).map((im) => (
-              <div
-                key={im.id}
-                style={photoPickStyle(Number(faceImageId) === Number(im.id))}
-                onClick={() => setFaceImageId(Number(im.id))}
-              >
-                <img src={im.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          {turnSource === 'generate' ? (
+            <>
+              <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, margin: '12px 0 8px' }}>
+                {lang === 'ru' ? 'ЛИЦО ПЕРСОНАЖА (FACE)' : 'FACE PHOTO'}
               </div>
-            ))}
-          </div>
+              <div style={{ display: 'flex', gap: 9, overflowX: 'auto', paddingBottom: 4 }}>
+                {(faceImages.length ? faceImages : modelImages).map((im) => (
+                  <div
+                    key={im.id}
+                    style={photoPickStyle(Number(faceImageId) === Number(im.id))}
+                    onClick={() => setFaceImageId(Number(im.id))}
+                  >
+                    <img src={im.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </div>
+                ))}
+              </div>
 
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
-              {lang === 'ru' ? 'МОДЕЛЬ ГЕНЕРАЦИИ' : 'GENERATION MODEL'}
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {turnModels.map((m) => {
-                const on = turnModelId === m.id;
-                const st = cardPickStyle(on);
-                return (
-                  <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setTurnModelId(m.id)}>
-                    <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
-                  </Hoverable>
-                );
-              })}
-            </div>
-          </div>
+              {!simplifiedUi && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
+                    {lang === 'ru' ? 'МОДЕЛЬ ГЕНЕРАЦИИ' : 'GENERATION MODEL'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {turnModels.map((m) => {
+                      const on = turnModelId === m.id;
+                      const st = cardPickStyle(on);
+                      return (
+                        <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setTurnModelId(m.id)}>
+                          <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
+                        </Hoverable>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                <Hoverable
+                  style={{
+                    background: 'rgba(56,189,248,.15)',
+                    border: '1px solid rgba(56,189,248,.35)',
+                    color: '#7DD3FC',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    borderRadius: 11,
+                    padding: '10px 16px',
+                    cursor: turnState === 'loading' ? 'wait' : 'pointer',
+                    opacity: turnState === 'loading' ? 0.7 : 1,
+                  }}
+                  hover={{ background: 'rgba(56,189,248,.22)' }}
+                  onClick={() => { if (turnState !== 'loading') void runTurnaround(); }}
+                >
+                  {lang === 'ru' ? 'Сгенерировать развёртку' : 'Generate turnaround'}
+                </Hoverable>
+                <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textDim }}>
+                  −{formatImageCostBadge(turnCredits, lang)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 8, lineHeight: 1.5 }}>
+                {lang === 'ru'
+                  ? 'Загрузите готовую развёртку 16:9 — генерация не нужна, кредиты не списываются.'
+                  : 'Upload a ready 16:9 turnaround — no generation, no credits charged.'}
+              </div>
+              <input
+                ref={turnaroundUploadRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) cabinet.setUploadFile('mc-turnaround-upload', file);
+                  e.target.value = '';
+                }}
+              />
+              <Hoverable
+                style={{
+                  marginTop: 12,
+                  borderRadius: 12,
+                  padding: 16,
+                  cursor: 'pointer',
+                  ...refUploadStyle(Boolean(cabinet.uploadFiles['mc-turnaround-upload'])).base,
+                }}
+                hover={refUploadStyle(Boolean(cabinet.uploadFiles['mc-turnaround-upload'])).hover}
+                onClick={() => turnaroundUploadRef.current?.click()}
+              >
+                <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: color.textDim }}>
+                  {cabinet.uploadFiles['mc-turnaround-upload']?.name || (lang === 'ru' ? 'Загрузить развёртку' : 'Upload turnaround')}
+                </span>
+              </Hoverable>
+              {cabinet.uploadPreviewUrls?.['mc-turnaround-upload'] && turnState !== 'done' && (
+                <div style={{ marginTop: 12 }}>
+                  <img
+                    src={cabinet.uploadPreviewUrls['mc-turnaround-upload']}
+                    alt=""
+                    style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 12, border: `1px solid ${line.soft}` }}
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                <Hoverable
+                  style={{
+                    background: 'rgba(56,189,248,.15)',
+                    border: '1px solid rgba(56,189,248,.35)',
+                    color: '#7DD3FC',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    borderRadius: 11,
+                    padding: '10px 16px',
+                    cursor: turnState === 'loading' ? 'wait' : 'pointer',
+                    opacity: turnState === 'loading' ? 0.7 : 1,
+                  }}
+                  hover={{ background: 'rgba(56,189,248,.22)' }}
+                  onClick={() => { if (turnState !== 'loading') void uploadTurnaround(); }}
+                >
+                  {lang === 'ru' ? 'Использовать фото' : 'Use photo'}
+                </Hoverable>
+                <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textDim }}>
+                  {lang === 'ru' ? 'бесплатно' : 'free'}
+                </span>
+              </div>
+            </>
+          )}
 
           {turnState === 'loading' && (
             <div style={{ marginTop: 12, fontSize: 11, color: '#38BDF8' }}>
-              {lang === 'ru' ? 'Генерируем развёртку…' : 'Generating turnaround…'}
+              {turnSource === 'upload'
+                ? (lang === 'ru' ? 'Загружаем развёртку…' : 'Uploading turnaround…')
+                : (lang === 'ru' ? 'Генерируем развёртку…' : 'Generating turnaround…')}
             </div>
           )}
           {turnState === 'done' && turnaroundPreviewUrl && (
@@ -560,29 +823,6 @@ export default function MotionControlWizard({
               <img src={turnaroundPreviewUrl} alt="" style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 12, border: `1px solid ${line.soft}` }} />
             </div>
           )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            <Hoverable
-              style={{
-                background: 'rgba(56,189,248,.15)',
-                border: '1px solid rgba(56,189,248,.35)',
-                color: '#7DD3FC',
-                fontWeight: 800,
-                fontSize: 13,
-                borderRadius: 11,
-                padding: '10px 16px',
-                cursor: turnState === 'loading' ? 'wait' : 'pointer',
-                opacity: turnState === 'loading' ? 0.7 : 1,
-              }}
-              hover={{ background: 'rgba(56,189,248,.22)' }}
-              onClick={() => { if (turnState !== 'loading') void runTurnaround(); }}
-            >
-              {lang === 'ru' ? 'Сгенерировать развёртку' : 'Generate turnaround'}
-            </Hoverable>
-            <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textDim }}>
-              −{formatImageCostBadge(turnCredits, lang)}
-            </span>
-          </div>
         </div>
       </div>
 
