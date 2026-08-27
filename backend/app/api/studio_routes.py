@@ -2466,38 +2466,8 @@ async def api_studio_motion_upload_driving_video(
             )
         if not raw_video:
             raise HTTPException(status_code=400, detail="Пустой файл видео.")
-
-        import os
-        import tempfile
-
-        from app.services.motion_video_outline import validate_motion_video_upload
-        from app.services.studio_motion_video import ensure_motion_video_wavespeed_ready
-
-        fd, tmp_path_str = tempfile.mkstemp(
-            prefix="motion_upload_",
-            suffix=Path(video.filename or "v.mp4").suffix or ".mp4",
-        )
-        os.close(fd)
-        tmp_path = Path(tmp_path_str)
-        norm_path: Path | None = None
-        norm_temp = False
-        try:
-            tmp_path.write_bytes(raw_video)
-            meta = validate_motion_video_upload(tmp_path, raw_size=len(raw_video))
-            norm_path, norm_temp, _ = ensure_motion_video_wavespeed_ready(tmp_path)
-            save_raw = norm_path.read_bytes() if norm_temp else raw_video
-            fid = save_motion_video_bytes(owner_id=oid, raw=save_raw, filename="motion_ref.mp4")
-        except RuntimeError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        finally:
-            if norm_temp and norm_path is not None:
-                norm_path.unlink(missing_ok=True)
-            tmp_path.unlink(missing_ok=True)
-        return StudioMotionDrivingVideoUploadOut(
-            motion_video_file_id=fid,
-            status="ready",
-            duration_seconds=meta.duration_sec,
-        )
+        fid = save_motion_video_bytes(owner_id=oid, raw=raw_video, filename=video.filename)
+        return StudioMotionDrivingVideoUploadOut(motion_video_file_id=fid, status="ready")
 
     if video is None or not (video.filename or "").strip():
         raise HTTPException(status_code=400, detail="Выберите файл видео (MP4/WebM/MOV).")
@@ -8244,7 +8214,6 @@ async def _studio_job_execute_motion_render_video(
     motion_vid_url: str | None = None
     motion_aud_url: str | None = None
     motion_summary: str | None = motion_timeline or None
-    motion_video_dur: int | None = None
     vpath = None
     if mv_id:
         # Motion Control wizard → video-edit по цветному клипу, без contour/silhouette.
@@ -8295,19 +8264,16 @@ async def _studio_job_execute_motion_render_video(
                         trimmed_path.unlink(missing_ok=True)
 
             ds_for_fit = motion_video_duration_seconds(duration_seconds)
-            mv_id_eff, _, probed_dur = prepare_motion_video_file_for_duration(
-                owner_id=oid,
-                file_id=mv_id,
-                source_path=vpath,
-                target_sec=ds_for_fit,
-            )
-            if probed_dur is None or probed_dur <= 0:
-                raise RuntimeError(
-                    "Не удалось определить длительность референс-видео. Загрузите файл заново."
-                )
-            motion_video_dur = probed_dur
             if motion_control_wizard:
-                ds_effective = probed_dur
+                # Wizard video-edit: цветной клип как есть (после trim), без fit/pad под billing.
+                mv_id_eff = mv_id
+            else:
+                mv_id_eff, _, _ = prepare_motion_video_file_for_duration(
+                    owner_id=oid,
+                    file_id=mv_id,
+                    source_path=vpath,
+                    target_sec=ds_for_fit,
+                )
             vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
             motion_vid_url = (
                 f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
@@ -8828,7 +8794,7 @@ async def _studio_job_execute_motion_render_video(
                         prompt=seed_prompt,
                         aspect_ratio=ar_edit,
                         resolution=video_res_edit,
-                        duration=motion_video_dur if motion_control_wizard else ds_effective,
+                        duration=None if motion_control_wizard else ds_effective,
                         keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
                         variant=seedance_v,
                     )

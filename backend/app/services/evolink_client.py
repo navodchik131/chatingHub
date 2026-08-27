@@ -345,6 +345,13 @@ async def _load_media_bytes_for_evolink_mirror(
         local = await read_studio_public_media_bytes(session, url)
         if local is not None:
             return local
+    if "/studio/public-motion-video" in url:
+        raise RuntimeError(
+            format_evolink_user_error(
+                f"Референс-видео не найдено на сервере при чтении {label} для EvoLink. "
+                "Загрузите видео заново на шаге 1 wizard."
+            )
+        )
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         r = await client.get(url)
         if r.status_code >= 400:

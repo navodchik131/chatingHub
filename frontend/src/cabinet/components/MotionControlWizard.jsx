@@ -108,7 +108,7 @@ export default function MotionControlWizard({
     if (faceImageId == null && faceImages[0]?.id != null) setFaceImageId(Number(faceImages[0].id));
   }, [cabinet.selectedModelId, basePhotos, faceImages, baseImageId, faceImageId]);
 
-  /** Восстановление шагов wizard из sessionStorage при возврате на вкладку. */
+  /** Восстановление шагов wizard из sessionStorage (один раз при открытии вкладки). */
   useEffect(() => {
     skipPersistRef.current = true;
     const saved = loadMcWizardState(wizardStorageKey);
@@ -124,14 +124,8 @@ export default function MotionControlWizard({
       if (saved.turnaroundGenId != null) setTurnaroundGenId(Number(saved.turnaroundGenId));
       setOutfitState(saved.outfitState === 'done' ? 'done' : 'idle');
       setTurnState(saved.turnState === 'done' ? 'done' : 'idle');
-      setOutfitPreviewUrl(
-        saved.outfitPreviewUrl
-        || genArchivePreviewUrl(saved.outfitGenId, cabinet.archiveImages),
-      );
-      setTurnaroundPreviewUrl(
-        saved.turnaroundPreviewUrl
-        || genArchivePreviewUrl(saved.turnaroundGenId, cabinet.archiveImages),
-      );
+      setOutfitPreviewUrl(saved.outfitPreviewUrl || '');
+      setTurnaroundPreviewUrl(saved.turnaroundPreviewUrl || '');
       if (saved.trimMode) setTrimMode(saved.trimMode);
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
@@ -141,7 +135,21 @@ export default function MotionControlWizard({
     }
     const t = window.setTimeout(() => { skipPersistRef.current = false; }, 0);
     return () => window.clearTimeout(t);
-  }, [wizardStorageKey, cabinet.archiveImages, cabinet.restoreMotionVideoSession]);
+  }, [wizardStorageKey, cabinet.restoreMotionVideoSession]);
+
+  /** Превью outfit/turnaround из архива после подгрузки списка генераций. */
+  useEffect(() => {
+    const saved = loadMcWizardState(wizardStorageKey);
+    if (!saved) return;
+    if (!outfitPreviewUrl && saved.outfitGenId != null) {
+      const url = genArchivePreviewUrl(saved.outfitGenId, cabinet.archiveImages);
+      if (url) setOutfitPreviewUrl(url);
+    }
+    if (!turnaroundPreviewUrl && saved.turnaroundGenId != null) {
+      const url = genArchivePreviewUrl(saved.turnaroundGenId, cabinet.archiveImages);
+      if (url) setTurnaroundPreviewUrl(url);
+    }
+  }, [wizardStorageKey, cabinet.archiveImages, outfitPreviewUrl, turnaroundPreviewUrl]);
 
   useEffect(() => {
     if (skipPersistRef.current) return;

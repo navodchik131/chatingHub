@@ -191,6 +191,7 @@ async def execute_evolink_motion_render_video(
         n_start = 1
 
     motion_vid_url: str | None = None
+    motion_vid_evolink_url: str | None = None
     motion_aud_url: str | None = None
     motion_summary = motion_timeline or None
     vpath = None
@@ -238,11 +239,33 @@ async def execute_evolink_motion_render_video(
                 if is_temp:
                     trimmed_path.unlink(missing_ok=True)
 
-        mv_id_eff, _vpath_eff, ref_video_duration = prepare_motion_video_file_for_duration(
-            owner_id=oid,
-            file_id=mv_id,
-            source_path=vpath,
-            target_sec=ds_effective,
+        if motion_control_wizard:
+            mv_id_eff = mv_id
+            vpath_eff = vpath
+            from app.services.studio_motion_video import probe_video_duration_seconds
+
+            probed = probe_video_duration_seconds(vpath_eff) if vpath_eff else None
+            ref_video_duration = (
+                int(math.ceil(probed)) if probed and probed > 0 else ds_effective
+            )
+        else:
+            mv_id_eff, vpath_eff, ref_video_duration = prepare_motion_video_file_for_duration(
+                owner_id=oid,
+                file_id=mv_id,
+                source_path=vpath,
+                target_sec=ds_effective,
+            )
+        if vpath_eff is None or not vpath_eff.is_file():
+            raise RuntimeError(
+                "Референс-видео не найдено на сервере. Загрузите файл заново на шаге 1."
+            )
+        # EvoLink: зеркалим с диска, а не через JWT URL (частый 404 при устаревшем file_id).
+        from app.services.evolink_client import evolink_upload_file_bytes
+
+        motion_vid_evolink_url = await evolink_upload_file_bytes(
+            data=vpath_eff.read_bytes(),
+            filename="motion_ref.mp4",
+            content_type="video/mp4",
         )
         vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
         motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
@@ -250,7 +273,7 @@ async def execute_evolink_motion_render_video(
             motion_aud_url = f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
 
     ref_images: list[str] = []
-    ref_videos = [motion_vid_url] if motion_vid_url else []
+    ref_videos = [motion_vid_evolink_url or motion_vid_url] if (motion_vid_evolink_url or motion_vid_url) else []
     n_model = 0
     n_outfit = 0
     prompt_source = "template"

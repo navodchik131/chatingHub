@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import BACKEND_DIR, settings
+from app.config import BACKEND_DIR
 from app.db.models import StudioGeneration, UserStudioModel, UserStudioModelImage
 from app.services.studio_generation_storage import generation_has_archive_file
 from app.services.studio_image_token import (
@@ -23,11 +23,8 @@ def _studio_public_url_paths(url: str) -> tuple[str, str] | None:
     if not raw:
         return None
     parsed = urlparse(raw)
-    pub = (settings.public_app_url or "").strip().rstrip("/")
-    if pub:
-        pub_host = urlparse(pub if "://" in pub else f"https://{pub}").netloc.lower()
-        if parsed.netloc and pub_host and parsed.netloc.lower() != pub_host:
-            return None
+    # Локальное чтение по JWT-path не зависит от host в URL — иначе EvoLink mirror
+    # падает в HTTP 404, если PUBLIC_APP_URL и фактический host расходятся.
     path = parsed.path.rstrip("/")
     if "/studio/public-" not in path:
         return None
