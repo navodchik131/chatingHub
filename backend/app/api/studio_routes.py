@@ -7822,6 +7822,50 @@ async def api_studio_motion_render_video(
         )
 
     try:
+        accept_params: dict[str, Any] = {
+            "model_id": mid,
+            "prompt": (prompt or "").strip(),
+            "output_aspect": aspect_key,
+            "motion_video_file_id": mv_id,
+            "first_frame_generation_id": ff_gid,
+            "motion_timeline": timeline_raw,
+            "outfit_generation_id": outfit_gid,
+            "negative_prompt": (negative_prompt or "").strip(),
+            "generate_audio": (generate_audio or "1").strip(),
+            "duration_seconds": str(ds_effective),
+            "seedance_variant": seedance_v,
+            "video_resolution": video_res,
+            "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
+            "video_provider": vp,
+            "prompt_only_mode": "1" if prompt_only else "0",
+            "video_backend": vb,
+            "motion_control_wizard": "1" if mc_wizard else "0",
+            "trim_mode": trim_mode_n,
+            "trim_start_sec": trim_start_f,
+            "trim_end_sec": trim_end_f,
+            "turnaround_generation_id": (turnaround_generation_id or "").strip(),
+        }
+        dedupe_key = studio_jobs.motion_render_video_dedupe_key(accept_params)
+        accept_params["dedupe_key"] = dedupe_key
+        existing = await studio_jobs.find_recent_inflight_studio_job(
+            session,
+            owner_id=oid,
+            job_type="motion_render_video",
+            dedupe_key=dedupe_key,
+            within_seconds=300,
+        )
+        if existing is not None:
+            ex_params = studio_jobs.job_params(existing)
+            return JSONResponse(
+                status_code=202,
+                content=StudioJobAcceptedOut(
+                    job_id=existing.id,
+                    job_type="motion_render_video",
+                    generation_id=ex_params.get("placeholder_generation_id"),
+                    message="Такое видео уже генерируется — дождитесь завершения.",
+                ).model_dump(),
+            )
+
         job_files = (
             {"first_frame": (still_bytes, still_mime)} if still_bytes else None
         )
@@ -7829,29 +7873,7 @@ async def api_studio_motion_render_video(
             session,
             user,
             job_type="motion_render_video",
-            params={
-                "model_id": mid,
-                "prompt": (prompt or "").strip(),
-                "output_aspect": aspect_key,
-                "motion_video_file_id": mv_id,
-                "first_frame_generation_id": ff_gid,
-                "motion_timeline": timeline_raw,
-                "outfit_generation_id": outfit_gid,
-                "negative_prompt": (negative_prompt or "").strip(),
-                "generate_audio": (generate_audio or "1").strip(),
-                "duration_seconds": str(ds_effective),
-                "seedance_variant": seedance_v,
-                "video_resolution": video_res,
-                "auto_motion_prompt": (auto_motion_prompt or "0").strip(),
-                "video_provider": vp,
-                "prompt_only_mode": "1" if prompt_only else "0",
-                "video_backend": vb,
-                "motion_control_wizard": "1" if mc_wizard else "0",
-                "trim_mode": trim_mode_n,
-                "trim_start_sec": trim_start_f,
-                "trim_end_sec": trim_end_f,
-                "turnaround_generation_id": (turnaround_generation_id or "").strip(),
-            },
+            params=accept_params,
             placeholder={
                 "studio_model_id": mid,
                 "output_aspect": aspect_key,
@@ -7994,6 +8016,7 @@ async def _studio_job_execute_motion_render_video(
         from app.services.studio_evolink_motion import execute_evolink_motion_render_video
 
         return await execute_evolink_motion_render_video(session, job, user)
+    await studio_jobs.guard_studio_job_provider_resubmit(job)
     oid = workspace_owner_id(user)
     mid = int(params["model_id"])
     sheet_gid_raw = params.get("sheet_generation_id")
@@ -8373,6 +8396,8 @@ async def _studio_job_execute_motion_render_video(
             )
 
     billing = await ensure_can_consume_credits(session, user, cost)
+
+    await studio_jobs.guard_and_mark_studio_job_provider_submit(session, job)
 
     msg: str | None = None
     video_url: str | None = None

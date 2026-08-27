@@ -8,7 +8,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from app.config import settings
 from app.services.studio_model_bootstrap import MODEL_SHEET_ASPECT_KEY
 
 log = logging.getLogger(__name__)
@@ -51,7 +50,9 @@ MOTION_CONTROL_SHEET_ASPECT = "16:9"
 
 
 def _ffmpeg_bin() -> str:
-    return (settings.ffmpeg_path or "ffmpeg").strip() or "ffmpeg"
+    from app.services.studio_motion_video import _ffmpeg_bin as motion_ffmpeg_bin
+
+    return motion_ffmpeg_bin()
 
 
 def trim_motion_video_segment(

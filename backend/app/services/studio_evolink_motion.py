@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.db.models import StudioGeneration, StudioJob, StudioMotionRender, User, UserStudioModel
 from app.services.credits import ensure_can_consume_credits, record_usage
+from app.services import studio_jobs
 from app.services.evolink_client import format_evolink_user_error, seedance_evolink_video_url
 from app.services.studio_aspect import aspect_ratio_for_seedance_i2v
 from app.services.studio_evolink_motion_pricing import (
@@ -66,6 +67,7 @@ async def execute_evolink_motion_render_video(
     user: User,
 ) -> dict[str, Any]:
     """Seedance Sale: EvoLink reference/T2V/I2V, всегда кредиты."""
+    await studio_jobs.guard_studio_job_provider_resubmit(job)
     from app.schemas import StudioMotionVideoOut
     from app.services.studio_image_token import (
         create_generation_image_access_token,
@@ -408,6 +410,7 @@ async def execute_evolink_motion_render_video(
     video_url: str | None = None
     msg: str | None = None
     try:
+        await studio_jobs.guard_and_mark_studio_job_provider_submit(session, job)
         video_url = await seedance_evolink_video_url(
             prompt=seed_prompt,
             variant=seedance_v,

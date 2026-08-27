@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -176,6 +177,59 @@ def job_result_dict(job: StudioJob) -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
+PROVIDER_RESUBMIT_USER_MESSAGE = (
+    "Генерация уже была отправлена провайдеру и прервана перезапуском сервера. "
+    "Проверьте архив — если видео нет, запустите новую генерацию."
+)
+
+
+def studio_job_provider_submitted(job: StudioJob) -> bool:
+    """True если запрос к WaveSpeed/EvoLink уже ушёл — повтор после recovery запрещён."""
+    return job_params(job).get("provider_submitted") == "1"
+
+
+def motion_render_video_dedupe_key(params: dict[str, Any]) -> str:
+    """Ключ для защиты от двойного accept одной и той же video-задачи."""
+    parts = [
+        str(params.get("video_backend") or "wavespeed"),
+        str(params.get("model_id") or ""),
+        str(params.get("motion_video_file_id") or ""),
+        str(params.get("turnaround_generation_id") or ""),
+        str(params.get("trim_mode") or "full"),
+        str(params.get("trim_start_sec") or ""),
+        str(params.get("trim_end_sec") or ""),
+        str(params.get("duration_seconds") or ""),
+        str(params.get("first_frame_generation_id") or ""),
+        str(params.get("motion_control_wizard") or ""),
+        str(params.get("video_provider") or ""),
+    ]
+    digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
+    return f"motion-video:{digest}"
+
+
+async def mark_studio_job_provider_submitted(session: AsyncSession, job: StudioJob) -> None:
+    """Фиксируем отправку провайдеру до долгого poll — recovery не перезапустит job."""
+    params = job_params(job)
+    if params.get("provider_submitted") == "1":
+        return
+    params["provider_submitted"] = "1"
+    params["provider_submitted_at"] = datetime.now(timezone.utc).isoformat()
+    await update_studio_job_params(session, job, params)
+
+
+async def guard_studio_job_provider_resubmit(job: StudioJob) -> None:
+    if studio_job_provider_submitted(job):
+        raise RuntimeError(PROVIDER_RESUBMIT_USER_MESSAGE)
+
+
+async def guard_and_mark_studio_job_provider_submit(
+    session: AsyncSession,
+    job: StudioJob,
+) -> None:
+    await guard_studio_job_provider_resubmit(job)
+    await mark_studio_job_provider_submitted(session, job)
+
+
 def schedule_studio_job(job_id: int) -> None:
     asyncio.create_task(_run_studio_job(job_id))
 
@@ -184,6 +238,8 @@ async def recover_studio_jobs_on_startup() -> None:
     """После рестарта API: только прерванные running и свежие pending (<30 мин)."""
     now = datetime.now(timezone.utc)
     pending_cutoff = now - timedelta(minutes=30)
+    to_run: list[StudioJob] = []
+    skipped_provider: list[StudioJob] = []
     async with SessionLocal() as session:
         stmt = select(StudioJob).where(
             StudioJob.status.in_(
@@ -196,9 +252,21 @@ async def recover_studio_jobs_on_startup() -> None:
         rows = list((await session.execute(stmt)).scalars().all())
         if not rows:
             return
-        to_run: list[StudioJob] = []
         for job in rows:
             st = (job.status or "").strip()
+            if studio_job_provider_submitted(job):
+                result = job_result_dict(job)
+                if result and (result.get("video_url") or result.get("ok")):
+                    job.status = StudioJobStatus.completed.value
+                    job.error_message = None
+                else:
+                    job.status = StudioJobStatus.failed.value
+                    job.error_message = PROVIDER_RESUBMIT_USER_MESSAGE[:4000]
+                job.completed_at = now
+                job.updated_at = now
+                session.add(job)
+                skipped_provider.append(job)
+                continue
             if st == StudioJobStatus.running.value:
                 job.status = StudioJobStatus.pending.value
                 job.started_at = None
@@ -212,9 +280,29 @@ async def recover_studio_jobs_on_startup() -> None:
                     created = created.replace(tzinfo=timezone.utc)
                 if created is not None and created >= pending_cutoff:
                     to_run.append(job)
-        if not to_run:
+        if not to_run and not skipped_provider:
             return
+        if skipped_provider:
+            from app.services.studio_generation_placeholders import (
+                finalize_studio_generation_for_terminal_job,
+            )
+
+            for job in skipped_provider:
+                try:
+                    await finalize_studio_generation_for_terminal_job(session, job)
+                except Exception:
+                    log.exception(
+                        "studio jobs: finalize after provider-skip job=%s",
+                        job.id,
+                    )
         await session.commit()
+    if skipped_provider:
+        log.info(
+            "studio jobs: skipped %s provider-submitted job(s) after startup",
+            len(skipped_provider),
+        )
+    if not to_run:
+        return
     for job in to_run:
         schedule_studio_job(job.id)
     log.info(
