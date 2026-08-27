@@ -37,6 +37,8 @@ STUDIO_JOB_TYPES = frozenset(
         "model_bootstrap_body_compose",
         "model_bootstrap_sheet",
         "seedance_director_generate",
+        "motion_control_dress",
+        "motion_control_turnaround",
     }
 )
 

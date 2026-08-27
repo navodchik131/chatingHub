@@ -1200,7 +1200,7 @@ export function CabinetDataProvider({ children }) {
   )
 
   const generateVideo = useCallback(
-    async (appState, { backend = 'wavespeed' } = {}) => {
+    async (appState, { backend = 'wavespeed', wizard = null } = {}) => {
       const isEvolink = backend === 'evolink'
       if (isEvolink && health?.evolink_video_enabled === false) {
         setError('Seedance Sale временно недоступен')
@@ -1214,8 +1214,13 @@ export function CabinetDataProvider({ children }) {
         return
       }
       const motionControl = !promptMode
+      const mcWizard = wizard?.motionControlWizard
       if (motionControl && !motionVideoFileId) {
         setError('Загрузите референс-видео')
+        return
+      }
+      if (mcWizard && !wizard?.turnaroundGenerationId) {
+        setError('Сначала сгенерируйте развёртку')
         return
       }
       const prompt = (appState.motionPrompt || appState.studioPrompt || '').trim()
@@ -1233,11 +1238,11 @@ export function CabinetDataProvider({ children }) {
         setError('Загрузите или выберите первый кадр')
         return
       }
-      if (motionControl && appState.hasFirstFrame === 'no' && !firstFrameGenId) {
+      if (motionControl && !mcWizard && appState.hasFirstFrame === 'no' && !firstFrameGenId) {
         setError('Сначала сгенерируйте первый кадр')
         return
       }
-      if (motionControl && appState.hasFirstFrame === 'yes' && !ffGenId && !frameFile) {
+      if (motionControl && !mcWizard && appState.hasFirstFrame === 'yes' && !ffGenId && !frameFile) {
         setError('Загрузите или выберите первый кадр из архива')
         return
       }
@@ -1267,18 +1272,23 @@ export function CabinetDataProvider({ children }) {
         }
         const accepted = await actions.runMotionVideo({
           modelId: selectedModelId,
-          prompt: motionControl ? '' : prompt,
+          prompt: motionControl && !mcWizard ? '' : prompt,
           aspect: appState.vidFormat || selectedAspect,
           resolution: appState.vidQuality || '1080',
-          durationSeconds: Number(appState.vidTime) || 5,
+          durationSeconds: (wizard?.durationSeconds ?? Number(appState.vidTime)) || 5,
           motionVideoFileId: motionControl ? motionVideoFileId : null,
-          firstFrameGenerationId: ffGenId,
-          frameFile: !ffGenId && frameFile ? frameFile : null,
-          autoMotionPrompt: motionControl && Boolean(motionVideoFileId),
+          firstFrameGenerationId: mcWizard ? null : ffGenId,
+          frameFile: mcWizard ? null : (!ffGenId && frameFile ? frameFile : null),
+          autoMotionPrompt: motionControl && Boolean(motionVideoFileId) && !mcWizard,
           promptOnlyMode: promptMode,
           generateAudio: appState.vidGenerateAudio !== false,
           seedanceVariant: appState.vidSeedanceVariant || 'standard',
           videoBackend: isEvolink ? 'evolink' : 'wavespeed',
+          motionControlWizard: mcWizard,
+          turnaroundGenerationId: wizard?.turnaroundGenerationId,
+          trimMode: wizard?.trimMode || 'full',
+          trimStartSec: wizard?.trimStartSec,
+          trimEndSec: wizard?.trimEndSec,
         })
         setArchive((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
         await refreshArchiveFull()
@@ -1327,6 +1337,20 @@ export function CabinetDataProvider({ children }) {
     },
     [run, setUploadFile],
   )
+
+  const runMotionControlDress = useCallback(
+    (params) => actions.runMotionControlDress(params),
+    [],
+  )
+
+  const runMotionControlTurnaround = useCallback(
+    (params) => actions.runMotionControlTurnaround(params),
+    [],
+  )
+
+  const refreshMe = useCallback(async () => {
+    setMe(await apiJson('/api/auth/me'))
+  }, [])
 
   const createCharacter = useCallback(
     async (name) => {
@@ -1777,6 +1801,9 @@ export function CabinetDataProvider({ children }) {
       clearFirstFrameArchivePick,
       generateVideo,
       uploadDrivingVideo,
+      runMotionControlDress,
+      runMotionControlTurnaround,
+      refreshMe,
       createCharacter,
       saveCharacterProfile,
       saveCharacterPersona,
@@ -1895,6 +1922,9 @@ export function CabinetDataProvider({ children }) {
       clearFirstFrameArchivePick,
       generateVideo,
       uploadDrivingVideo,
+      runMotionControlDress,
+      runMotionControlTurnaround,
+      refreshMe,
       createCharacter,
       saveCharacterProfile,
       saveCharacterPersona,

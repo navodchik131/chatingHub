@@ -23,6 +23,7 @@ from app.api.integrations_routes import router as integrations_router
 from app.api.telegram_user_routes import router as telegram_user_router
 from app.api.push_routes import router as push_router
 from app.api.studio_routes import router as studio_router
+from app.api.studio_motion_control_routes import router as studio_motion_control_router
 from app.api.studio_workflow_routes import router as studio_workflow_router
 from app.api.support_routes import router as support_router
 from app.api.tribute_routes import router as tribute_router
@@ -44,6 +45,7 @@ router.include_router(billing_router)
 router.include_router(referral_router)
 router.include_router(partner_router)
 router.include_router(studio_router)
+router.include_router(studio_motion_control_router)
 router.include_router(studio_workflow_router)
 router.include_router(support_router)
 router.include_router(analytics_router)

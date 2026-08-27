@@ -7,6 +7,8 @@ import math
 from typing import Any
 from urllib.parse import quote
 
+import anyio
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -88,9 +90,12 @@ async def execute_evolink_motion_render_video(
     video_resolution = str(params.get("video_resolution") or "")
     auto_motion_prompt = str(params.get("auto_motion_prompt") or "0")
     prompt_only_mode = _truthy_flag(str(params.get("prompt_only_mode") or ""))
+    motion_control_wizard = _truthy_flag(str(params.get("motion_control_wizard") or ""))
+    turnaround_gid_raw = str(params.get("turnaround_generation_id") or "").strip()
 
     if not prompt.strip() and not (_truthy_flag(auto_motion_prompt) and mv_id):
-        raise RuntimeError("Опишите сцену и движение для видео.")
+        if not (motion_control_wizard and mv_id and turnaround_gid_raw):
+            raise RuntimeError("Опишите сцену и движение для видео.")
 
     sub_b, _llm, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
@@ -198,7 +203,35 @@ async def execute_evolink_motion_render_video(
         vpath = resolve_motion_video_file(oid, mv_id)
         if vpath is None or not vpath.is_file():
             raise RuntimeError("Референс-видео не найдено.")
-        from app.services.studio_motion_video import prepare_motion_video_file_for_duration
+        from app.services.studio_motion_video import prepare_motion_video_file_for_duration, save_motion_video_bytes
+
+        if (
+            motion_control_wizard
+            and str(params.get("trim_mode") or "full").strip().lower() == "part"
+            and params.get("trim_start_sec") is not None
+            and params.get("trim_end_sec") is not None
+        ):
+            from app.services.studio_motion_control import trim_motion_video_segment
+
+            trim_start_mc = float(params.get("trim_start_sec"))
+            trim_end_mc = float(params.get("trim_end_sec"))
+            trimmed_path, is_temp = await anyio.to_thread.run_sync(
+                lambda vp=vpath, ts=trim_start_mc, te=trim_end_mc: trim_motion_video_segment(
+                    vp, start_sec=ts, end_sec=te
+                )
+            )
+            try:
+                mv_id = save_motion_video_bytes(
+                    owner_id=oid,
+                    raw=trimmed_path.read_bytes(),
+                    filename="motion_trim.mp4",
+                )
+                vpath = resolve_motion_video_file(oid, mv_id)
+                duration_seconds = str(int(math.ceil(max(0.5, trim_end_mc - trim_start_mc))))
+                ds_effective = evolink_video_duration_seconds(duration_seconds, variant=seedance_v)
+            finally:
+                if is_temp:
+                    trimmed_path.unlink(missing_ok=True)
 
         mv_id_eff, _vpath_eff, ref_video_duration = prepare_motion_video_file_for_duration(
             owner_id=oid,
@@ -215,88 +248,120 @@ async def execute_evolink_motion_render_video(
     ref_videos = [motion_vid_url] if motion_vid_url else []
     n_model = 0
     n_outfit = 0
+    prompt_source = "template"
+    ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
 
-    if motion_vid_url:
-        model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
-        if not model_imgs and not ff_url:
-            raise RuntimeError(
-                "У модели нет фото лица для motion control. Добавьте face или первый кадр."
-            )
-    elif prompt_only_mode and ff_url:
-        # Prompt-only: анимируем приложенный кадр, без подмены лицом из кабинета модели.
-        model_imgs = []
-    else:
-        model_imgs = filter_model_images_for_seedance_video(
-            list(sm.images),
-            minimal=False,
-            include_body=False,
-        )
+    if motion_control_wizard and turnaround_gid_raw and motion_vid_url:
+        from app.services.studio_motion_control import MOTION_CONTROL_VIDEO_EDIT_PROMPT
 
-    if ff_url:
-        ref_images.append(ff_url)
-    ref_images.extend(
-        model_reference_public_urls(
-            owner_id=oid,
-            images=model_imgs,
-            public_app_base=pub,
-            token_factory=create_model_image_access_token,
-        )
-    )
-    n_model = len(model_imgs)
-
-    outfit_gen_id: int | None = None
-    if outfit_gid is not None:
         try:
-            outfit_gen_id = int(outfit_gid)
-        except (TypeError, ValueError):
-            outfit_gen_id = None
-    if outfit_gen_id is not None and outfit_gen_id != first_frame_gen_id:
-        row_outfit = await session.get(StudioGeneration, outfit_gen_id)
-        if not row_outfit or row_outfit.user_id != oid:
-            raise RuntimeError("Снимок наряда не найден")
-        await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
+            turnaround_gid = int(turnaround_gid_raw)
+        except ValueError as e:
+            raise RuntimeError("Некорректный turnaround_generation_id") from e
+        ta_row = await session.get(StudioGeneration, turnaround_gid)
+        if not ta_row or ta_row.user_id != oid:
+            raise RuntimeError("Развёртка не найдена")
         await ensure_studio_generation_image_archived_for_external_fetch(
             session,
-            row_outfit,
+            ta_row,
             wavespeed_api_key=ws_key,
-            label="Снимок наряда",
+            label="Развёртка Motion Control",
         )
-        outfit_url = generation_still_fetch_url(
-            row=row_outfit,
+        turnaround_url = generation_still_fetch_url(
+            row=ta_row,
             owner_id=oid,
             public_app_base=pub,
             token_factory=create_generation_image_access_token,
         )
-        if outfit_url:
-            ref_images.append(outfit_url)
-            n_outfit = 1
+        if not turnaround_url:
+            raise RuntimeError("Не удалось подготовить URL развёртки")
+        ref_images = [turnaround_url]
+        seed_prompt = MOTION_CONTROL_VIDEO_EDIT_PROMPT
+        prompt_source = "motion_control_video_edit"
+    else:
+        if motion_vid_url:
+            model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
+            if not model_imgs and not ff_url:
+                raise RuntimeError(
+                    "У модели нет фото лица для motion control. Добавьте face или первый кадр."
+                )
+        elif prompt_only_mode and ff_url:
+            # Prompt-only: анимируем приложенный кадр, без подмены лицом из кабинета модели.
+            model_imgs = []
+        else:
+            model_imgs = filter_model_images_for_seedance_video(
+                list(sm.images),
+                minimal=False,
+                include_body=False,
+            )
 
-    if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
-        ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+        if ff_url:
+            ref_images.append(ff_url)
+        ref_images.extend(
+            model_reference_public_urls(
+                owner_id=oid,
+                images=model_imgs,
+                public_app_base=pub,
+                token_factory=create_model_image_access_token,
+            )
+        )
+        n_model = len(model_imgs)
 
-    ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
-    seed_prompt, prompt_source = await build_seedance_t2v_prompt(
-        user_brief=prompt,
-        n_start_frame=n_start,
-        n_model_images=n_model,
-        n_outfit_images=n_outfit,
-        n_motion_videos=len(ref_videos),
-        motion_summary=motion_summary,
-        model_profile_text=None,
-        negative=negative_prompt,
-        output_aspect=ar_t2v or output_aspect,
-        duration_seconds=ds_effective,
-        force_template=False,
-        reference_only=False,
-        remove_face_grid=False,
-        soft_identity=False,
-    )
+        outfit_gen_id: int | None = None
+        if outfit_gid is not None:
+            try:
+                outfit_gen_id = int(outfit_gid)
+            except (TypeError, ValueError):
+                outfit_gen_id = None
+        if outfit_gen_id is not None and outfit_gen_id != first_frame_gen_id:
+            row_outfit = await session.get(StudioGeneration, outfit_gen_id)
+            if not row_outfit or row_outfit.user_id != oid:
+                raise RuntimeError("Снимок наряда не найден")
+            await assert_studio_generation_access(session, user, row_outfit.studio_model_id)
+            await ensure_studio_generation_image_archived_for_external_fetch(
+                session,
+                row_outfit,
+                wavespeed_api_key=ws_key,
+                label="Снимок наряда",
+            )
+            outfit_url = generation_still_fetch_url(
+                row=row_outfit,
+                owner_id=oid,
+                public_app_base=pub,
+                token_factory=create_generation_image_access_token,
+            )
+            if outfit_url:
+                ref_images.append(outfit_url)
+                n_outfit = 1
+
+        if len(ref_images) > MAX_SEEDANCE_REFERENCE_IMAGES:
+            ref_images = ref_images[:MAX_SEEDANCE_REFERENCE_IMAGES]
+
+        seed_prompt, prompt_source = await build_seedance_t2v_prompt(
+            user_brief=prompt,
+            n_start_frame=n_start,
+            n_model_images=n_model,
+            n_outfit_images=n_outfit,
+            n_motion_videos=len(ref_videos),
+            motion_summary=motion_summary,
+            model_profile_text=None,
+            negative=negative_prompt,
+            output_aspect=ar_t2v or output_aspect,
+            duration_seconds=ds_effective,
+            force_template=False,
+            reference_only=False,
+            remove_face_grid=False,
+            soft_identity=False,
+        )
+
     if motion_aud_url:
         from app.services.motion_video_outline import append_motion_original_audio_prompt
 
         seed_prompt = append_motion_original_audio_prompt(seed_prompt)
 
-    image_to_video = prompt_only_mode and ff_url and not mv_id and not model_imgs
+    image_to_video = prompt_only_mode and ff_url and not mv_id and not (
+        motion_control_wizard and turnaround_gid_raw
+    )
     evolink_images = [ff_url] if image_to_video and ff_url else ref_images
 
     cost = apply_seedance_sale_credit_cost(

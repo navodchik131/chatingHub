@@ -9,6 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import StudioJob, User
 
 
+async def _execute_motion_control_dress(session: AsyncSession, job: StudioJob, user: User) -> dict:
+    from app.api.studio_motion_control_routes import execute_motion_control_dress
+
+    return await execute_motion_control_dress(session, job, user)
+
+
+async def _execute_motion_control_turnaround(session: AsyncSession, job: StudioJob, user: User) -> dict:
+    from app.api.studio_motion_control_routes import execute_motion_control_turnaround
+
+    return await execute_motion_control_turnaround(session, job, user)
+
+
 async def execute_studio_job(session: AsyncSession, job: StudioJob, user: User) -> dict[str, Any]:
     from app.api import studio_routes as sr
 
@@ -27,6 +39,8 @@ async def execute_studio_job(session: AsyncSession, job: StudioJob, user: User) 
         "model_bootstrap_body_compose": sr._studio_job_execute_model_bootstrap_body_compose,
         "model_bootstrap_sheet": sr._studio_job_execute_model_bootstrap_sheet,
         "seedance_director_generate": sr._studio_job_execute_seedance_director_generate,
+        "motion_control_dress": _execute_motion_control_dress,
+        "motion_control_turnaround": _execute_motion_control_turnaround,
     }
     fn = handlers.get(job.job_type)
     if fn is None:

@@ -562,6 +562,14 @@ export async function runMotionVideo(params) {
   if (params.frameFile) fd.append('image', params.frameFile, params.frameFile.name || 'frame.jpg')
   fd.append('generate_audio', params.generateAudio === false ? '0' : '1')
   if (params.seedanceVariant) fd.append('seedance_variant', String(params.seedanceVariant))
+  if (params.motionControlWizard) fd.append('motion_control_wizard', '1')
+  if (params.turnaroundGenerationId) {
+    fd.append('turnaround_generation_id', String(params.turnaroundGenerationId))
+  }
+  if (params.trimMode) fd.append('trim_mode', String(params.trimMode))
+  if (params.trimStartSec != null) fd.append('trim_start_sec', String(params.trimStartSec))
+  if (params.trimEndSec != null) fd.append('trim_end_sec', String(params.trimEndSec))
+  if (params.durationSeconds != null) fd.append('duration_seconds', String(params.durationSeconds))
   const endpoint = params.videoBackend === 'evolink'
     ? '/api/studio/seedance-sale/render-video'
     : '/api/studio/motion/render-video'
@@ -612,6 +620,38 @@ export async function uploadWorkflowReference(file) {
   if (!res.ok) throw new Error(data.detail || 'Не удалось загрузить референс')
   if (!data.ref_id) throw new Error('Сервер не вернул ref_id')
   return data.ref_id
+}
+
+export async function runMotionControlDress(params) {
+  const fd = new FormData()
+  fd.append('model_id', String(params.modelId))
+  fd.append('base_image_id', String(params.baseImageId))
+  fd.append('outfit_route', params.outfitRoute || 'video')
+  if (params.motionVideoFileId) fd.append('motion_video_file_id', params.motionVideoFileId)
+  if (params.waveModelId) fd.append('wave_model_id', params.waveModelId)
+  if (params.studioWaveProfile) fd.append('studio_wave_profile', params.studioWaveProfile)
+  if (params.outputAspect) fd.append('output_aspect', params.outputAspect)
+  if (params.clothingFile) fd.append('clothing_image', params.clothingFile, params.clothingFile.name || 'cloth.jpg')
+  const accepted = await postStudioJobStart('/api/studio/motion-control/dress-outfit', { method: 'POST', body: fd })
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+    return { accepted, result }
+  }
+  return { accepted, result: null }
+}
+
+export async function runMotionControlTurnaround(params) {
+  const fd = new FormData()
+  fd.append('model_id', String(params.modelId))
+  fd.append('outfit_generation_id', String(params.outfitGenerationId))
+  fd.append('face_image_id', String(params.faceImageId))
+  if (params.waveModelId) fd.append('wave_model_id', params.waveModelId)
+  const accepted = await postStudioJobStart('/api/studio/motion-control/turnaround', { method: 'POST', body: fd })
+  if (accepted.job_id) {
+    const result = await waitForStudioJobResult(accepted.job_id, { maxWaitMs: 10 * 60 * 1000 })
+    return { accepted, result }
+  }
+  return { accepted, result: null }
 }
 
 export async function uploadMotionDrivingVideo(file) {

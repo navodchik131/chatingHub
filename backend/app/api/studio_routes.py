@@ -7530,6 +7530,11 @@ async def api_studio_motion_render_video(
     video_provider: str = Form("seedance_t2v"),
     prompt_only_mode: str = Form("0"),
     video_backend: str = Form("wavespeed"),
+    motion_control_wizard: str = Form("0"),
+    trim_mode: str = Form("full"),
+    trim_start_sec: str = Form(""),
+    trim_end_sec: str = Form(""),
+    turnaround_generation_id: str = Form(""),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut | JSONResponse:
@@ -7591,7 +7596,10 @@ async def api_studio_motion_render_video(
             )
 
     if not (prompt or "").strip() and not (auto_mp and mv_id_early):
-        raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
+        mc_wizard = _truthy_wavespeed_flag(motion_control_wizard)
+        turn_raw = (turnaround_generation_id or "").strip()
+        if not (mc_wizard and mv_id_early and turn_raw):
+            raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
     if prompt_only and not mv_id_early:
         if not ff_gid_early and not still_bytes:
             raise HTTPException(
@@ -7643,7 +7651,11 @@ async def api_studio_motion_render_video(
         profile_text=(sm.profile_text or "").strip() or None,
         use_moderation=False,
     )
-    if not prompt_only and not sort_model_images_for_seedance_t2v(list(sm.images)):
+    if (
+        not prompt_only
+        and not mc_wizard
+        and not sort_model_images_for_seedance_t2v(list(sm.images))
+    ):
         raise HTTPException(
             status_code=400,
             detail="У модели нет фото для Seedance. Добавьте развёртку (turnaround) или другие снимки в кабинете модели.",
@@ -7690,14 +7702,41 @@ async def api_studio_motion_render_video(
 
     mv_id = str(motion_video_file_id).strip()
     ref_video_duration: int | None = None
+    mc_wizard = _truthy_wavespeed_flag(motion_control_wizard)
+    trim_mode_n = (trim_mode or "full").strip().lower()
+    trim_start_f: float | None = None
+    trim_end_f: float | None = None
+    if trim_start_sec.strip():
+        try:
+            trim_start_f = float(trim_start_sec.strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный trim_start_sec") from None
+    if trim_end_sec.strip():
+        try:
+            trim_end_f = float(trim_end_sec.strip())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный trim_end_sec") from None
     if mv_id:
         vpath = resolve_motion_video_uploaded(oid, mv_id)
         if vpath is None or not vpath.is_file():
             raise HTTPException(status_code=404, detail="Референс-видео не найдено.")
         from app.services.studio_motion_video import probe_video_duration_seconds
+        from app.services.studio_motion_control import motion_control_trim_duration_seconds
 
         probed = probe_video_duration_seconds(vpath)
-        if probed is not None and probed > 0:
+        if mc_wizard and trim_mode_n == "part" and trim_start_f is not None and trim_end_f is not None:
+            ds_effective = int(
+                math.ceil(
+                    motion_control_trim_duration_seconds(
+                        full_duration=probed,
+                        trim_start=trim_start_f,
+                        trim_end=trim_end_f,
+                        use_full=False,
+                    )
+                )
+            )
+            ref_video_duration = ds_effective
+        elif probed is not None and probed > 0:
             ref_video_duration = int(math.ceil(min(float(probed), float(ds_effective))))
 
     ff_gid: int | None = ff_gid_early
@@ -7785,6 +7824,11 @@ async def api_studio_motion_render_video(
                 "video_provider": vp,
                 "prompt_only_mode": "1" if prompt_only else "0",
                 "video_backend": vb,
+                "motion_control_wizard": "1" if mc_wizard else "0",
+                "trim_mode": trim_mode_n,
+                "trim_start_sec": trim_start_f,
+                "trim_end_sec": trim_end_f,
+                "turnaround_generation_id": (turnaround_generation_id or "").strip(),
             },
             placeholder={
                 "studio_model_id": mid,
@@ -7985,9 +8029,12 @@ async def _studio_job_execute_motion_render_video(
                 )
             )
 
+    motion_control_wizard = _truthy_wavespeed_flag(str(params.get("motion_control_wizard") or ""))
+    turnaround_gid_raw = str(params.get("turnaround_generation_id") or "").strip()
     if not prompt.strip() and not workflow_source:
         if not (_truthy_wavespeed_flag(auto_motion_prompt) and mv_id):
-            raise RuntimeError("Опишите сцену и движение для видео.")
+            if not (motion_control_wizard and mv_id and turnaround_gid_raw):
+                raise RuntimeError("Опишите сцену и движение для видео.")
 
     sub_b, llm_row, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
@@ -8014,7 +8061,11 @@ async def _studio_job_execute_motion_render_video(
         except (TypeError, ValueError):
             first_frame_gen_id_early = None
 
-    skip_model_ref_check = video_provider == "seedance_i2v" or prompt_only_mode
+    skip_model_ref_check = (
+        video_provider == "seedance_i2v"
+        or prompt_only_mode
+        or (motion_control_wizard and bool(turnaround_gid_raw))
+    )
     if video_provider != "grok_imagine_i2v" and not skip_model_ref_check:
         if mv_id and send_video_reference:
             model_ref_ok = filter_model_images_for_seedance_motion_swap(list(sm.images))
@@ -8140,7 +8191,39 @@ async def _studio_job_execute_motion_render_video(
         vpath = resolve_motion_video_file(oid, mv_id)
         if vpath is not None and vpath.is_file():
             from app.services.studio_motion_pricing import motion_video_duration_seconds
-            from app.services.studio_motion_video import prepare_motion_video_file_for_duration
+            from app.services.studio_motion_video import (
+                prepare_motion_video_file_for_duration,
+                save_motion_video_bytes,
+            )
+
+            if (
+                motion_control_wizard
+                and str(params.get("trim_mode") or "full").strip().lower() == "part"
+                and params.get("trim_start_sec") is not None
+                and params.get("trim_end_sec") is not None
+            ):
+                from app.services.studio_motion_control import trim_motion_video_segment
+
+                trim_start_mc = float(params.get("trim_start_sec"))
+                trim_end_mc = float(params.get("trim_end_sec"))
+                trimmed_path, is_temp = await anyio.to_thread.run_sync(
+                    lambda vp=vpath, ts=trim_start_mc, te=trim_end_mc: trim_motion_video_segment(
+                        vp, start_sec=ts, end_sec=te
+                    )
+                )
+                try:
+                    mv_id = save_motion_video_bytes(
+                        owner_id=oid,
+                        raw=trimmed_path.read_bytes(),
+                        filename="motion_trim.mp4",
+                    )
+                    vpath = resolve_motion_video_file(oid, mv_id)
+                    duration_seconds = str(
+                        int(math.ceil(max(0.5, trim_end_mc - trim_start_mc)))
+                    )
+                finally:
+                    if is_temp:
+                        trimmed_path.unlink(missing_ok=True)
 
             ds_for_fit = motion_video_duration_seconds(duration_seconds)
             mv_id_eff, _, _ = prepare_motion_video_file_for_duration(
@@ -8291,7 +8374,31 @@ async def _studio_job_execute_motion_render_video(
         # Swap по референс-видео: Seedance T2V + reference_videos (standard → fast API, mini → mini T2V)
         use_boardstory_video_edit = False
 
-        if use_seedance_i2v:
+        if motion_control_wizard and turnaround_gid_raw and motion_vid_url:
+            from app.services.studio_motion_control import MOTION_CONTROL_VIDEO_EDIT_PROMPT
+
+            try:
+                turnaround_gid = int(turnaround_gid_raw)
+            except ValueError as e:
+                raise RuntimeError("Некорректный turnaround_generation_id") from e
+            ta_row = await session.get(StudioGeneration, turnaround_gid)
+            if not ta_row or ta_row.user_id != oid:
+                raise RuntimeError("Развёртка не найдена")
+            turnaround_url = generation_still_public_url(
+                owner_id=oid,
+                generation_id=turnaround_gid,
+                public_app_base=pub,
+                token_factory=create_generation_image_access_token,
+            )
+            if not turnaround_url:
+                raise RuntimeError("Не удалось подготовить URL развёртки")
+            ref_images = [turnaround_url]
+            ref_videos = []
+            seed_prompt = MOTION_CONTROL_VIDEO_EDIT_PROMPT
+            prompt_source = "motion_control_video_edit"
+            use_boardstory_video_edit = True
+            n_start = 0
+        elif use_seedance_i2v:
             seed_prompt = prompt.strip()
             neg = (negative_prompt or "").strip()
             if neg:
