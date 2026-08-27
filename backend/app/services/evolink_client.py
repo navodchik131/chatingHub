@@ -337,6 +337,7 @@ async def _load_media_bytes_for_evolink_mirror(
     url: str,
     *,
     session: "AsyncSession | None",
+    label: str = "медиа",
 ) -> bytes:
     if session is not None:
         from app.services.studio_public_media import read_studio_public_media_bytes
@@ -349,7 +350,8 @@ async def _load_media_bytes_for_evolink_mirror(
         if r.status_code >= 400:
             raise RuntimeError(
                 format_evolink_user_error(
-                    f"HTTP {r.status_code} при чтении медиа для EvoLink"
+                    f"HTTP {r.status_code} при чтении {label} для EvoLink. "
+                    "Перезагрузите файл или сгенерируйте кадр заново."
                 )
             )
         data = r.content or b""
@@ -373,7 +375,7 @@ async def evolink_mirror_media_urls(
         if not _needs_evolink_file_mirror(url):
             out.append(url)
             continue
-        data = await _load_media_bytes_for_evolink_mirror(url, session=session)
+        data = await _load_media_bytes_for_evolink_mirror(url, session=session, label=label)
         default_stem = f"{label.lower()}_{i}"
         if label.lower().startswith("video"):
             media_kind = "video"

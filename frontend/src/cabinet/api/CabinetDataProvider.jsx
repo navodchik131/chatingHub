@@ -88,6 +88,7 @@ function reuseModelImageUrls(prevModels, nextModels) {
 export function CabinetDataProvider({ children }) {
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [videoGenerating, setVideoGenerating] = useState(false)
   const [error, setError] = useState(null)
   const [me, setMe] = useState(null)
   const [health, setHealth] = useState(null)
@@ -1257,6 +1258,8 @@ export function CabinetDataProvider({ children }) {
       })
       setArchive((prev) => prependOptimisticStudioArchive(prev, item))
       setError(null)
+      setVideoGenerating(true)
+      setBusy(true)
       try {
         if (!ffGenId && frameFile && motionControl) {
           const { result } = await actions.runMotionFirstFrame({
@@ -1296,6 +1299,9 @@ export function CabinetDataProvider({ children }) {
       } catch (e) {
         setArchive((prev) => removeOptimisticStudioArchive(prev, tempId))
         setError(e?.message || String(e))
+      } finally {
+        setVideoGenerating(false)
+        setBusy(false)
       }
     },
     [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull, me, health],
@@ -1716,6 +1722,7 @@ export function CabinetDataProvider({ children }) {
     () => ({
       ready,
       busy,
+      videoGenerating,
       error,
       setError,
       clearBusy,
@@ -1850,6 +1857,7 @@ export function CabinetDataProvider({ children }) {
     [
       ready,
       busy,
+      videoGenerating,
       error,
       me,
       health,

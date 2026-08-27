@@ -242,6 +242,81 @@ def extract_motion_audio_file(
     return None
 
 
+def ensure_motion_video_wavespeed_ready(source: Path) -> tuple[Path, bool, float]:
+    """
+    WaveSpeed video-edit должен сам прочитать duration из входного video URL.
+    Перекодируем в MP4 (h264, faststart), если moov/duration/формат невалидны.
+    Возвращает (path, is_temp, duration_sec).
+    """
+    from app.services.motion_video_outline import _moov_valid, probe_motion_video_stream
+
+    needs_reencode = source.suffix.lower() != ".mp4"
+    dur = 0.0
+    if not needs_reencode:
+        if not _moov_valid(source):
+            needs_reencode = True
+        else:
+            try:
+                _w, _h, dur = probe_motion_video_stream(source)
+                if dur <= 0:
+                    needs_reencode = True
+            except RuntimeError:
+                needs_reencode = True
+    if not needs_reencode and dur > 0:
+        return source, False, dur
+
+    if not source.is_file() or source.stat().st_size < 1024:
+        raise RuntimeError("Референс-видео пустое или повреждено. Загрузите файл заново.")
+
+    fd, tmp_path_str = tempfile.mkstemp(prefix="motion_ws_", suffix=".mp4")
+    os.close(fd)
+    out_path = Path(tmp_path_str)
+    try:
+        has_audio = probe_video_has_audio(source)
+        cmd: list[str] = [
+            _ffmpeg_bin(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source),
+            "-movflags",
+            "+faststart",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+        if has_audio:
+            cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+        else:
+            cmd.append("-an")
+        cmd.append(str(out_path))
+        r = subprocess.run(cmd, check=False, timeout=600, capture_output=True)
+        if r.returncode != 0 or not out_path.is_file() or out_path.stat().st_size < 1024:
+            err = (r.stderr or b"").decode("utf-8", errors="replace")[:400]
+            raise RuntimeError(
+                "Не удалось подготовить референс-видео для WaveSpeed. "
+                f"Перезагрузите MP4/MOV/WebM. {err}".strip()
+            )
+        _w, _h, dur = probe_motion_video_stream(out_path)
+        if dur <= 0:
+            raise RuntimeError(
+                "После перекодирования не удалось определить длительность видео. "
+                "Попробуйте другой файл."
+            )
+        log_motion.info("motion video normalized for wavespeed src=%s dur=%.2fs", source.name, dur)
+        return out_path, True, dur
+    except Exception:
+        out_path.unlink(missing_ok=True)
+        raise
+
+
 def fit_motion_video_to_duration(source: Path, target_sec: int) -> tuple[Path, bool]:
     """
     Подгоняет референс под целевую длительность: обрезка или дополнение последним кадром.
@@ -319,34 +394,77 @@ def prepare_motion_video_file_for_duration(
     При необходимости подгоняет длительность и сохраняет копию на диск.
     Возвращает (file_id_for_url, path_on_disk, duration_sec).
     """
-    audio_src = resolve_motion_video_source(owner_id, file_id) or source_path
-    mux_original_audio_onto_video(source_path, audio_src)
-    fit_path, is_temp = fit_motion_video_to_duration(source_path, target_sec)
-    out_id = file_id
-    out_path = source_path
+    work_id = file_id
+    work_path = source_path
+    norm_path, norm_temp, _norm_dur = ensure_motion_video_wavespeed_ready(source_path)
     try:
-        if is_temp:
-            out_id = save_motion_video_bytes(
+        if norm_temp:
+            work_id = save_motion_video_bytes(
                 owner_id=owner_id,
-                raw=fit_path.read_bytes(),
-                filename=f"motion_{target_sec}s.mp4",
+                raw=norm_path.read_bytes(),
+                filename="motion_norm.mp4",
             )
-            resolved = resolve_motion_video_file(owner_id, out_id)
-            if resolved is not None:
-                out_path = resolved
-                mux_original_audio_onto_video(out_path, audio_src)
-        extract_motion_audio_file(
-            owner_id=owner_id,
-            file_id=out_id,
-            source=audio_src,
-            target_sec=target_sec,
-        )
-        probed = probe_video_duration_seconds(out_path)
-        dur = int(math.ceil(probed)) if probed and probed > 0 else int(target_sec)
-        return out_id, out_path, dur
+            resolved = resolve_motion_video_file(owner_id, work_id)
+            if resolved is None:
+                raise RuntimeError("Не удалось сохранить подготовленное референс-видео.")
+            work_path = resolved
+
+        audio_src = resolve_motion_video_source(owner_id, file_id) or work_path
+        mux_original_audio_onto_video(work_path, audio_src)
+        fit_path, is_temp = fit_motion_video_to_duration(work_path, target_sec)
+        out_id = work_id
+        out_path = work_path
+        try:
+            if is_temp:
+                out_id = save_motion_video_bytes(
+                    owner_id=owner_id,
+                    raw=fit_path.read_bytes(),
+                    filename=f"motion_{target_sec}s.mp4",
+                )
+                resolved = resolve_motion_video_file(owner_id, out_id)
+                if resolved is not None:
+                    out_path = resolved
+                    mux_original_audio_onto_video(out_path, audio_src)
+            extract_motion_audio_file(
+                owner_id=owner_id,
+                file_id=out_id,
+                source=audio_src,
+                target_sec=target_sec,
+            )
+            # Финальная проверка — WaveSpeed читает duration именно из этого файла.
+            ready_path, ready_temp, ready_dur = ensure_motion_video_wavespeed_ready(out_path)
+            try:
+                if ready_temp:
+                    out_id = save_motion_video_bytes(
+                        owner_id=owner_id,
+                        raw=ready_path.read_bytes(),
+                        filename="motion_ready.mp4",
+                    )
+                    resolved = resolve_motion_video_file(owner_id, out_id)
+                    if resolved is None:
+                        raise RuntimeError(
+                            "Референс-видео не готово для WaveSpeed. Перезагрузите файл."
+                        )
+                    out_path = resolved
+                    mux_original_audio_onto_video(out_path, audio_src)
+                    ready_dur = probe_video_duration_seconds(out_path) or ready_dur
+                probed = ready_dur if ready_dur > 0 else probe_video_duration_seconds(out_path)
+                if probed is None or probed <= 0:
+                    raise RuntimeError(
+                        "WaveSpeed не сможет прочитать длительность референс-видео. "
+                        "Загрузите MP4 заново."
+                    )
+                dur = int(math.ceil(probed))
+                return out_id, out_path, dur
+            finally:
+                if ready_temp:
+                    ready_path.unlink(missing_ok=True)
+        finally:
+            if is_temp:
+                fit_path.unlink(missing_ok=True)
     finally:
-        if is_temp:
-            fit_path.unlink(missing_ok=True)
+        if norm_temp:
+            norm_path.unlink(missing_ok=True)
 
 
 def extract_video_timeline_frames_jpeg(

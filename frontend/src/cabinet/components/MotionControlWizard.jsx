@@ -434,7 +434,8 @@ export default function MotionControlWizard({
     }
   }, [cabinet, lang]);
 
-  const handleGenerateVideo = () => {
+  const handleGenerateVideo = async () => {
+    if (cabinet.videoGenerating) return;
     if (!cabinet.motionVideoFileId) {
       cabinet.setError(lang === 'ru' ? 'Загрузите референс-видео' : 'Upload reference video');
       return;
@@ -443,15 +444,22 @@ export default function MotionControlWizard({
       cabinet.setError(lang === 'ru' ? 'Подготовьте развёртку перед видео' : 'Prepare turnaround before video');
       return;
     }
-    void onGenerate({
-      motionControlWizard: true,
-      turnaroundGenerationId: turnaroundGenId,
-      trimMode,
-      trimStartSec: trimMode === 'part' ? trimIn : null,
-      trimEndSec: trimMode === 'part' ? trimOut : null,
-      durationSeconds: Math.ceil(clipDuration),
-    });
+    cabinet.setError(null);
+    try {
+      await onGenerate({
+        motionControlWizard: true,
+        turnaroundGenerationId: turnaroundGenId,
+        trimMode,
+        trimStartSec: trimMode === 'part' ? trimIn : null,
+        trimEndSec: trimMode === 'part' ? trimOut : null,
+        durationSeconds: Math.ceil(clipDuration),
+      });
+    } catch {
+      /* ошибка уже в cabinet.setError */
+    }
   };
+
+  const videoBusy = Boolean(cabinet.videoGenerating);
 
   const stepBlock = {
     background: color.surface,
@@ -1001,28 +1009,41 @@ export default function MotionControlWizard({
 
         <Hoverable
           style={{
-            background: color.lime,
+            background: videoBusy ? 'rgba(215,244,82,.55)' : color.lime,
             color: color.limeInk,
             fontWeight: 800,
             fontSize: 14,
             borderRadius: 12,
             padding: '14px 16px',
             textAlign: 'center',
-            cursor: 'pointer',
+            cursor: videoBusy ? 'wait' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: 8,
+            opacity: videoBusy ? 0.85 : 1,
+            pointerEvents: videoBusy ? 'none' : 'auto',
           }}
-          hover={{ filter: 'brightness(1.05)' }}
-          onClick={handleGenerateVideo}
+          hover={videoBusy ? {} : { filter: 'brightness(1.05)' }}
+          onClick={() => { if (!videoBusy) void handleGenerateVideo(); }}
         >
           <span style={{ display: 'flex', width: 16, height: 16 }}><IcoPlay /></span>
-          {lang === 'ru' ? 'Сгенерировать видео' : 'Generate video'}
-          <span style={{ fontFamily: font.mono, fontSize: 11 }}>
-            −{formatMotionCreditCost(videoCredits, isEvolink ? evolinkPricing : cabinet.health?.studio_motion_video_pricing, t.cr)}
-          </span>
+          {videoBusy
+            ? (lang === 'ru' ? 'Запускаем видео…' : 'Starting video…')
+            : (lang === 'ru' ? 'Сгенерировать видео' : 'Generate video')}
+          {!videoBusy && (
+            <span style={{ fontFamily: font.mono, fontSize: 11 }}>
+              −{formatMotionCreditCost(videoCredits, isEvolink ? evolinkPricing : cabinet.health?.studio_motion_video_pricing, t.cr)}
+            </span>
+          )}
         </Hoverable>
+        {videoBusy && (
+          <div style={{ marginTop: 8, fontSize: 11, color: '#38BDF8', lineHeight: 1.45 }}>
+            {lang === 'ru'
+              ? 'Отправляем задачу в очередь. Видео появится в архиве — это может занять несколько минут.'
+              : 'Submitting the job. Video will appear in archive — may take a few minutes.'}
+          </div>
+        )}
         <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 8, lineHeight: 1.45 }}>
           {lang === 'ru'
             ? 'Video-edit: развёртка + отрезок реф-видео. Промпт character-only replacement.'

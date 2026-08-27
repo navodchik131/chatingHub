@@ -116,7 +116,7 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
   };
 
   const handleGenerateVideo = (wizardOpts) => {
-    void cabinet.generateVideo(s, {
+    return cabinet.generateVideo(s, {
       backend: isEvolink ? 'evolink' : 'wavespeed',
       wizard: wizardOpts || null,
     });
