@@ -10,7 +10,7 @@ from aiogram.types import BotCommand
 
 from app.config import settings
 from app.connectors.telegram.ig_bot.setup import ig_dp
-from app.services.ig_bot.download import resolve_cookies_path
+from app.services.ig_bot.download import describe_cookies_status, resolve_cookies_path
 
 log = logging.getLogger(__name__)
 
@@ -67,13 +67,21 @@ async def run_ig_bot_polling() -> None:
     token = settings.ig_bot_token.strip()
     if not token:
         return
-    cookies = (settings.ig_bot_cookies_path or "").strip()
-    if not cookies:
+    cookies_cfg = (settings.ig_bot_cookies_path or "").strip()
+    cookies_path = resolve_cookies_path()
+    cookies_status = describe_cookies_status(cookies_path)
+    if not cookies_cfg:
         log.warning("IG bot: IG_BOT_COOKIES_PATH not set — downloads will fail")
-    elif resolve_cookies_path() is None:
+    elif cookies_status == "file_not_found":
         log.warning(
             "IG bot: cookies file missing at %s — downloads will fail",
-            cookies,
+            cookies_cfg,
+        )
+    elif cookies_status == "no_sessionid":
+        log.warning(
+            "IG bot: cookies file %s has NO sessionid — photo/download will fail until "
+            "admin exports fresh Netscape cookies from a logged-in Instagram browser session",
+            cookies_cfg,
         )
     bot = create_ig_bot()
     try:
@@ -84,7 +92,7 @@ async def run_ig_bot_polling() -> None:
             settings.ig_bot_daily_limit_default,
             settings.ig_bot_daily_limit_subscribed,
             settings.ig_bot_subscribe_channel,
-            "yes" if resolve_cookies_path() else "no",
+            cookies_status,
         )
         await verify_ig_bot_channel_access(bot)
         await setup_ig_bot_commands(bot)

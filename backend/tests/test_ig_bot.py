@@ -71,6 +71,55 @@ def test_validate_single_media():
         validate_instagram_media_url("https://www.instagram.com/user/")
 
 
+def test_remotes_from_post_html_carousel_and_photo():
+    from app.services.ig_bot.download import _remotes_from_post_html
+
+    html_carousel = """
+    "carousel_media":[{"image_versions2":{"candidates":[{"url":"https://cdn.example/a.jpg","width":100,"height":100}]}},
+    {"video_versions":[{"url":"https://cdn.example/b.mp4","width":720,"height":1280}]}]
+    """
+    remotes = _remotes_from_post_html(html_carousel)
+    assert len(remotes) == 2
+    assert remotes[0].kind == "image"
+    assert remotes[1].kind == "video"
+
+    html_photo = '"display_url":"https:\\/\\/scontent.cdninstagram.com\\/photo.jpg"'
+    remotes2 = _remotes_from_post_html(html_photo)
+    assert len(remotes2) == 1
+    assert remotes2[0].kind == "image"
+
+
+def test_remotes_from_ytdlp_info_photo_and_video():
+    from app.services.ig_bot.download import _remotes_from_ytdlp_info
+
+    info = {
+        "entries": [
+            {"url": "https://cdn.example/photo.jpg", "ext": "jpg", "vcodec": "none"},
+            {"url": "https://cdn.example/reel.mp4", "ext": "mp4", "vcodec": "h264"},
+        ]
+    }
+    remotes = _remotes_from_ytdlp_info(info)
+    assert len(remotes) == 2
+    assert remotes[0].kind == "image"
+    assert remotes[1].kind == "video"
+
+
+def test_cookies_file_has_session(tmp_path, monkeypatch):
+    from app.services.ig_bot import download as ig_download
+
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text(
+        "# Netscape HTTP Cookie File\n"
+        ".instagram.com\tTRUE\t/\tTRUE\t0\tsessionid\tabc123sessionidvalue\n",
+        encoding="utf-8",
+    )
+    assert ig_download.cookies_file_has_session(cookies) is True
+
+    empty = tmp_path / "empty.txt"
+    empty.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    assert ig_download.cookies_file_has_session(empty) is False
+
+
 def test_resolve_cookies_path_relative(tmp_path, monkeypatch):
     from app.services.ig_bot import download as ig_download
 
