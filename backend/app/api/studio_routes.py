@@ -136,6 +136,9 @@ from app.services.studio_generation_placeholders import (
     reconcile_stuck_studio_generations,
     generation_media_kind,
     reserve_studio_generation_for_job,
+    reserve_carousel_shot_placeholders,
+    carousel_placeholder_ids_from_params,
+    mark_carousel_placeholders_failed_from,
 )
 from app.services.studio_outfit_anchor import exclude_hidden_outfit_anchors_from_archive
 from app.services.studio_generation_status import StudioGenerationStatus
@@ -546,6 +549,73 @@ async def _accept_studio_job(
             job_id=job.id,
             job_type=job_type,
             generation_id=generation_id,
+        ).model_dump(),
+    )
+
+
+async def _accept_carousel_studio_job(
+    session: AsyncSession,
+    user: User,
+    *,
+    params: dict[str, Any],
+    job_files: dict[str, tuple[bytes, str]] | None = None,
+) -> JSONResponse:
+    """Принимает job карусели и сразу резервирует N server-side placeholder в архиве."""
+    oid = workspace_owner_id(user)
+    count = max(2, min(8, int(params.get("count") or 4)))
+    parent_gen_id = params.get("gen_id")
+    if parent_gen_id is not None:
+        try:
+            parent_gen_id = int(parent_gen_id)
+        except (TypeError, ValueError):
+            parent_gen_id = None
+    studio_model_id = params.get("studio_model_id")
+    if studio_model_id is not None:
+        try:
+            studio_model_id = int(studio_model_id)
+        except (TypeError, ValueError):
+            studio_model_id = None
+    aspect_key = params.get("output_aspect")
+
+    job = await studio_jobs.create_studio_job(
+        session,
+        owner_id=oid,
+        actor_user_id=user.id,
+        job_type="carousel",
+        params=params,
+    )
+    merged = dict(params)
+    if job_files:
+        for key, (data, mime) in job_files.items():
+            merged[f"{key}_path"] = studio_jobs.save_studio_job_file(job.id, f"{key}.bin", data)
+            if mime:
+                merged[f"{key}_mime"] = mime
+
+    placeholders = await reserve_carousel_shot_placeholders(
+        session,
+        owner_id=oid,
+        studio_job_id=job.id,
+        count=count,
+        studio_model_id=studio_model_id,
+        output_aspect=aspect_key,
+        carousel_parent_generation_id=parent_gen_id,
+        prompt_base="Карусель",
+    )
+    ph_ids = [int(r.id) for r in placeholders]
+    merged["carousel_placeholder_ids"] = ph_ids
+    if ph_ids:
+        merged["placeholder_generation_id"] = ph_ids[0]
+    await studio_jobs.update_studio_job_params(session, job, merged)
+    await session.commit()
+
+    studio_jobs.schedule_studio_job(job.id)
+    return JSONResponse(
+        status_code=202,
+        content=StudioJobAcceptedOut(
+            job_id=job.id,
+            job_type="carousel",
+            generation_id=ph_ids[0] if ph_ids else None,
+            generation_ids=ph_ids,
         ).model_dump(),
     )
 
@@ -2712,7 +2782,11 @@ async def api_list_studio_generations(
         select(StudioGeneration)
         .where(StudioGeneration.user_id == oid)
         .where(StudioGeneration.status.in_(visible))
-        .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
+        .order_by(
+            StudioGeneration.created_at.desc(),
+            StudioGeneration.carousel_shot_index.asc().nulls_last(),
+            StudioGeneration.id.desc(),
+        )
         .offset(int(skip))
         .limit(take)
     )
@@ -2804,7 +2878,11 @@ async def api_list_pending_studio_generations(
                 )
             )
         )
-        .order_by(StudioGeneration.created_at.desc(), StudioGeneration.id.desc())
+        .order_by(
+            StudioGeneration.created_at.desc(),
+            StudioGeneration.carousel_shot_index.asc().nulls_last(),
+            StudioGeneration.id.desc(),
+        )
         .limit(int(limit))
     )
     stmt = _apply_studio_generation_media_kind_filter(stmt, media_kind)
@@ -3178,10 +3256,9 @@ async def api_studio_carousel(
     except HTTPException as e:
         return StudioCarouselOut(message=str(e.detail))
 
-    return await _accept_studio_job(
+    return await _accept_carousel_studio_job(
         session,
         user,
-        job_type="carousel",
         params={
             "gen_id": gen_id,
             "count": int(payload.count),
@@ -3297,11 +3374,14 @@ async def api_studio_carousel_from_upload(
     if cm_raw not in ("auto", "standard", "story_nsfw"):
         cm_raw = "auto"
 
-    job = await studio_jobs.create_studio_job(
+    job_files: dict[str, tuple[bytes, str]] | None = None
+    if image_bytes:
+        mime = (image.content_type or "").strip() if image else "image/jpeg"
+        job_files = {"image": (image_bytes, mime or "image/jpeg")}
+
+    return await _accept_carousel_studio_job(
         session,
-        owner_id=oid,
-        actor_user_id=user.id,
-        job_type="carousel",
+        user,
         params={
             "gen_id": gen_id,
             "count": int(count),
@@ -3313,17 +3393,7 @@ async def api_studio_carousel_from_upload(
             "output_aspect": aspect_key,
             "carousel_mode": cm_raw,
         },
-    )
-    if image_bytes:
-        params = studio_jobs.job_params(job)
-        params["image_path"] = studio_jobs.save_studio_job_file(job.id, "carousel_master.bin", image_bytes)
-        params["image_mime"] = (image.content_type or "").strip() if image else ""
-        await studio_jobs.update_studio_job_params(session, job, params)
-
-    studio_jobs.schedule_studio_job(job.id)
-    return JSONResponse(
-        status_code=202,
-        content=StudioJobAcceptedOut(job_id=job.id, job_type="carousel", generation_id=None).model_dump(),
+        job_files=job_files,
     )
 
 
@@ -3500,6 +3570,9 @@ async def _studio_job_execute_carousel(
         None,
     )
 
+    placeholder_ids = carousel_placeholder_ids_from_params(params)
+    shots_done = 0
+
     for shot_i in range(count):
         billing = await ensure_can_consume_credits(session, user, cost_one)
         variation = shot_variations[shot_i] if shot_i < len(shot_variations) else static_carousel_variations(1)[0]
@@ -3590,10 +3663,22 @@ async def _studio_job_execute_carousel(
                 shot_i,
                 last_msg,
             )
+            await mark_carousel_placeholders_failed_from(
+                session,
+                placeholder_ids,
+                start_index=shot_i,
+                message=last_msg,
+            )
+            await session.commit()
             break
 
         source_label = f"gen {gen_id}" if gen_id is not None else "upload"
         parent_gen_id = gen_id if gen_id is not None else None
+        existing_row: StudioGeneration | None = None
+        if shot_i < len(placeholder_ids):
+            existing_row = await session.get(StudioGeneration, int(placeholder_ids[shot_i]))
+            if existing_row is not None and existing_row.user_id != oid:
+                existing_row = None
         gen = await download_and_create_generation(
             session,
             owner_id=oid,
@@ -3606,10 +3691,20 @@ async def _studio_job_execute_carousel(
             outfit_generation_id=ref_bundle.outfit_generation_id,
             carousel_parent_generation_id=parent_gen_id,
             carousel_shot_index=shot_i,
+            existing_row=existing_row,
         )
         if gen is None:
             last_msg = "Не удалось сохранить кадр карусели — повторите позже."
+            await mark_carousel_placeholders_failed_from(
+                session,
+                placeholder_ids,
+                start_index=shot_i,
+                message=last_msg,
+            )
+            await session.commit()
             break
+
+        shots_done = shot_i + 1
 
         await record_usage(
             session,
@@ -3634,6 +3729,15 @@ async def _studio_job_execute_carousel(
         else:
             out_u = raw_url
         items.append(StudioCarouselItemOut(generation_id=gen.id, image_url=out_u))
+
+    if placeholder_ids and shots_done < len(placeholder_ids):
+        await mark_carousel_placeholders_failed_from(
+            session,
+            placeholder_ids,
+            start_index=shots_done,
+            message=last_msg or "Кадр карусели не сгенерирован",
+        )
+        await session.commit()
 
     return StudioCarouselOut(items=items, message=last_msg).model_dump()
 

@@ -480,6 +480,10 @@ class StudioJobAcceptedOut(BaseModel):
     status: str = "pending"
     job_type: str
     generation_id: int | None = None
+    generation_ids: list[int] = Field(
+        default_factory=list,
+        description="Все placeholder generation_id (карусель — по одному на кадр)",
+    )
     message: str = "Задача принята. Ожидайте результат — статус обновится автоматически."
 
 

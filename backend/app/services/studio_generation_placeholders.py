@@ -17,7 +17,7 @@ from app.services.studio_generation_storage import (
 )
 from app.services.studio_model_images import normalize_exif_camera
 from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
-from app.services.studio_jobs import job_params
+from app.services.studio_jobs import job_params, job_result_dict
 
 if TYPE_CHECKING:
     pass
@@ -94,6 +94,147 @@ async def reserve_studio_generation_for_job(
     return row
 
 
+def carousel_placeholder_ids_from_params(params: dict) -> list[int]:
+    """ID заглушек кадров карусели из params job."""
+    raw = params.get("carousel_placeholder_ids")
+    if not isinstance(raw, list):
+        return []
+    out: list[int] = []
+    for item in raw:
+        try:
+            out.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+async def reserve_carousel_shot_placeholders(
+    session: AsyncSession,
+    *,
+    owner_id: int,
+    studio_job_id: int,
+    count: int,
+    studio_model_id: int | None,
+    output_aspect: str | None,
+    carousel_parent_generation_id: int | None = None,
+    prompt_base: str = "Карусель",
+) -> list[StudioGeneration]:
+    """
+    Создаёт N записей processing до старта WaveSpeed — видны в архиве после F5 / с другого устройства.
+    studio_job_id нужен для reconcile; сами кадры ищем по carousel_placeholder_ids в params job.
+    """
+    n = max(2, min(8, int(count)))
+    rows: list[StudioGeneration] = []
+    for shot_i in range(n):
+        excerpt = f"{prompt_base} {shot_i + 1}/{n}…".strip()[:2000]
+        row = StudioGeneration(
+            user_id=owner_id,
+            status=StudioGenerationStatus.PROCESSING,
+            relative_path="",
+            content_type="image/jpeg",
+            output_aspect=output_aspect,
+            studio_model_id=studio_model_id,
+            studio_job_id=int(studio_job_id),
+            prompt_excerpt=excerpt,
+            carousel_parent_generation_id=carousel_parent_generation_id,
+            carousel_shot_index=shot_i,
+            video_backend="wavespeed",
+        )
+        session.add(row)
+        rows.append(row)
+    await session.flush()
+    from app.services.funnel_analytics import record_funnel_event_for_owner_once
+
+    await record_funnel_event_for_owner_once(
+        session, owner_id=owner_id, event="first_generation"
+    )
+    log.info(
+        "carousel placeholders job=%s shots=%s ids=%s",
+        studio_job_id,
+        n,
+        [r.id for r in rows],
+    )
+    return rows
+
+
+async def mark_carousel_placeholders_failed_from(
+    session: AsyncSession,
+    placeholder_ids: list[int],
+    *,
+    start_index: int,
+    message: str,
+) -> int:
+    """Помечает незавершённые кадры карусели (с start_index) как failed."""
+    changed = 0
+    msg = (message or "").strip() or "Кадр карусели не сгенерирован"
+    for i in range(max(0, int(start_index)), len(placeholder_ids)):
+        row = await session.get(StudioGeneration, int(placeholder_ids[i]))
+        if row is None:
+            continue
+        st = (row.status or "").strip()
+        if st in (StudioGenerationStatus.READY, StudioGenerationStatus.FAILED):
+            continue
+        await mark_studio_generation_failed(session, row, message=msg, step="carousel")
+        changed += 1
+    return changed
+
+
+async def finalize_carousel_placeholders_for_terminal_job(
+    session: AsyncSession,
+    job: StudioJob,
+) -> bool:
+    """Закрывает зависшие заглушки карусели, когда job completed/failed."""
+    if (job.job_type or "").strip() != "carousel":
+        return False
+    if job.status not in (
+        StudioJobStatus.failed.value,
+        StudioJobStatus.completed.value,
+    ):
+        return False
+    params = job_params(job)
+    ph_ids = carousel_placeholder_ids_from_params(params)
+    if not ph_ids:
+        return False
+
+    completed_ids: set[int] = set()
+    if job.status == StudioJobStatus.completed.value:
+        result = job_result_dict(job)
+        for item in result.get("items") or []:
+            if isinstance(item, dict):
+                try:
+                    completed_ids.add(int(item.get("generation_id")))
+                except (TypeError, ValueError):
+                    pass
+
+    changed = 0
+    fail_msg = (job.error_message or "").strip() or "Генерация не выполнена"
+    for gid in ph_ids:
+        row = await session.get(StudioGeneration, gid)
+        if row is None:
+            continue
+        st = (row.status or "").strip()
+        if st in (StudioGenerationStatus.READY, StudioGenerationStatus.FAILED):
+            continue
+        if gid in completed_ids and generation_has_archive_file(row):
+            continue
+        if job.status == StudioJobStatus.failed.value:
+            await mark_studio_generation_failed(
+                session, row, message=fail_msg, step="job"
+            )
+            changed += 1
+        elif st == StudioGenerationStatus.PROCESSING:
+            await mark_studio_generation_failed(
+                session,
+                row,
+                message="Задача завершена без файла результата",
+                step="job",
+            )
+            changed += 1
+    if changed:
+        log.info("carousel finalize placeholders job=%s changed=%s", job.id, changed)
+    return changed > 0
+
+
 def generation_media_kind(row: StudioGeneration) -> str:
     ct = (row.content_type or "").strip().lower()
     return "video" if ct.startswith("video/") else "image"
@@ -126,6 +267,8 @@ async def finalize_studio_generation_for_terminal_job(
         StudioJobStatus.completed.value,
     ):
         return False
+    if (job.job_type or "").strip() == "carousel":
+        return await finalize_carousel_placeholders_for_terminal_job(session, job)
     gen = await resolve_studio_generation_for_job(session, job)
     if gen is None:
         return False

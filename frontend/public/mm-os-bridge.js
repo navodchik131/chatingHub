@@ -941,6 +941,33 @@
     return dedupeArchiveById([item, ...current])
   }
 
+  function applyCarouselJobToArchive(current, tempIds, accepted) {
+    const realIds = Array.isArray(accepted?.generation_ids)
+      ? accepted.generation_ids
+          .map((x) => Number(x))
+          .filter((n) => Number.isFinite(n) && n > 0)
+      : []
+    let next = current
+    if (realIds.length && tempIds.length) {
+      tempIds.forEach((tid, i) => {
+        const rid = realIds[i]
+        if (rid) {
+          next = replaceOptimisticArchiveId(next, tid, rid, {
+            status: 'processing',
+            job_id: accepted?.job_id ?? null,
+          })
+        }
+      })
+      return next
+    }
+    if (accepted?.job_id) {
+      return next.map((g) =>
+        tempIds.includes(g.id) ? { ...g, job_id: accepted.job_id, status: 'processing' } : g,
+      )
+    }
+    return next
+  }
+
   function replaceOptimisticArchiveId(current, tempId, realId, patch) {
     return dedupeArchiveById(
       current.map((g) => (g.id === tempId ? { ...g, id: realId, ...patch } : g)),
@@ -3573,13 +3600,8 @@
         if (srcId) fd.append('existing_generation_id', String(srcId))
         else if (uploadFile) fd.append('image', uploadFile, uploadFile.name || 'carousel.jpg')
         const accepted = await API.postStudioJob('/api/studio/carousel', fd)
-        // Готовые кадры подтягиваем по одному через poll — не ждём весь джоб в UI
         await withArchiveMut(() => {
-          if (accepted.job_id) {
-            store.archiveImages = store.archiveImages.map((g) =>
-              tempIds.includes(g.id) ? { ...g, job_id: accepted.job_id, status: 'processing' } : g,
-            )
-          }
+          store.archiveImages = applyCarouselJobToArchive(store.archiveImages, tempIds, accepted)
         })
         scheduleArchivePoll()
         logic.forceUpdate()
@@ -3592,11 +3614,6 @@
           } catch (e) {
             store.error = e.message || String(e)
           } finally {
-            await withArchiveMut(() => {
-              for (const tid of tempIds) {
-                store.archiveImages = removeOptimisticArchive(store.archiveImages, tid)
-              }
-            })
             await refreshPendingArchiveOnly()
             store.logic?.forceUpdate()
             scheduleArchivePoll()

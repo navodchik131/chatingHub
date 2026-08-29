@@ -6,6 +6,7 @@ export interface StudioJobAccepted {
   status: string
   job_type: string
   generation_id?: number | null
+  generation_ids?: number[]
   message?: string
 }
 
@@ -17,6 +18,18 @@ export function coerceJobGenerationId(accepted: StudioJobAccepted | null | undef
     if (Number.isFinite(n) && n > 0) return n
   }
   return null
+}
+
+/** ID всех placeholder-записей (карусель: по одному на кадр). */
+export function coerceJobGenerationIds(accepted: StudioJobAccepted | null | undefined): number[] {
+  const fromList = accepted?.generation_ids
+  if (Array.isArray(fromList) && fromList.length) {
+    return fromList
+      .map((x) => (typeof x === 'number' ? x : Number(x)))
+      .filter((n) => Number.isFinite(n) && n > 0)
+  }
+  const one = coerceJobGenerationId(accepted)
+  return one != null ? [one] : []
 }
 
 /** POST студии: 202 — задача в фоне, без ожидания WaveSpeed. */

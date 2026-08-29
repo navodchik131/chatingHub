@@ -11,15 +11,28 @@ import {
   removeOptimisticStudioArchive,
   replaceOptimisticStudioArchiveId,
 } from '../../studioArchive'
-import { coerceJobGenerationId, waitForStudioJobResult } from '../../studioJobs'
+import { coerceJobGenerationId, coerceJobGenerationIds, waitForStudioJobResult } from '../../studioJobs'
 import { apiJson, apiJsonOptional, isPlausibleTelegramBotToken, resolveDonationBalances } from './helpers'
 import { refreshPendingArchiveImages, refreshPendingArchiveVideos } from './archivePoll'
 import { mapGenModelsFromApi, normalizeStudioModelId, sameStudioModelId, waveModelParamsFromState, effectiveStudioState } from './studioHelpers'
 import * as actions from './actions'
 
 function applyJobToOptimisticArchive(current, tempIds, accepted) {
-  const realId = coerceJobGenerationId(accepted)
+  const realIds = coerceJobGenerationIds(accepted)
   let next = current
+  if (realIds.length && tempIds.length) {
+    tempIds.forEach((tid, i) => {
+      const rid = realIds[i]
+      if (rid) {
+        next = replaceOptimisticStudioArchiveId(next, tid, rid, {
+          status: 'processing',
+          job_id: accepted?.job_id ?? null,
+        })
+      }
+    })
+    return next
+  }
+  const realId = coerceJobGenerationId(accepted)
   if (realId && tempIds.length === 1) {
     return replaceOptimisticStudioArchiveId(next, tempIds[0], realId, {
       status: 'processing',
