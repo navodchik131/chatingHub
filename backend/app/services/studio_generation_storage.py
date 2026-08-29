@@ -631,6 +631,9 @@ async def download_and_create_generation(
     motion_video_prompt_auto: str | None = None,
     existing_row: StudioGeneration | None = None,
     exif_camera: str | None = None,
+    outfit_generation_id: int | None = None,
+    carousel_parent_generation_id: int | None = None,
+    carousel_shot_index: int | None = None,
 ) -> StudioGeneration | None:
     """Скачивает картинку с WaveSpeed/CDN и сохраняет в data/studio_generations/…"""
     url = (source_url or "").strip()
@@ -653,6 +656,12 @@ async def download_and_create_generation(
     )
     if row is None:
         return None
+    if outfit_generation_id is not None:
+        row.outfit_generation_id = int(outfit_generation_id)
+    if carousel_parent_generation_id is not None:
+        row.carousel_parent_generation_id = int(carousel_parent_generation_id)
+    if carousel_shot_index is not None:
+        row.carousel_shot_index = int(carousel_shot_index)
     if row.status == StudioGenerationStatus.READY and generation_has_archive_file(row):
         return row
     if row.status == StudioGenerationStatus.PROVIDER_READY:

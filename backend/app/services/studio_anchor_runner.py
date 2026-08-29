@@ -44,6 +44,8 @@ class AnchorPipelineResult:
     scene_description: str
     visibility: AnchorVisibility
     cache_key: str
+    dressed_body_bytes: bytes | None = None
+    outfit_generation_id: int | None = None
 
 
 async def _analyze_scene_text(
@@ -283,4 +285,5 @@ async def run_anchor_pipeline(
         scene_description=scene_description,
         visibility=vis,
         cache_key=cache_key,
+        dressed_body_bytes=dressed_bytes,
     )

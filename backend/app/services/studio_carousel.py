@@ -225,6 +225,36 @@ def build_carousel_grok_wave_prompt(*, master_scene_context: str, shot_variation
     )
 
 
+def build_carousel_multi_ref_wave_prompt(
+    *,
+    master_scene_context: str,
+    shot_variation: str,
+    ref_binding_block: str,
+    story_nsfw: bool = False,
+) -> str:
+    """Multi-ref carousel: явные @ImageN роли + shot variation."""
+    lock = load_carousel_lock_text()
+    base = (master_scene_context or "").strip() or "(see reference images)"
+    variation = (shot_variation or "").strip()
+    story_hint = ""
+    if story_nsfw:
+        story_hint = (
+            "\n\n[NSFW_STORY] Execute the STORY_BEAT in SHOT_VARIATION. "
+            "Wardrobe changes only as explicitly described in the beat. "
+            "Preserve face (@Image2), outfit anchor (@Image3), and anatomy (@Image4) fidelity."
+        )
+    refs = (ref_binding_block or "").strip()
+    refs_block = f"\n\n{refs}\n" if refs else "\n"
+    return (
+        f"{lock}{refs_block}\n"
+        f"BASE_SCENE (text context):\n{base}\n\n"
+        f"[SHOT_VARIATION — this carousel frame only]\n{variation}"
+        f"{story_hint}"
+        f"{_CAROUSEL_VARIATION_APPLY}"
+        f"{_CAROUSEL_IDENTITY_REINFORCE}"
+    )
+
+
 def static_carousel_variations(count: int) -> list[str]:
     n = max(2, min(8, int(count)))
     return [carousel_variation_at(i) for i in range(n)]
@@ -307,4 +337,98 @@ async def grok_compose_carousel_prompts(
     )
     prompts = parse_carousel_grok_prompts(raw_out, count=n)
     log.info("carousel grok composed shots=%s model=%s", len(prompts), model)
+    return prompts
+
+
+def _grok_carousel_nsfw_story_prompt_candidates() -> list[Path]:
+    rel = (getattr(settings, "grok_carousel_nsfw_story_compose_system_path", None) or "").strip()
+    name = "grok_carousel_nsfw_story_compose_system.txt"
+    if rel:
+        name = (BACKEND_DIR / rel).name
+    ordered = [
+        (BACKEND_DIR / rel).resolve() if rel else None,
+        (BACKEND_DIR / "data" / "prompts" / name).resolve(),
+        (BACKEND_DIR / "_bundled_prompts" / name).resolve(),
+    ]
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for item in ordered:
+        if item is None or item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def load_grok_carousel_nsfw_story_compose_system() -> str:
+    inline = (getattr(settings, "grok_carousel_nsfw_story_compose_system_inline", None) or "").strip()
+    if inline:
+        return inline
+    for path in _grok_carousel_nsfw_story_prompt_candidates():
+        if path.is_file():
+            t = path.read_text(encoding="utf-8").strip()
+            if t:
+                return t
+    raise RuntimeError(
+        "NSFW carousel story prompt пуст: добавьте grok_carousel_nsfw_story_compose_system.txt"
+    )
+
+
+async def grok_compose_carousel_story_prompts(
+    *,
+    master_image_bytes: bytes,
+    master_image_mime: str | None,
+    user_direction: str,
+    count: int,
+    master_scene_text: str | None = None,
+    credentials: StudioOpenAiCredentials | None = None,
+) -> list[str]:
+    """Grok vision: NSFW story arc → N carousel briefs with narrative escalation."""
+    if not master_image_bytes:
+        raise RuntimeError("Grok NSFW carousel: нет MASTER_IMAGE")
+    creds = credentials or grok_motion_studio_credentials()
+    system = load_grok_carousel_nsfw_story_compose_system()
+    n = max(2, min(8, int(count)))
+    direction = (user_direction or "").strip() or (
+        "Plan an NSFW carousel story arc from this master photo. "
+        "Progress the scenario naturally — tease, partial reveal, interaction with clothing/props — "
+        "not just camera rotations. Same person and room throughout."
+    )
+    scene = (master_scene_text or "").strip()
+    ref_mime = (master_image_mime or "image/jpeg").split(";")[0].strip()
+    if ref_mime not in ("image/jpeg", "image/png", "image/gif", "image/webp"):
+        ref_mime = "image/jpeg"
+    ref_b64 = base64.standard_b64encode(master_image_bytes).decode("ascii")
+    user_parts: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                "Task: read MASTER_IMAGE, design a NSFW story arc across FRAME_COUNT frames, "
+                "write exactly FRAME_COUNT img2img briefs with STORY_BEAT + camera + pose.\n\n"
+                f"FRAME_COUNT: {n}\n\nUSER_DIRECTION:\n{direction}\n\n"
+                f"MASTER_SCENE_TEXT:\n{scene or '(none)'}\n\n"
+                "Additional refs (@Image2 face, @Image3 outfit, @Image4 anatomy) will be sent to the editor — "
+                "briefs must not contradict them."
+            ),
+        },
+        {"type": "image_url", "image_url": {"url": f"data:{ref_mime};base64,{ref_b64}"}},
+    ]
+    model = _carousel_grok_vision_model()
+    temp = min(1.0, max(float(settings.grok_scene_compose_temperature), 0.72))
+    raw_out = await chat_completion_openai_compatible_text(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": system + "\n\nFollow the output JSON format exactly. No markdown fences.",
+            },
+            {"role": "user", "content": user_parts},
+        ],
+        max_tokens=int(settings.grok_scene_compose_max_tokens),
+        temperature=temp,
+        credentials=creds,
+        timeout_seconds=float(settings.grok_scene_compose_timeout_seconds),
+    )
+    prompts = parse_carousel_grok_prompts(raw_out, count=n)
+    log.info("carousel grok NSFW story composed shots=%s model=%s", len(prompts), model)
     return prompts

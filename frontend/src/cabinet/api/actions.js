@@ -509,6 +509,8 @@ export async function runCarouselGeneration(params) {
   fd.append('description', params.prompt || '')
   fd.append('output_aspect', params.aspect || '9:16')
   fd.append('studio_wave_profile', params.nsfw ? 'nsfw' : 'regular')
+  // auto → NSFW story + multi-ref; SFW → standard carousel
+  fd.append('carousel_mode', params.nsfw ? 'auto' : 'standard')
   if (params.waveModelId) fd.append('workflow_wave_model', params.waveModelId)
   if (params.wanTier) fd.append('wan_edit_tier', params.wanTier)
   if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))

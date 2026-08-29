@@ -543,6 +543,7 @@ class StudioCarouselIn(BaseModel):
     wan_edit_tier: Literal["standard", "pro"] = "standard"
     user_notes: str = Field(default="", max_length=4000)
     workflow_wave_model: str | None = Field(default=None, max_length=64)
+    carousel_mode: Literal["auto", "standard", "story_nsfw"] = "auto"
 
 
 class StudioCarouselItemOut(BaseModel):

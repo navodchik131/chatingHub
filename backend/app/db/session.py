@@ -205,6 +205,28 @@ def _migrate_studio_generation_exif_camera(sync_conn) -> None:
     )
 
 
+def _migrate_studio_generation_carousel_refs(sync_conn) -> None:
+    """Outfit anchor + carousel parent links на studio_generations."""
+    from sqlalchemy import inspect
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("studio_generations"):
+        return
+    cols = {c["name"] for c in insp.get_columns("studio_generations")}
+    if "outfit_generation_id" not in cols:
+        sync_conn.execute(
+            text("ALTER TABLE studio_generations ADD COLUMN outfit_generation_id INTEGER")
+        )
+    if "carousel_parent_generation_id" not in cols:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE studio_generations ADD COLUMN carousel_parent_generation_id INTEGER"
+            )
+        )
+    if "carousel_shot_index" not in cols:
+        sync_conn.execute(text("ALTER TABLE studio_generations ADD COLUMN carousel_shot_index INTEGER"))
+
+
 def _migrate_studio_model_image_kind(sync_conn) -> None:
     from sqlalchemy import inspect
 
@@ -372,6 +394,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_studio_generation_refined_prompt)
         await conn.run_sync(_migrate_studio_generation_motion_video_prompt)
         await conn.run_sync(_migrate_studio_generation_exif_camera)
+        await conn.run_sync(_migrate_studio_generation_carousel_refs)
         await conn.run_sync(_migrate_studio_model_image_kind)
         await conn.run_sync(_migrate_user_studio_model_export_camera)
         await conn.run_sync(_migrate_user_studio_model_phone_exif_refs)

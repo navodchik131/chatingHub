@@ -1489,6 +1489,18 @@ class StudioGeneration(Base):
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     """wavespeed | evolink — провайдер видео (Seedance Sale = evolink)."""
     video_backend: Mapped[str] = mapped_column(String(16), default="wavespeed", nullable=False)
+    # Dress-prep / outfit anchor для multi-ref карусели и img2img.
+    outfit_generation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("studio_generations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    carousel_parent_generation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("studio_generations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    carousel_shot_index: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
