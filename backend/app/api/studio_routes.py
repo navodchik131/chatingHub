@@ -137,6 +137,7 @@ from app.services.studio_generation_placeholders import (
     generation_media_kind,
     reserve_studio_generation_for_job,
 )
+from app.services.studio_outfit_anchor import exclude_hidden_outfit_anchors_from_archive
 from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_generation_storage import (
     attach_studio_generation_wavespeed_task,
@@ -2717,6 +2718,7 @@ async def api_list_studio_generations(
     stmt = _apply_studio_generation_media_kind_filter(stmt, media_kind)
     stmt = _apply_studio_generation_video_backend_filter(stmt, video_backend)
     stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
+    stmt = exclude_hidden_outfit_anchors_from_archive(stmt)
     rows = list((await session.execute(stmt)).scalars().all())
     has_more = len(rows) > limit
     rows = rows[:limit]
@@ -2807,6 +2809,7 @@ async def api_list_pending_studio_generations(
     stmt = _apply_studio_generation_media_kind_filter(stmt, media_kind)
     stmt = _apply_studio_generation_video_backend_filter(stmt, video_backend)
     stmt = apply_studio_model_id_filter(stmt, StudioGeneration.studio_model_id, allowed)
+    stmt = exclude_hidden_outfit_anchors_from_archive(stmt)
     rows = list((await session.execute(stmt)).scalars().all())
     base = _public_app_base(request)
     if not base:

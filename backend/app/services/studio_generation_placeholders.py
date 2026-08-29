@@ -29,13 +29,17 @@ async def find_studio_generation_by_job_id(
     session: AsyncSession,
     job_id: int,
 ) -> StudioGeneration | None:
+    from app.services.studio_outfit_anchor import generation_is_hidden_outfit_anchor
+
     stmt = (
         select(StudioGeneration)
         .where(StudioGeneration.studio_job_id == job_id)
         .order_by(StudioGeneration.id.desc())
-        .limit(1)
     )
-    return (await session.execute(stmt)).scalar_one_or_none()
+    for row in (await session.execute(stmt)).scalars().all():
+        if not generation_is_hidden_outfit_anchor(row):
+            return row
+    return None
 
 
 async def reserve_studio_generation_for_job(
@@ -99,15 +103,17 @@ async def resolve_studio_generation_for_job(
     session: AsyncSession,
     job: StudioJob,
 ) -> StudioGeneration | None:
-    row = await find_studio_generation_by_job_id(session, job.id)
-    if row is not None:
-        return row
+    # placeholder_generation_id — основной результат job; job_id может дублироваться у скрытого outfit ref.
     ph = job_params(job).get("placeholder_generation_id")
     if isinstance(ph, int):
-        return await session.get(StudioGeneration, ph)
+        row = await session.get(StudioGeneration, ph)
+        if row is not None:
+            return row
     if isinstance(ph, str) and ph.isdigit():
-        return await session.get(StudioGeneration, int(ph))
-    return None
+        row = await session.get(StudioGeneration, int(ph))
+        if row is not None:
+            return row
+    return await find_studio_generation_by_job_id(session, job.id)
 
 
 async def finalize_studio_generation_for_terminal_job(

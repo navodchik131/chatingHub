@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from app.db.models import StudioGeneration
 from app.services.studio_generation_storage import persist_studio_generation_from_uploaded_bytes
@@ -34,6 +35,9 @@ async def persist_outfit_anchor_generation(
     refined = OUTFIT_ANCHOR_PROMPT_TAG
     if note:
         refined = f"{OUTFIT_ANCHOR_PROMPT_TAG} {note}".strip()
+    # Не привязываем к studio_job_id: иначе find_studio_generation_by_job_id
+    # вернёт outfit вместо итоговой генерации и сломает recovery/архив.
+    _ = source_job_id
     row = await persist_studio_generation_from_uploaded_bytes(
         session,
         owner_id=owner_id,
@@ -43,7 +47,7 @@ async def persist_outfit_anchor_generation(
         studio_model_id=studio_model_id,
         refined_prompt=refined,
         motion_video_prompt_auto=None,
-        studio_job_id=source_job_id,
+        studio_job_id=None,
     )
     if row is not None:
         log.info(
@@ -112,7 +116,25 @@ async def find_outfit_generation_for_master(
 
 
 def generation_is_outfit_anchor(row: StudioGeneration | None) -> bool:
+    """Outfit ref для карусели: явный anchor или шаг Motion Control dress."""
     if row is None:
         return False
     blob = f"{row.prompt_excerpt or ''}\n{row.refined_prompt or ''}".lower()
     return "outfit anchor" in blob or "motion control dress" in blob
+
+
+def generation_is_hidden_outfit_anchor(row: StudioGeneration | None) -> bool:
+    """Скрытый ref anchor ([Outfit anchor]) — не показываем в архиве пользователя."""
+    if row is None:
+        return False
+    blob = f"{row.prompt_excerpt or ''}\n{row.refined_prompt or ''}".lower()
+    return OUTFIT_ANCHOR_PROMPT_TAG.lower() in blob
+
+
+def exclude_hidden_outfit_anchors_from_archive(stmt: Select) -> Select:
+    """SQL-фильтр: убираем скрытые outfit anchor из списка архива."""
+    hidden = or_(
+        StudioGeneration.prompt_excerpt.ilike(f"%{OUTFIT_ANCHOR_PROMPT_TAG}%"),
+        StudioGeneration.refined_prompt.ilike(f"%{OUTFIT_ANCHOR_PROMPT_TAG}%"),
+    )
+    return stmt.where(not_(hidden))
