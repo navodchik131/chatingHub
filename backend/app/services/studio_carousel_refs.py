@@ -88,8 +88,8 @@ async def resolve_carousel_reference_bundle(
             url=master_url,
             role="master",
             label=(
-                "MASTER FRAME: pose, camera angle, crop, scene composition, lighting "
-                "for this carousel shot. Apply SHOT_VARIATION to this base."
+                "MASTER FRAME (edit base): identity/outfit/room anchor — "
+                "apply SHOT_VARIATION; output must NOT be an unchanged copy of this image."
             ),
         )
     )

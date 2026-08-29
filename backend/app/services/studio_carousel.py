@@ -193,12 +193,31 @@ _CAROUSEL_IDENTITY_REINFORCE = (
     "match hair, outfit, body, and skin on any visible skin. Never swap to a different model."
 )
 
+_CAROUSEL_FIRST_SHOT_REINFORCE = (
+    "\n\n[FIRST_FRAME_MANDATE] Carousel frame #1: output MUST differ clearly from the master input — "
+    "apply SHOT_VARIATION camera/pose/crop/expression changes; never return an unchanged copy."
+)
+
+
+def carousel_first_shot_reinforce() -> str:
+    """Доп. инструкция для первого кадра — модель часто копирует мастер без неё."""
+    return _CAROUSEL_FIRST_SHOT_REINFORCE
+
+
 _CAROUSEL_VARIATION_APPLY = (
     "\n\n[APPLY_SHOT] Execute this frame's camera geometry, crop, body pose, gaze, expression, "
     "and any prop interaction from SHOT_VARIATION. Preserve the master's capture grammar "
     "(selfie stays selfie, mirror stays mirror). Do not keep the master's identical pose/angle "
     "unless SHOT_VARIATION says so."
 )
+
+
+def append_carousel_shot_reinforce(body: str, *, shot_index: int) -> str:
+    """Усиливает промпт для кадра 0 — anti-clone."""
+    text = (body or "").strip()
+    if shot_index == 0:
+        text += carousel_first_shot_reinforce()
+    return text
 
 
 def build_carousel_wave_prompt(*, master_refined_json: str, shot_index: int) -> str:

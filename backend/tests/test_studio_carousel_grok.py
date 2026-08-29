@@ -97,3 +97,32 @@ def test_load_grok_carousel_compose_system_capture_grammar() -> None:
 def test_parse_carousel_grok_prompts_too_few_raises() -> None:
     with pytest.raises(RuntimeError):
         parse_carousel_grok_prompts('{"prompts": ["only one"]}', count=3)
+
+
+def test_finalize_carousel_mode_not_photo_edit_prefix() -> None:
+    from app.services.studio_openai import (
+        finalize_nano_banana_studio_prompt,
+        finalize_wavespeed_studio_prompt,
+    )
+
+    body = "[SHOT_VARIATION] Camera RIGHT three-quarter."
+    wan = finalize_wavespeed_studio_prompt(body, studio_mode="carousel", user_image_first=True)
+    nano = finalize_nano_banana_studio_prompt(
+        body,
+        studio_mode="carousel",
+        user_photo_edit_first=False,
+        user_pose_reference_is_last=False,
+    )
+    assert "CAROUSEL_IMG2IMG" in wan
+    assert "EDIT_BASE" not in wan
+    assert "preserve shot scale" not in wan.lower()
+    assert "CAROUSEL_IMG2IMG" in nano
+    assert "EDIT_BASE" not in nano
+
+
+def test_append_carousel_shot_reinforce_first_frame_only() -> None:
+    from app.services.studio_carousel import append_carousel_shot_reinforce
+
+    base = "lock + variation"
+    assert "FIRST_FRAME_MANDATE" in append_carousel_shot_reinforce(base, shot_index=0)
+    assert append_carousel_shot_reinforce(base, shot_index=1) == base

@@ -192,6 +192,7 @@ from app.services.content_safety import (
     validate_model_profile_text,
 )
 from app.services.studio_carousel import (
+    append_carousel_shot_reinforce,
     build_carousel_grok_wave_prompt,
     build_carousel_multi_ref_wave_prompt,
     build_carousel_wave_prompt,
@@ -3521,6 +3522,8 @@ async def _studio_job_execute_carousel(
                 shot_index=shot_i,
             )
 
+        carousel_body = append_carousel_shot_reinforce(carousel_body, shot_index=shot_i)
+
         shot_image_urls = (
             ref_bundle.image_urls if ref_bundle.use_multi_ref else [master_url]
         )
@@ -3528,14 +3531,14 @@ async def _studio_job_execute_carousel(
         if wave_profile_n == "regular":
             wavespeed_prompt = finalize_nano_banana_studio_prompt(
                 carousel_body,
-                studio_mode="photo_edit",
-                user_photo_edit_first=True,
+                studio_mode="carousel",
+                user_photo_edit_first=False,
                 user_pose_reference_is_last=False,
             )
         else:
             wavespeed_prompt = finalize_wavespeed_studio_prompt(
                 carousel_body,
-                studio_mode="photo_edit",
+                studio_mode="carousel",
                 user_image_first=True,
             )
 

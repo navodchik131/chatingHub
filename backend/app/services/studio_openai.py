@@ -208,6 +208,22 @@ _WAVESPEED_PHOTO_EDIT_WITH_DETAIL_PREFIX = (
     "When JSON/USER_TEXT names a detail reference, explicitly cite **Image 2** / detail reference in the edit instructions.\n\n"
 )
 
+# Карусель: img2img от мастера, но каждый кадр ОБЯЗАН отличаться (не photo_edit «сохрани кроп»).
+_WAVESPEED_CAROUSEL_PREFIX = (
+    "[CAROUSEL_IMG2IMG] **Image 1** = master frame — identity, outfit, room, lighting quality are LOCKED. "
+    "**Every output MUST visibly differ from Image 1** per SHOT_VARIATION: change camera side/height/distance, "
+    "crop, body pose, gaze, expression, and/or prop interaction. "
+    "**Forbidden:** pixel-identical copy, same pose+angle as master, or ignoring SHOT_VARIATION. "
+    "Additional @Image refs (face/outfit/anatomy) are fidelity anchors only — do not copy their pose.\n\n"
+)
+
+_NANO_CAROUSEL_PREFIX = (
+    "[CAROUSEL_IMG2IMG] Image 1 = master — same person, outfit, room. "
+    "Apply SHOT_VARIATION: mandatory visible camera/pose/crop/expression change; "
+    "never return an unchanged duplicate of Image 1. "
+    "Extra refs lock face/outfit only.\n\n"
+)
+
 _WAVESPEED_NO_FACE_SUFFIX = (
     "\n\n[FRAMING] Do not show the subject's face or head unless the reference crop / JSON brief clearly includes them. "
     "Prefer crops on legs, feet, lower body, hands, or torso without head. "
@@ -406,6 +422,10 @@ def finalize_wavespeed_studio_prompt(
     geo = (location_geometry_block or "").strip()
     if geo:
         geo = geo + "\n\n"
+    # Карусель — отдельный префикс: не photo_edit «сохрани кадрирование».
+    if mode == "carousel":
+        out = _WAVESPEED_CAROUSEL_PREFIX.strip() if not p else _WAVESPEED_CAROUSEL_PREFIX + p
+        return out
     pose_last_model_scene = (
         mode == "model_scene"
         and user_pose_reference_is_last
@@ -592,6 +612,11 @@ def finalize_nano_banana_studio_prompt(
         vis is not None and not vis.include_face and vis.head_in_reference and not vis.headless_crop
     )
     use_no_face_nano = headless or face_hidden or (vis is None and mode == "no_face")
+
+    # Карусель — img2img с обязательным изменением ракурса (не «Доработать фото»).
+    if mode == "carousel":
+        out = _NANO_CAROUSEL_PREFIX.strip() if not p else _NANO_CAROUSEL_PREFIX + p
+        return out
 
     if location_change:
         out = (
