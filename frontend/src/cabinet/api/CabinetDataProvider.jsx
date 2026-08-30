@@ -145,6 +145,10 @@ export function CabinetDataProvider({ children }) {
   const [slotArchivePicks, setSlotArchivePicks] = useState({})
   const [motionVideoFileId, setMotionVideoFileId] = useState(null)
   const [motionVideoDurationSec, setMotionVideoDurationSec] = useState(null)
+  /** Пока true — на сервер ещё заливается новый ref-видео; старый id нельзя использовать. */
+  const [motionVideoUploading, setMotionVideoUploading] = useState(false)
+  const motionVideoUploadSeqRef = useRef(0)
+  const uploadFilesRef = useRef({})
   const [firstFrameGenId, setFirstFrameGenId] = useState(null)
   const [firstFrameUrl, setFirstFrameUrl] = useState(null)
   const [tributeEarnings, setTributeEarnings] = useState(null)
@@ -169,6 +173,7 @@ export function CabinetDataProvider({ children }) {
   useEffect(() => { archiveSeedanceVideosRef.current = archiveSeedanceVideos }, [archiveSeedanceVideos])
   useEffect(() => { donationOverviewRef.current = donationOverview }, [donationOverview])
   useEffect(() => { donationEventsRef.current = donationEvents }, [donationEvents])
+  useEffect(() => { uploadFilesRef.current = uploadFiles }, [uploadFiles])
   useEffect(() => { activeConvIdRef.current = activeConvId }, [activeConvId])
   useEffect(() => { notesByConvIdRef.current = notesByConvId }, [notesByConvId])
   useEffect(() => { conversationsRef.current = conversations }, [conversations])
@@ -1230,6 +1235,14 @@ export function CabinetDataProvider({ children }) {
       }
       const motionControl = !promptMode
       const mcWizard = wizard?.motionControlWizard
+      if (motionControl && motionVideoUploading) {
+        setError('Дождитесь загрузки видео на сервер')
+        return
+      }
+      if (motionControl && uploadFiles['motion-video'] && !motionVideoFileId) {
+        setError('Дождитесь загрузки видео на сервер')
+        return
+      }
       if (motionControl && !motionVideoFileId) {
         setError('Загрузите референс-видео')
         return
@@ -1320,7 +1333,7 @@ export function CabinetDataProvider({ children }) {
         void apiJson('/api/auth/me').then(setMe).catch(() => {})
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, firstFrameGenId, models, refreshArchiveFull, me, health],
+    [selectedModelId, selectedAspect, uploadFiles, motionVideoFileId, motionVideoUploading, firstFrameGenId, models, refreshArchiveFull, me, health],
   )
 
   const setUploadFile = useCallback((key, file) => {
@@ -1337,7 +1350,8 @@ export function CabinetDataProvider({ children }) {
       else delete next[key]
       return next
     })
-    if (key === 'motion-video' && !file) {
+    if (key === 'motion-video') {
+      // Любая смена локального файла инвалидирует предыдущий server-side id.
       setMotionVideoFileId(null)
       setMotionVideoDurationSec(null)
     }
@@ -1345,29 +1359,47 @@ export function CabinetDataProvider({ children }) {
 
   const uploadDrivingVideo = useCallback(
     async (file) => {
-      await run(async () => {
-        setMotionVideoFileId(null)
-        setMotionVideoDurationSec(null)
-        setFirstFrameGenId(null)
-        setFirstFrameUrl(null)
-        setUploadFile('motion-video', file)
+      const seq = ++motionVideoUploadSeqRef.current
+      setMotionVideoUploading(true)
+      setMotionVideoFileId(null)
+      setMotionVideoDurationSec(null)
+      setFirstFrameGenId(null)
+      setFirstFrameUrl(null)
+      setUploadFile('motion-video', file)
+      setError(null)
+      try {
         const { motionVideoFileId: id, durationSeconds } = await actions.uploadMotionDrivingVideo(file)
+        if (seq !== motionVideoUploadSeqRef.current) return null
         setMotionVideoFileId(id)
         setMotionVideoDurationSec(durationSeconds)
         return id
-      })
+      } catch (e) {
+        if (seq === motionVideoUploadSeqRef.current) {
+          setUploadFile('motion-video', null)
+          setError(e?.message || String(e))
+        }
+        throw e
+      } finally {
+        if (seq === motionVideoUploadSeqRef.current) {
+          setMotionVideoUploading(false)
+        }
+      }
     },
-    [run, setUploadFile],
+    [setUploadFile],
   )
 
   /** Восстановить ref-видео из sessionStorage после возврата на вкладку Video. */
   const restoreMotionVideoSession = useCallback((fileId, durationSec) => {
+    if (motionVideoUploading || uploadFilesRef.current['motion-video']) return
     const id = (fileId || '').trim()
     if (!id) return
-    setMotionVideoFileId(id)
-    const d = Number(durationSec)
-    setMotionVideoDurationSec(Number.isFinite(d) && d > 0 ? d : null)
-  }, [])
+    setMotionVideoFileId((cur) => cur || id)
+    setMotionVideoDurationSec((curDur) => {
+      if (curDur != null) return curDur
+      const d = Number(durationSec)
+      return Number.isFinite(d) && d > 0 ? d : null
+    })
+  }, [motionVideoUploading])
 
   const runMotionControlDress = useCallback(
     (params) => actions.runMotionControlDress(params),
@@ -1789,6 +1821,7 @@ export function CabinetDataProvider({ children }) {
       setSlotArchivePicks,
       motionVideoFileId,
       motionVideoDurationSec,
+      motionVideoUploading,
       setMotionVideoFileId,
       firstFrameGenId,
       firstFrameUrl,
@@ -1918,6 +1951,7 @@ export function CabinetDataProvider({ children }) {
       slotArchivePicks,
       motionVideoFileId,
       motionVideoDurationSec,
+      motionVideoUploading,
       firstFrameGenId,
       firstFrameUrl,
       tributeEarnings,

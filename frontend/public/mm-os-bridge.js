@@ -240,6 +240,7 @@
     uploadFiles: {},
     uploadPreviewUrls: {},
     motionVideoFileId: null,
+    motionVideoUploading: false,
     charProfileDraft: {},
     selectedPhotoKind: 'face',
     avatarCache: {},
@@ -2526,7 +2527,11 @@
     if (!zone) return
     revokeUploadPreview(key)
     delete store.uploadFiles[key]
-    if (key === 'motion-video') store.motionVideoFileId = null
+    if (key === 'motion-video') {
+      motionVideoUploadSeq += 1
+      store.motionVideoFileId = null
+      store.motionVideoUploading = false
+    }
     zone.classList.remove('mm-os-upload--filled', 'mm-os-upload--busy')
     zone.querySelector('.mm-os-upload-preview')?.remove()
     zone.querySelector('.mm-os-upload-badge')?.remove()
@@ -2544,16 +2549,30 @@
     })
   }
 
+  let motionVideoUploadSeq = 0
+
   async function uploadMotionDrivingVideo(file) {
+    const seq = ++motionVideoUploadSeq
+    store.motionVideoFileId = null
+    store.motionVideoUploading = true
+    store.logic?.forceUpdate()
     const fd = new FormData()
     fd.append('video', file)
-    const res = await API.apiFetch('/api/studio/motion/upload-driving-video', { method: 'POST', body: fd })
-    const data = await API.readJson(res)
-    if (!res.ok) throw new Error(API.formatDetail(data) || 'Не удалось загрузить видео')
-    const id = String(data.motion_video_file_id || '').trim()
-    if (!id) throw new Error('Сервер не вернул id видео')
-    store.motionVideoFileId = id
-    return id
+    try {
+      const res = await API.apiFetch('/api/studio/motion/upload-driving-video', { method: 'POST', body: fd })
+      const data = await API.readJson(res)
+      if (!res.ok) throw new Error(API.formatDetail(data) || 'Не удалось загрузить видео')
+      const id = String(data.motion_video_file_id || '').trim()
+      if (!id) throw new Error('Сервер не вернул id видео')
+      if (seq !== motionVideoUploadSeq) return null
+      store.motionVideoFileId = id
+      return id
+    } finally {
+      if (seq === motionVideoUploadSeq) {
+        store.motionVideoUploading = false
+        store.logic?.forceUpdate()
+      }
+    }
   }
 
   function bindUploadZone(zone) {
@@ -2584,6 +2603,8 @@
           store.logic?.forceUpdate()
         }
         if (activeKey === 'motion-video') {
+          store.motionVideoFileId = null
+          store.motionVideoUploading = true
           zone.classList.add('mm-os-upload--busy')
           try {
             await uploadMotionDrivingVideo(file)
@@ -3715,6 +3736,11 @@
     const modelId = store.selectedModelId
     if (!modelId) {
       store.error = 'Выберите персонажа'
+      store.logic?.forceUpdate()
+      return
+    }
+    if (!promptMode && (store.motionVideoUploading || (store.uploadFiles['motion-video'] && !store.motionVideoFileId))) {
+      store.error = 'Дождитесь загрузки видео на сервер'
       store.logic?.forceUpdate()
       return
     }

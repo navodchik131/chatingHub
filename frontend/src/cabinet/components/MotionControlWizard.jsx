@@ -320,6 +320,10 @@ export default function MotionControlWizard({
       cabinet.setError(lang === 'ru' ? 'Выберите персонажа и фото для образа' : 'Pick character and base photo');
       return;
     }
+    if (outfitRoute === 'video' && (cabinet.motionVideoUploading || (cabinet.uploadFiles['motion-video'] && !cabinet.motionVideoFileId))) {
+      cabinet.setError(lang === 'ru' ? 'Дождитесь загрузки видео на сервер' : 'Wait until the video finishes uploading');
+      return;
+    }
     if (outfitRoute === 'video' && !cabinet.motionVideoFileId) {
       cabinet.setError(lang === 'ru' ? 'Загрузите референс-видео' : 'Upload reference video');
       return;
@@ -444,6 +448,10 @@ export default function MotionControlWizard({
 
   const handleGenerateVideo = async () => {
     if (cabinet.videoSubmitting === wizardBackend) return;
+    if (cabinet.motionVideoUploading || (cabinet.uploadFiles['motion-video'] && !cabinet.motionVideoFileId)) {
+      cabinet.setError(lang === 'ru' ? 'Дождитесь загрузки видео на сервер' : 'Wait until the video finishes uploading');
+      return;
+    }
     if (!cabinet.motionVideoFileId) {
       cabinet.setError(lang === 'ru' ? 'Загрузите референс-видео' : 'Upload reference video');
       return;
