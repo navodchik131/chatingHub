@@ -181,10 +181,19 @@ def order_mode_a_image_urls(
     dressed_url: str,
     scene_url: str,
     scene_first: bool,
+    extra_face_copies: int = 0,
 ) -> list[str]:
+    """extra_face_copies — повтор face URL для усиления identity (бюст, лицо крупно в кадре)."""
+    copies = max(0, min(int(extra_face_copies), 3))
     if scene_first:
-        return [scene_url, face_url, dressed_url]
-    return [face_url, dressed_url, scene_url]
+        urls = [scene_url, face_url]
+        urls.extend([face_url] * copies)
+        urls.append(dressed_url)
+        return urls
+    urls = [face_url]
+    urls.extend([face_url] * copies)
+    urls.extend([dressed_url, scene_url])
+    return urls
 
 
 def order_mode_a_face_closeup_urls(
@@ -217,6 +226,26 @@ def detect_face_closeup_scene(
     if re.search(r"face only|head only|forehead to chin|no (visible )?(torso|chest|shoulders)", t, re.I):
         return True
     return True  # face visible, upper/lower not visible
+
+
+def detect_bust_portrait_scene(
+    vis: AnchorVisibility,
+    scene_description: str = "",
+) -> bool:
+    """Бюст / до груди: лицо + торс в кадре — scene ref доминирует, нужен усиленный face swap."""
+    if not (vis.face and vis.upper):
+        return False
+    return True
+
+
+BUST_PORTRAIT_FACE_BLOCK = (
+    "BUST PORTRAIT FACE SWAP: Tight chest-up framing — the scene sitter's face is large in the crop. "
+    "The output MUST show the model identity face, not the scene sitter. "
+    "If a hand, finger, hair, or object touches the lips, chin, or cheek, keep that contact pose exactly "
+    "but replace all visible facial skin and underlying bone structure with the model identity — "
+    "including skin around and behind the hand. "
+    "When several face reference images are provided, they depict the SAME model and must fully override the scene face."
+)
 
 
 def hairstyle_style_block(*, lock_hairstyle_style: bool) -> str:
@@ -360,6 +389,7 @@ def build_mode_a_prompt(
     notes: str = "",
     lock_hairstyle_style: bool = True,
     scene_first: bool = False,
+    bust_portrait: bool = False,
 ) -> str:
     """Face-swap WITH scene photo — Mode A (HTML), с порядком картинок под WaveSpeed."""
     exclusions = exclusion_notes(vis)
@@ -370,30 +400,50 @@ def build_mode_a_prompt(
         # Nano regular: identity first, scene last (как _nano_banana_reorder).
         face_i, body_i, scene_i = 1, 2, 3
 
+    face_ref_label = (
+        f"Images {face_i}–{face_i + 2} = the SAME facial identity reference (repeated for emphasis). "
+        if bust_portrait
+        else f"Image {face_i} = facial identity reference only. "
+    )
+
+    if bust_portrait:
+        expr_rule = (
+            f"Copy expression MOOD from Image {scene_i} (smile intensity, lip parting, teeth visibility, "
+            f"eye state, brow position, head tilt) but apply it ONLY on the MODEL bone structure from "
+            "the face reference image(s) — never keep the scene sitter's face shape or likeness."
+        )
+    else:
+        expr_rule = (
+            f"Do not blend structural facial features — eye shape, nose shape, lip shape, face shape, "
+            f"jawline — between Image {face_i} and Image {scene_i}. However, facial expression must be copied exactly "
+            f"from Image {scene_i}: smile type and intensity, whether teeth are showing, eye state "
+            "(wide open / squinting / winking), eyebrow position, and head tilt. Facial expression is "
+            f"not part of identity — it must follow Image {scene_i}, not default to neutral."
+        )
+
     prompt = (
         f"Image {scene_i} = target scene: recreate this exact pose, camera angle, framing, and lighting. "
         f"The scene reference donates geometry, light, and wardrobe coverage only — never the sitter's "
         "tattoos, moles, scars, birthmarks, face, or body identity.\n"
-        f"Image {face_i} = facial identity reference only. Use this face, and only this face.\n"
+        f"{face_ref_label}Use this face, and only this face.\n"
         f"Image {body_i} = body proportions and outfit reference. The person's body shape and the clothing "
         "shown here should be transferred exactly as-is.\n"
         "\n"
-        f"Replace the person in Image {scene_i} entirely with the identity from Image {face_i} and Image {body_i}.\n"
+        f"Replace the person in Image {scene_i} entirely with the identity from the face reference image(s) "
+        f"and Image {body_i}.\n"
         "\n"
         f"{filtered_anchor}\n"
         "\n"
         f"Do not preserve the body silhouette, bust size, waist width, hip width, face, or outfit of "
-        f"the person in Image {scene_i} — replace all of it with Image {face_i} and Image {body_i}.\n"
+        f"the person in Image {scene_i} — replace all of it with the model identity references.\n"
         "\n"
         f"Preserve exactly from Image {scene_i}: pose, camera distance and angle, framing, lighting direction "
         "and color temperature, shadows, background.\n"
         "\n"
-        f"Do not blend structural facial features — eye shape, nose shape, lip shape, face shape, "
-        f"jawline — between Image {face_i} and Image {scene_i}. However, facial expression must be copied exactly "
-        f"from Image {scene_i}: smile type and intensity, whether teeth are showing, eye state "
-        "(wide open / squinting / winking), eyebrow position, and head tilt. Facial expression is "
-        f"not part of identity — it must follow Image {scene_i}, not default to neutral."
+        f"{expr_rule}"
     )
+    if bust_portrait:
+        prompt += f"\n\n{BUST_PORTRAIT_FACE_BLOCK}"
     prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
     prompt += f"\n\n{identity_marks_block(vis)}"
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"

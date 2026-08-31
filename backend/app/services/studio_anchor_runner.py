@@ -17,6 +17,7 @@ from app.services.studio_anchor_pipeline import (
     build_mode_a_face_closeup_prompt,
     build_mode_a_prompt,
     build_mode_b_prompt,
+    detect_bust_portrait_scene,
     detect_face_closeup_scene,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
@@ -54,6 +55,7 @@ class AnchorPipelineResult:
     outfit_generation_id: int | None = None
     scene_first: bool = False
     face_closeup: bool = False
+    bust_portrait: bool = False
 
 
 async def _analyze_scene_text(
@@ -204,6 +206,11 @@ async def run_anchor_pipeline(
     face_closeup = mode_n == "face_swap" and detect_face_closeup_scene(
         vis, scene_description
     )
+    bust_portrait = (
+        mode_n == "face_swap"
+        and not face_closeup
+        and detect_bust_portrait_scene(vis, scene_description)
+    )
 
     anchor = profile_text_to_identity_anchor(model_profile_text)
     filtered = filter_anchor_by_visibility(anchor, vis) if anchor else ""
@@ -290,18 +297,21 @@ async def run_anchor_pipeline(
                 duplicate_face=scene_first,
             )
         else:
+            extra_faces = 2 if bust_portrait else 0
             prompt = build_mode_a_prompt(
                 filtered_anchor=filtered or anchor,
                 vis=vis,
                 notes=notes,
                 lock_hairstyle_style=lock_hairstyle_style,
                 scene_first=scene_first,
+                bust_portrait=bust_portrait,
             )
             urls = order_mode_a_image_urls(
                 face_url=face_url,
                 dressed_url=dressed_url,
                 scene_url=scene_url,
                 scene_first=scene_first,
+                extra_face_copies=extra_faces,
             )
         out_mode = "A"
     else:
@@ -332,4 +342,5 @@ async def run_anchor_pipeline(
         dressed_body_bytes=dressed_bytes,
         scene_first=scene_first if mode_n == "face_swap" else False,
         face_closeup=face_closeup if mode_n == "face_swap" else False,
+        bust_portrait=bust_portrait if mode_n == "face_swap" else False,
     )

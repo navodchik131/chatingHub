@@ -6,6 +6,7 @@ from app.services.studio_anchor_pipeline import (
     anchor_mode_a_scene_first,
     build_mode_a_prompt,
     build_mode_b_prompt,
+    detect_bust_portrait_scene,
     detect_face_closeup_scene,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
@@ -104,6 +105,48 @@ def test_order_mode_a_face_closeup_urls():
     assert order_mode_a_face_closeup_urls(
         face_url="f", scene_url="s", scene_first=False
     ) == ["f", "s"]
+
+
+def test_order_mode_a_image_urls_extra_face():
+    assert order_mode_a_image_urls(
+        face_url="f",
+        dressed_url="d",
+        scene_url="s",
+        scene_first=True,
+        extra_face_copies=2,
+    ) == ["s", "f", "f", "f", "d"]
+    assert order_mode_a_image_urls(
+        face_url="f",
+        dressed_url="d",
+        scene_url="s",
+        scene_first=False,
+        extra_face_copies=2,
+    ) == ["f", "f", "f", "d", "s"]
+
+
+def test_detect_bust_portrait_scene():
+    assert detect_bust_portrait_scene(
+        AnchorVisibility(face=True, upper=True, lower=False),
+        "CAMERA:\n- Shot type: close-up\n",
+    )
+    assert not detect_bust_portrait_scene(
+        AnchorVisibility(face=True, upper=False, lower=False),
+        "",
+    )
+
+
+def test_mode_a_bust_portrait_prompt():
+    vis = AnchorVisibility(face=True, upper=True, lower=False)
+    filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
+    prompt = build_mode_a_prompt(
+        filtered_anchor=filtered,
+        vis=vis,
+        scene_first=True,
+        bust_portrait=True,
+    )
+    assert "BUST PORTRAIT FACE SWAP" in prompt
+    assert "hand, finger, hair" in prompt
+    assert "Images 2–4" in prompt
 
 
 def test_mode_a_bust_includes_upper_body_marks_block():

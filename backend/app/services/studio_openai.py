@@ -153,6 +153,7 @@ def finalize_anchor_mode_a_wavespeed_prompt(
     wave_profile: str,
     lock_model_hairstyle: bool,
     scene_first: bool,
+    bust_portrait: bool = False,
 ) -> str:
     """Префикс/суффикс как у обычного face_swap — anchor раньше их не получал."""
     p = (prompt or "").strip()
@@ -160,14 +161,26 @@ def finalize_anchor_mode_a_wavespeed_prompt(
     if wp == "regular":
         head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
         out = head.strip() if not p else head + p
-        return out.rstrip() + _nano_banana_pose_last_suffix(
+        out = out.rstrip() + _nano_banana_pose_last_suffix(
             lock_model_hairstyle=lock_model_hairstyle
         )
+        if bust_portrait:
+            out += (
+                "\n\n[BUST PORTRAIT] Multiple early identity images are the SAME model face — "
+                "they must fully replace the large face in the last scene image, including when a hand touches the lips."
+            )
+        return out
     if scene_first:
-        return wavespeed_prompt_with_face_swap_first(
+        out = wavespeed_prompt_with_face_swap_first(
             p,
             lock_model_hairstyle=lock_model_hairstyle,
         )
+        if bust_portrait:
+            out += (
+                "\n\n[BUST PORTRAIT — WAN] Repeated model face URLs after Image 1 are the SAME identity — "
+                "override the scene sitter's large in-frame face completely; keep hand-on-lip pose only."
+            )
+        return out
     return p
 
 

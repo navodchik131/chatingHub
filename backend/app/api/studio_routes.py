@@ -5591,9 +5591,10 @@ async def _studio_job_execute_refine_prompt(
                     session.add(gen_row)
                     await session.flush()
                 log.info(
-                    "anchor pipeline mode=%s closeup=%s cache=%s urls=%s job=%s",
+                    "anchor pipeline mode=%s closeup=%s bust=%s cache=%s urls=%s job=%s",
                     anchor_result.mode,
                     anchor_result.face_closeup,
+                    anchor_result.bust_portrait,
                     anchor_result.dressed_from_cache,
                     len(anchor_result.image_urls),
                     job.id,
@@ -5937,6 +5938,7 @@ async def _studio_job_execute_refine_prompt(
                         wave_profile=wave_profile_n,
                         lock_model_hairstyle=effective_lock_hairstyle,
                         scene_first=anchor_result.scene_first,
+                        bust_portrait=anchor_result.bust_portrait,
                     )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
@@ -7133,6 +7135,7 @@ async def _studio_job_execute_motion_first_frame(
                     wave_profile=wave_profile_n,
                     lock_model_hairstyle=effective_lock_hairstyle,
                     scene_first=anchor_result.scene_first,
+                    bust_portrait=anchor_result.bust_portrait,
                 )
             if workflow_first_frame:
                 from app.services.studio_model_bootstrap import (
