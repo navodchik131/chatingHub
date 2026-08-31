@@ -146,6 +146,20 @@ IDENTITY_MARKS_BLOCK = (
     "from the scene donor — even if they appear prominently on the scene person."
 )
 
+UPPER_BODY_MARKS_BLOCK = (
+    "Visible chest, décolletage, neck, shoulders, arms, and any other exposed skin in the scene "
+    "reference must NOT keep the sitter's tattoos, moles, scars, or birthmarks. "
+    "Use model identity skin only — if the model profile lists marks, apply those; otherwise clean bare skin. "
+    "The scene reference donates pose, framing, light, and garment coverage — never epidermal marks."
+)
+
+
+def identity_marks_block(vis: AnchorVisibility) -> str:
+    """Блок про родинки/тату: усиление когда в кадре торс (бюст, до груди)."""
+    if vis.upper or vis.lower:
+        return f"{IDENTITY_MARKS_BLOCK}\n{UPPER_BODY_MARKS_BLOCK}"
+    return IDENTITY_MARKS_BLOCK
+
 # Жёсткий лок лица — модели часто «держат» лицо со scene ref без явного запрета.
 FACE_IDENTITY_LOCK_BLOCK = (
     "CRITICAL FACE REPLACEMENT: The output face must be unmistakably the person from the "
@@ -193,40 +207,16 @@ def detect_face_closeup_scene(
     vis: AnchorVisibility,
     scene_description: str = "",
 ) -> bool:
-    """Кадр в основном лицо — dressed body только мешает финальному swap."""
+    """Только чистый headshot: лицо в кадре, торс/ноги вне кропа. Бюст/до груди — полный Mode A."""
     if not vis.face:
         return False
+    if vis.upper or vis.lower:
+        return False
     t = (scene_description or "").lower()
-    if re.search(r"shot type[^\n:]*:\s*[^\n]*close[- ]?up", t, re.I):
+    # Явный face-only framing из анализа сцены.
+    if re.search(r"face only|head only|forehead to chin|no (visible )?(torso|chest|shoulders)", t, re.I):
         return True
-    if re.search(r"close[- ]?up", t, re.I) and not vis.upper:
-        return True
-    # Лицо в кадре, торс/ноги вне кропа — типичный headshot.
-    if not vis.upper and not vis.lower:
-        return True
-    return False
-
-
-def detect_face_closeup_from_bytes(scene_bytes: bytes) -> bool:
-    """Fallback без Grok: квадратный/портретный tight crop часто = headshot."""
-    if not scene_bytes or len(scene_bytes) < 64:
-        return False
-    try:
-        from io import BytesIO
-
-        from PIL import Image
-
-        with Image.open(BytesIO(scene_bytes)) as im:
-            w, h = im.size
-        short = min(w, h)
-        long = max(w, h)
-        if short < 320:
-            return True
-        if long / max(short, 1) <= 1.4 and short >= 480:
-            return True
-    except Exception:
-        return False
-    return False
+    return True  # face visible, upper/lower not visible
 
 
 def hairstyle_style_block(*, lock_hairstyle_style: bool) -> str:
@@ -381,7 +371,9 @@ def build_mode_a_prompt(
         face_i, body_i, scene_i = 1, 2, 3
 
     prompt = (
-        f"Image {scene_i} = target scene: recreate this exact pose, camera angle, framing, and lighting.\n"
+        f"Image {scene_i} = target scene: recreate this exact pose, camera angle, framing, and lighting. "
+        f"The scene reference donates geometry, light, and wardrobe coverage only — never the sitter's "
+        "tattoos, moles, scars, birthmarks, face, or body identity.\n"
         f"Image {face_i} = facial identity reference only. Use this face, and only this face.\n"
         f"Image {body_i} = body proportions and outfit reference. The person's body shape and the clothing "
         "shown here should be transferred exactly as-is.\n"
@@ -403,7 +395,7 @@ def build_mode_a_prompt(
         f"not part of identity — it must follow Image {scene_i}, not default to neutral."
     )
     prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
-    prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"
+    prompt += f"\n\n{identity_marks_block(vis)}"
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
@@ -450,7 +442,7 @@ def build_mode_a_face_closeup_prompt(
         "never output the scene sitter's face even if expression/lighting match the scene."
     )
     prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
-    prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"
+    prompt += f"\n\n{identity_marks_block(vis)}"
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
@@ -486,7 +478,7 @@ def build_mode_b_prompt(
         "\n"
         f"{filtered_anchor}"
     )
-    prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"
+    prompt += f"\n\n{identity_marks_block(vis)}"
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:
         prompt += f"\n\n{exclusions}"

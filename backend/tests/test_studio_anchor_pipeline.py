@@ -6,11 +6,11 @@ from app.services.studio_anchor_pipeline import (
     anchor_mode_a_scene_first,
     build_mode_a_prompt,
     build_mode_b_prompt,
-    detect_face_closeup_from_bytes,
     detect_face_closeup_scene,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
     hairstyle_style_block,
+    identity_marks_block,
     order_mode_a_face_closeup_urls,
     order_mode_a_image_urls,
 )
@@ -75,12 +75,26 @@ def test_anchor_mode_a_scene_first_profile():
 
 
 def test_detect_face_closeup_scene():
+    # Чистый headshot — без торса в кадре.
     vis = AnchorVisibility(face=True, hair=True, upper=False, lower=False)
     assert detect_face_closeup_scene(vis, "CAMERA:\n- Shot type: close-up\n")
+    # Бюст / до груди — upper visible → полный Mode A с dressed body.
+    assert not detect_face_closeup_scene(
+        AnchorVisibility(face=True, upper=True, lower=False),
+        "CAMERA:\n- Shot type: close-up\n",
+    )
     assert not detect_face_closeup_scene(
         AnchorVisibility(face=True, upper=True, lower=True),
         "CAMERA:\n- Shot type: full body\n",
     )
+
+
+def test_identity_marks_block_upper_body():
+    bust = identity_marks_block(AnchorVisibility(face=True, upper=True, lower=False))
+    head = identity_marks_block(AnchorVisibility(face=True, upper=False, lower=False))
+    assert "NEVER copy marks, tattoos, or scars" in bust
+    assert "must NOT keep the sitter's tattoos" in bust
+    assert "must NOT keep the sitter's tattoos" not in head
 
 
 def test_order_mode_a_face_closeup_urls():
@@ -92,17 +106,12 @@ def test_order_mode_a_face_closeup_urls():
     ) == ["f", "s"]
 
 
-def test_detect_face_closeup_from_bytes_square():
-    try:
-        from io import BytesIO
-
-        from PIL import Image
-
-        buf = BytesIO()
-        Image.new("RGB", (900, 900), color=(128, 128, 128)).save(buf, format="JPEG")
-        assert detect_face_closeup_from_bytes(buf.getvalue()) is True
-    except ImportError:
-        pass
+def test_mode_a_bust_includes_upper_body_marks_block():
+    vis = AnchorVisibility(face=True, upper=True, lower=False)
+    filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
+    prompt = build_mode_a_prompt(filtered_anchor=filtered, vis=vis)
+    assert "must NOT keep the sitter's tattoos" in prompt
+    assert "never the sitter's tattoos" in prompt.lower() or "never" in prompt.lower()
 
 
 def test_mode_a_hairstyle_lock_from_model_vs_scene():

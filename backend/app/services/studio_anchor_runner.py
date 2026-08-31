@@ -17,7 +17,6 @@ from app.services.studio_anchor_pipeline import (
     build_mode_a_face_closeup_prompt,
     build_mode_a_prompt,
     build_mode_b_prompt,
-    detect_face_closeup_from_bytes,
     detect_face_closeup_scene,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
@@ -205,8 +204,6 @@ async def run_anchor_pipeline(
     face_closeup = mode_n == "face_swap" and detect_face_closeup_scene(
         vis, scene_description
     )
-    if mode_n == "face_swap" and not face_closeup:
-        face_closeup = detect_face_closeup_from_bytes(scene_bytes)
 
     anchor = profile_text_to_identity_anchor(model_profile_text)
     filtered = filter_anchor_by_visibility(anchor, vis) if anchor else ""
