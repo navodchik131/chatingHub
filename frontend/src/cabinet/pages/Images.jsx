@@ -105,8 +105,16 @@ export function Lightbox() {
 
   const handleCarousel = () => {
     if (!item?.id) return;
+    cabinet.setUploadFile('carousel', null);
     cabinet.setSlotArchivePicks((prev) => ({ ...prev, 'carousel:0': item.id }));
-    setS({ lightbox: null, imgMode: 'carousel', slotSource: { 'carousel:0': 'archive' } });
+    setS({
+      lightbox: null,
+      imgMode: 'carousel',
+      carouselPickId: item.id,
+      showGenError: false,
+      genErrors: [],
+      slotSource: { ...(s.slotSource || {}), 'carousel:0': 'archive' },
+    });
     go('images')();
   };
 

@@ -1104,7 +1104,26 @@ export function CabinetDataProvider({ children }) {
         }
         let accepted
         if (mode === 'carousel') {
-          const src = actions.resolveSlotSource('carousel', 0, uploadFiles, slotArchivePicks)
+          const src = actions.resolveSlotSource(
+            'carousel',
+            0,
+            uploadFiles,
+            slotArchivePicks,
+            effState.slotSource,
+          )
+          const archiveId = src?.archiveId ?? effState.carouselPickId ?? null
+          const imageFile = src?.file ?? null
+          if (!archiveId && !imageFile) {
+            setArchiveImages((prev) => {
+              let next = prev
+              for (const tid of tempIds) {
+                next = removeOptimisticStudioArchive(next, tid)
+              }
+              return next
+            })
+            setError('Выберите кадр из архива или загрузите фото для карусели')
+            return
+          }
           accepted = await actions.runCarouselGeneration({
             modelId: selectedModelId,
             count: Math.max(2, Math.min(8, Number(effState.carouselCount) || 4)),
@@ -1112,8 +1131,8 @@ export function CabinetDataProvider({ children }) {
             aspect: selectedAspect,
             nsfw: effState.contentMode === 'nsfw',
             ...waveModelParamsFromState(effState),
-            existingGenerationId: src?.archiveId,
-            imageFile: src?.file,
+            existingGenerationId: archiveId,
+            imageFile,
           })
         } else {
           accepted = await actions.runImageGeneration({

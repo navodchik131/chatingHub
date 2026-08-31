@@ -56,6 +56,21 @@ export function resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePic
       preferredSource: 'archive',
     }
   }
+  // Карусель из lightbox: pick в slotArchivePicks, но slotSource ещё не успел обновиться.
+  if (
+    mode === 'carousel'
+    && rawArchiveId != null
+    && !rawFile
+    && !legacyFile
+  ) {
+    return {
+      file: null,
+      archiveId: rawArchiveId,
+      uploadKey,
+      slotKey,
+      preferredSource: 'archive',
+    }
+  }
   return {
     file: rawFile || legacyFile,
     archiveId: null,
@@ -168,10 +183,13 @@ export function validateStudioForm(appState, studioStore, t) {
   const { uploadFiles, slotArchivePicks, selectedModelId } = studioStore
   const slotSourceMap = appState.slotSource || {}
 
-  const hasCarouselSrc =
-    Boolean(uploadFiles.carousel) ||
-    appState.carouselPickId != null ||
-    slotArchivePicks['carousel:0'] != null
+  const hasCarouselSrc = slotHasActiveSource(
+    'carousel',
+    0,
+    uploadFiles,
+    slotArchivePicks,
+    slotSourceMap,
+  ) || appState.carouselPickId != null
 
   const hasFrame =
     mode === 'carousel'
