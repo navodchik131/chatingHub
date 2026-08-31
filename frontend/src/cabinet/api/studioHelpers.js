@@ -1,3 +1,5 @@
+import { isOptimisticStudioArchiveId } from '../../studioArchive'
+
 const AI_MODEL_MAP = {
   nano: 'nano-banana-pro',
   gpt: 'gpt-image-2',
@@ -32,6 +34,22 @@ export function slotSourceKind(slotSourceMap, mode, index) {
   return slotSourceMap?.[key] === 'archive' ? 'archive' : 'upload'
 }
 
+/** Реальный id генерации из архива (не temp/optimistic). */
+export function normalizeArchiveGenerationId(raw) {
+  if (raw == null || raw === '') return null
+  const n = typeof raw === 'number' ? raw : Number(String(raw).trim())
+  if (!Number.isFinite(n) || n <= 0) return null
+  if (isOptimisticStudioArchiveId(n)) return null
+  return n
+}
+
+/** Файл пригоден для multipart upload (не пустой blob). */
+export function isUsableStudioUploadFile(file) {
+  if (!file || typeof file !== 'object') return false
+  const size = typeof file.size === 'number' ? file.size : 0
+  return size > 0
+}
+
 /**
  * Активный источник слота: учитывает вкладку «Загрузить» / «Архив» (slotSource).
  * file и archiveId не смешиваются — stale upload не перебивает новый pick из архива.
@@ -56,16 +74,12 @@ export function resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePic
       preferredSource: 'archive',
     }
   }
-  // Карусель из lightbox: pick в slotArchivePicks, но slotSource ещё не успел обновиться.
-  if (
-    mode === 'carousel'
-    && rawArchiveId != null
-    && !rawFile
-    && !legacyFile
-  ) {
+  // Карусель: pick из архива всегда важнее stale upload (даже если slotSource ещё «upload»).
+  const carouselArchiveId = mode === 'carousel' ? normalizeArchiveGenerationId(rawArchiveId) : null
+  if (carouselArchiveId != null) {
     return {
       file: null,
-      archiveId: rawArchiveId,
+      archiveId: carouselArchiveId,
       uploadKey,
       slotKey,
       preferredSource: 'archive',
@@ -83,6 +97,37 @@ export function resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePic
 function slotHasActiveSource(mode, index, uploadFiles, slotArchivePicks, slotSourceMap) {
   const src = resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePicks, slotSourceMap)
   return Boolean(src.file || src.archiveId != null)
+}
+
+/**
+ * Мастер-кадр карусели: pick из архива всегда важнее upload.
+ * Как mm-os-bridge resolveCarouselMasterSource — без «перебивания» stale upload.
+ */
+export function resolveCarouselMasterSource(appState, uploadFiles, slotArchivePicks) {
+  const slotKey = slotStateKey('carousel', 0)
+  const archiveId =
+    normalizeArchiveGenerationId(slotArchivePicks?.[slotKey])
+    ?? normalizeArchiveGenerationId(appState?.carouselPickId)
+    ?? null
+  if (archiveId != null) {
+    return { archiveId, file: null }
+  }
+  const uploadKey = slotUploadKey('carousel', 0)
+  const candidates = [
+    uploadFiles?.[uploadKey],
+    uploadFiles?.[LEGACY_SHARED_REF_UPLOAD_KEY],
+  ]
+  for (const candidate of candidates) {
+    if (isUsableStudioUploadFile(candidate)) {
+      return { archiveId: null, file: candidate }
+    }
+  }
+  return { archiveId: null, file: null }
+}
+
+export function carouselHasMasterSource(appState, uploadFiles, slotArchivePicks) {
+  const { archiveId, file } = resolveCarouselMasterSource(appState, uploadFiles, slotArchivePicks)
+  return archiveId != null || file != null
 }
 export const FALLBACK_GEN_MODELS = [
   { id: 'nano-banana-2', label: 'Nano Banana', nsfw: false, note: '' },
@@ -183,17 +228,9 @@ export function validateStudioForm(appState, studioStore, t) {
   const { uploadFiles, slotArchivePicks, selectedModelId } = studioStore
   const slotSourceMap = appState.slotSource || {}
 
-  const hasCarouselSrc = slotHasActiveSource(
-    'carousel',
-    0,
-    uploadFiles,
-    slotArchivePicks,
-    slotSourceMap,
-  ) || appState.carouselPickId != null
-
   const hasFrame =
     mode === 'carousel'
-      ? hasCarouselSrc
+      ? carouselHasMasterSource(appState, uploadFiles, slotArchivePicks)
       : slotHasActiveSource(mode, 0, uploadFiles, slotArchivePicks, slotSourceMap)
 
   if (slotN > 0 && !hasFrame) errs.push(t.errNoRef)

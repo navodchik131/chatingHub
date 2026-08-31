@@ -17,6 +17,9 @@ export type SeedanceDirectorPricing = {
   compose_usd_base?: number;
   compose_usd_per_extra_image?: number;
   compose_credits_sample_3_images?: number;
+  /** WS Fast T2V output-only @720p (prompt + фото, без ref-video). */
+  fast_t2v_output_usd_per_sec_720p?: number;
+  piece_credits_sample_20_10s_wavespeed?: number;
 };
 
 /** Кредиты за сборку промптов Grok (vision + инструкция). */
@@ -44,6 +47,7 @@ export function computeDirectorPieceCreditCost(
     resolution?: SeedanceT2vResolution;
     motionPricing?: Partial<StudioMotionVideoPricing> | null;
     evolinkPricing?: Partial<StudioEvolinkVideoPricing> | null;
+    directorPricing?: SeedanceDirectorPricing | null;
   },
 ): number {
   const dur = Math.max(1, Math.round(Number(durationSeconds) || 1));
@@ -58,11 +62,17 @@ export function computeDirectorPieceCreditCost(
     });
   }
 
-  // WaveSpeed T2V с reference_images — тариф with ref.
-  return computeMotionVideoCreditCost(dur, true, mergeMotionVideoPricing(options.motionPricing), {
-    variant,
-    resolution,
-  });
+  // Fast T2V + reference_images (без ref-video): output-only, не motion ref $0.13/с.
+  const fast720 = Number(options.directorPricing?.fast_t2v_output_usd_per_sec_720p ?? 0.2);
+  const mult =
+    resolution === '480p'
+      ? 0.5
+      : resolution === '1080p'
+        ? 2.5
+        : 1;
+  const usdPerSec = fast720 * mult;
+  const cpt = 100;
+  return Math.max(1, Math.round(usdPerSec * dur * cpt));
 }
 
 /** Оценка «compose + все куски» для шапки. */

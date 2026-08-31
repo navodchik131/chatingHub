@@ -54,6 +54,8 @@ def _default_catalog() -> dict[str, Any]:
             "wavespeed": {
                 "standard_with_ref_720p": float(settings.studio_motion_usd_per_sec_with_ref),
                 "standard_no_ref_720p": float(settings.studio_motion_usd_per_sec_no_ref),
+                "standard_fast_output_720p": float(settings.studio_motion_fast_usd_per_sec_output_720p),
+                "standard_fast_output_480p": float(settings.studio_motion_fast_usd_per_sec_output_480p),
                 "mini_with_ref_720p": float(settings.studio_motion_mini_usd_per_sec_with_ref),
                 "mini_no_ref_720p": float(settings.studio_motion_mini_usd_per_sec_no_ref),
                 "seedance_25_with_ref_720p": float(settings.studio_motion_seedance_25_usd_per_sec_with_ref),
@@ -182,6 +184,32 @@ def operation_usd(name: str) -> float:
     block = cat.get("operations_usd") if isinstance(cat.get("operations_usd"), dict) else {}
     val = block.get(name, 0)
     return max(0.0, float(val or 0))
+
+
+def video_wavespeed_fast_output_usd_per_sec_720p(*, variant: str = "standard") -> float:
+    """
+    Seedance 2.0 Fast T2V без reference_videos: только output seconds (reference_images не ref-video).
+    Док: https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedance-2.0-fast-text-to-video
+    """
+    cat = provider_pricing_catalog()
+    ws = (cat.get("video") or {}).get("wavespeed") if isinstance(cat.get("video"), dict) else {}
+    ws = ws if isinstance(ws, dict) else {}
+    v = (variant or "standard").strip().lower().replace("-", "_")
+    if v in ("seedance_25", "seedance25", "2_5", "25"):
+        # Director 2.5 — пока fallback на standard no-ref (fast 2.5 отдельно не документирован).
+        key = "seedance_25_no_ref_720p"
+    elif v == "mini":
+        key = "mini_no_ref_720p"
+    else:
+        key = "standard_fast_output_720p"
+    val = ws.get(key)
+    if isinstance(val, (int, float)) and float(val) >= 0:
+        return float(val)
+    if v in ("seedance_25", "seedance25", "2_5", "25"):
+        return float(settings.studio_motion_seedance_25_usd_per_sec_no_ref)
+    if v == "mini":
+        return float(settings.studio_motion_mini_usd_per_sec_no_ref)
+    return float(settings.studio_motion_fast_usd_per_sec_output_720p)
 
 
 def video_wavespeed_usd_per_sec_720p(*, variant: str, has_ref: bool) -> float:

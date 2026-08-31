@@ -82,9 +82,10 @@ def test_director_pricing():
 
     assert seedance_director_compose_credit_cost(image_count=1) >= 1
     assert seedance_director_compose_credit_cost(image_count=3) >= seedance_director_compose_credit_cost(image_count=1)
+    # Fast T2V output-only: 10 × $0.20 = $2.00 → 200 кр. (не motion ref $0.13 → 130 кр.)
     assert seedance_director_piece_credit_cost(
         version="2.0", duration_seconds=10, resolution="720p", video_backend="wavespeed"
-    ) >= 1
+    ) == 200
     assert seedance_director_piece_credit_cost(
         version="2.5", duration_seconds=15, resolution="720p", video_backend="evolink"
     ) >= 1

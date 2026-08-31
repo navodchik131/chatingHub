@@ -12,6 +12,7 @@ from app.services.studio_motion_pricing import (
     motion_video_credit_cost,
     normalize_seedance_t2v_resolution,
     normalize_seedance_t2v_variant,
+    seedance_fast_t2v_output_credit_cost,
 )
 from app.services.studio_provider_pricing import grok_pipeline_usd, operation_usd
 
@@ -54,12 +55,11 @@ def seedance_director_piece_credit_cost(
         )
 
     res = normalize_seedance_t2v_resolution(resolution)
-    # T2V / I2V с reference_images — тариф «with ref», без ref-видео.
-    return motion_video_credit_cost(
+    # Fast T2V + reference_images (без reference_videos): output-only $0.20/с @720p, не motion ref $0.13/с.
+    return seedance_fast_t2v_output_credit_cost(
         dur,
         variant=variant,
         resolution=res,
-        has_motion_reference_video=True,
     )
 
 
@@ -79,11 +79,16 @@ def seedance_director_pricing_public() -> dict:
         resolution="720p",
         video_backend="wavespeed",
     )
+    from app.services.studio_motion_pricing import seedance_fast_t2v_output_usd_per_sec
+
     return {
         "compose_usd_base": grok_pipeline_usd("heavy"),
         "compose_usd_per_extra_image": grok_pipeline_usd("light"),
         "compose_credits_sample_3_images": sample_compose,
         "piece_credits_sample_20_10s_wavespeed": sample_piece_20,
         "piece_credits_sample_25_15s_wavespeed": sample_piece_25,
+        "fast_t2v_output_usd_per_sec_720p": seedance_fast_t2v_output_usd_per_sec(
+            variant="standard", resolution="720p"
+        ),
         "credits_per_usd": units.get("credits_per_usd"),
     }

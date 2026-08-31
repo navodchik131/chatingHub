@@ -233,6 +233,36 @@ def motion_video_credit_cost(
     )
 
 
+def seedance_fast_t2v_output_usd_per_sec(
+    *,
+    variant: SeedanceT2vVariant | str = "standard",
+    resolution: SeedanceT2vResolution | str = "720p",
+) -> float:
+    """
+    Seedance 2.0 Fast T2V с reference_images, но без reference_videos:
+    WaveSpeed биллит только output seconds (не тариф motion ref-video $0.13/с).
+    """
+    from app.services.studio_provider_pricing import video_wavespeed_fast_output_usd_per_sec_720p
+
+    v = normalize_seedance_t2v_variant(variant if isinstance(variant, str) else "standard")
+    res = normalize_seedance_t2v_resolution(resolution if isinstance(resolution, str) else "720p")
+    base_720p = video_wavespeed_fast_output_usd_per_sec_720p(variant=v)
+    mult = _RESOLUTION_MULT_FROM_720P.get(res, 1.0)
+    return max(0.0, base_720p * mult)
+
+
+def seedance_fast_t2v_output_credit_cost(
+    duration_seconds: int,
+    *,
+    variant: SeedanceT2vVariant | str = "standard",
+    resolution: SeedanceT2vResolution | str = "720p",
+) -> int:
+    """Кредиты за Fast T2V (Director: prompt + фото, endpoint seedance-2.0-fast/text-to-video)."""
+    dur = motion_video_duration_seconds(duration_seconds)
+    usd = seedance_fast_t2v_output_usd_per_sec(variant=variant, resolution=resolution) * dur
+    return usd_to_credits(usd, markup_usd=0.0)
+
+
 def _variant_pricing_block(variant: SeedanceT2vVariant) -> dict[str, float | int]:
     return {
         "usd_per_sec_720p_with_reference_video": motion_video_usd_per_sec(

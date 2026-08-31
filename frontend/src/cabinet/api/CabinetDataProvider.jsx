@@ -14,7 +14,14 @@ import {
 import { coerceJobGenerationId, coerceJobGenerationIds, waitForStudioJobResult } from '../../studioJobs'
 import { apiJson, apiJsonOptional, isPlausibleTelegramBotToken, resolveDonationBalances } from './helpers'
 import { refreshPendingArchiveImages, refreshPendingArchiveVideos } from './archivePoll'
-import { mapGenModelsFromApi, normalizeStudioModelId, sameStudioModelId, waveModelParamsFromState, effectiveStudioState } from './studioHelpers'
+import {
+  mapGenModelsFromApi,
+  normalizeStudioModelId,
+  sameStudioModelId,
+  waveModelParamsFromState,
+  effectiveStudioState,
+  resolveCarouselMasterSource,
+} from './studioHelpers'
 import * as actions from './actions'
 
 function applyJobToOptimisticArchive(current, tempIds, accepted) {
@@ -1104,15 +1111,11 @@ export function CabinetDataProvider({ children }) {
         }
         let accepted
         if (mode === 'carousel') {
-          const src = actions.resolveSlotSource(
-            'carousel',
-            0,
+          const { archiveId, file: imageFile } = resolveCarouselMasterSource(
+            effState,
             uploadFiles,
             slotArchivePicks,
-            effState.slotSource,
           )
-          const archiveId = src?.archiveId ?? effState.carouselPickId ?? null
-          const imageFile = src?.file ?? null
           if (!archiveId && !imageFile) {
             setArchiveImages((prev) => {
               let next = prev

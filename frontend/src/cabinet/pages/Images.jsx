@@ -14,6 +14,7 @@ import { formatArchiveErrorMessage } from '../api/helpers';
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import {
   validateStudioForm, syncRefArchivePicks, clearSlotArchivePick, resolveActiveSlotSource,
+  resolveCarouselMasterSource,
   enginesForNsfw, sameStudioModelId,
   normalizeWaveModel, waveModelFromState, isNsfwMode, isUiSimplified, effectiveStudioState,
 } from '../api/studioHelpers';
@@ -205,9 +206,14 @@ function Slot({ slot, index }) {
   const mode = s.imgMode;
   const key = `${mode}:${index}`;
   const src = s.slotSource?.[key] || 'upload';
-  const { uploadKey, archiveId } = resolveActiveSlotSource(
+  const slotSrc = resolveActiveSlotSource(
     mode, index, cabinet.uploadFiles, cabinet.slotArchivePicks, s.slotSource,
   );
+  const { uploadKey } = slotSrc;
+  const archiveId = mode === 'carousel'
+    ? (resolveCarouselMasterSource(s, cabinet.uploadFiles, cabinet.slotArchivePicks).archiveId
+      ?? slotSrc.archiveId)
+    : slotSrc.archiveId;
   const hasFile = Boolean(cabinet.uploadFiles[uploadKey]);
   const previewUrl = cabinet.uploadPreviewUrls?.[uploadKey] || '';
   const archiveItems = (cabinet.archiveImages || []).slice(0, 12);
@@ -238,6 +244,8 @@ function Slot({ slot, index }) {
             {t.srcUpload}
           </div>
           <div style={seg(src === 'archive')} onClick={() => {
+            // Сбрасываем stale upload, иначе backend может получить пустой multipart вместо archive id.
+            cabinet.setUploadFile(uploadKey, null);
             setS({ slotSource: { ...s.slotSource, [key]: 'archive' } });
           }}>
             {t.srcArchive}
@@ -261,21 +269,32 @@ function Slot({ slot, index }) {
               return <div key={i} style={{ aspectRatio: '3/4', borderRadius: 7, background: G[i % 6], opacity: 0.35 }} />;
             }
             const thumb = archiveThumbUrl(item);
-            const picked = archiveId === item.id;
+            const picked = archiveId != null && item?.id != null
+              && Number(archiveId) === Number(item.id);
             const thumbSt = refThumbStyle(picked);
+            const pending = isArchivePending(item);
             return (
             <Hoverable
               key={item.id}
               style={{
                 ...thumbSt.base,
                 background: thumb ? `url(${thumb}) center/cover` : G[i % 6],
+                opacity: pending ? 0.55 : 1,
+                cursor: pending ? 'default' : 'pointer',
               }}
-              hover={thumbSt.hover}
+              hover={pending ? {} : thumbSt.hover}
               onClick={() => {
+                if (pending) return;
                 // Архив: сбрасываем файл этого режима, иначе stale upload перебивает pick.
                 cabinet.setUploadFile(uploadKey, null);
                 cabinet.setSlotArchivePicks((prev) => syncRefArchivePicks(prev, mode, index, item.id));
-                setS({ slotSource: { ...s.slotSource, [key]: 'archive' } });
+                const patch = { slotSource: { ...s.slotSource, [key]: 'archive' } };
+                if (mode === 'carousel') {
+                  patch.carouselPickId = item.id;
+                  patch.showGenError = false;
+                  patch.genErrors = [];
+                }
+                setS(patch);
               }}
             />
           );})}
@@ -758,7 +777,19 @@ export default function Images() {
                 }}
                 hover={pending || failed ? {} : { borderColor: borderHoverOff }}
                 onClick={() => {
-                  if (!pending && !failed) setS({ lightbox: item.id ?? i });
+                  if (pending || failed) return;
+                  if (s.imgMode === 'carousel') {
+                    cabinet.setUploadFile('carousel', null);
+                    cabinet.setSlotArchivePicks((prev) => syncRefArchivePicks(prev, 'carousel', 0, item.id));
+                    setS({
+                      carouselPickId: item.id,
+                      slotSource: { ...(s.slotSource || {}), 'carousel:0': 'archive' },
+                      showGenError: false,
+                      genErrors: [],
+                    });
+                    return;
+                  }
+                  setS({ lightbox: item.id ?? i });
                 }}
               >
                 <div

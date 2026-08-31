@@ -377,6 +377,9 @@ class Settings(BaseSettings):
     studio_motion_usd_per_sec_with_ref: float = Field(default=0.13, ge=0.0)
     # Без ref → seedance-2.0 T2V (720p): $0.24/с output
     studio_motion_usd_per_sec_no_ref: float = Field(default=0.24, ge=0.0)
+    # Seedance 2.0 Fast T2V с reference_images (без reference_videos): output-only, см. WS docs
+    studio_motion_fast_usd_per_sec_output_720p: float = Field(default=0.20, ge=0.0)
+    studio_motion_fast_usd_per_sec_output_480p: float = Field(default=0.10, ge=0.0)
     # Mini 720p: ориентир ~75% от Seedance 2.0 Fast (официальный прайс Mini — в env после релиза)
     studio_motion_mini_usd_per_sec_with_ref: float = Field(default=0.0975, ge=0.0)
     studio_motion_mini_usd_per_sec_no_ref: float = Field(default=0.15, ge=0.0)

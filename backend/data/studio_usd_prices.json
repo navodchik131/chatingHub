@@ -28,6 +28,8 @@
     "wavespeed": {
       "standard_with_ref_720p": 0.13,
       "standard_no_ref_720p": 0.24,
+      "standard_fast_output_720p": 0.20,
+      "standard_fast_output_480p": 0.10,
       "mini_with_ref_720p": 0.0975,
       "mini_no_ref_720p": 0.15,
       "seedance_25_with_ref_720p": 0.22,
