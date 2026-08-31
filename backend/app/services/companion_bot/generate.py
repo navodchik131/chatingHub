@@ -84,6 +84,19 @@ async def _load_or_create_state(
     return row
 
 
+async def _refresh_companion_orm_rows(
+    session: AsyncSession,
+    *,
+    conv: Conversation,
+    model_row: UserStudioModel,
+    state: CompanionConversationState,
+) -> None:
+    """После долгого await (LLM/HTTP) AsyncSession может expire ORM — без refresh lazy-load падает greenlet_spawn."""
+    await session.refresh(conv)
+    await session.refresh(model_row)
+    await session.refresh(state)
+
+
 async def generate_companion_reply(
     session: AsyncSession,
     *,
@@ -115,6 +128,10 @@ async def generate_companion_reply(
         credentials=cred,
         owner_id=owner_id,
     )
+    # maybe_refresh_companion_memory делает внешний LLM-вызов — перечитываем ORM до следующих обращений к полям.
+    await _refresh_companion_orm_rows(
+        session, conv=conv, model_row=model_row, state=state
+    )
     notes = await _load_notes(session, conv.id)
 
     fan_image_description: str | None = None
@@ -127,6 +144,10 @@ async def generate_companion_reply(
             trigger=trigger_message,
             messages=messages,
             credentials=cred,
+        )
+        # Vision тоже ходит во внешний LLM — refresh перед сборкой промпта.
+        await _refresh_companion_orm_rows(
+            session, conv=conv, model_row=model_row, state=state
         )
 
     target_lang = resolve_target_lang(conv, last_fan_text=last_fan_message_text(messages))
@@ -156,6 +177,10 @@ async def generate_companion_reply(
         lang=target_lang,
         followup=followup,
         credentials=cred,
+    )
+    # style RAG может вызывать embeddings API — снова refresh ORM перед финальной генерацией.
+    await _refresh_companion_orm_rows(
+        session, conv=conv, model_row=model_row, state=state
     )
     if style_block:
         system += "\n" + style_block
