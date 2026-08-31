@@ -545,6 +545,31 @@ export default function Images() {
             </div>
           )}
 
+          {s.imgMode === 'swap' && (
+            <label
+              style={{
+                display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer',
+                background: color.bgPanel, border: `1px solid ${line.soft}`,
+                borderRadius: 10, padding: '10px 12px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={s.lockHairstyleStyle !== false}
+                onChange={(e) => setS({ lockHairstyleStyle: e.target.checked })}
+                style={{ marginTop: 2, accentColor: color.lime }}
+              />
+              <span>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, marginBottom: 4 }}>
+                  {t.lockHairstyle}
+                </span>
+                <span style={{ display: 'block', fontSize: 11, color: color.textDim, lineHeight: 1.45 }}>
+                  {t.lockHairstyleHint}
+                </span>
+              </span>
+            </label>
+          )}
+
           {/* slots */}
           {displaySlots.length > 0 && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>

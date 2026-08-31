@@ -25,6 +25,7 @@ from app.services.studio_anchor_pipeline import (
     should_use_anchor_pipeline,
     visibility_from_identity_visibility,
 )
+from app.services.studio_prompt_bundle import extract_creative_notes_from_workflow_description
 from app.services.studio_image_token import (
     create_model_image_access_token,
     create_pose_reference_access_token,
@@ -145,6 +146,7 @@ async def run_anchor_pipeline(
     wave_model_id: str = "",
     aspect_ratio: str = "9:16",
     force_redress: bool = False,
+    lock_hairstyle_style: bool = True,
 ) -> AnchorPipelineResult | None:
     """
     Returns None if mode shouldn't use anchor pipeline.
@@ -194,7 +196,8 @@ async def run_anchor_pipeline(
 
     anchor = profile_text_to_identity_anchor(model_profile_text)
     filtered = filter_anchor_by_visibility(anchor, vis) if anchor else ""
-    notes = (user_notes or "").strip()
+    # Только SCENE_DIRECTION / пользовательские заметки — без REFERENCE_CONTEXT из workflow.
+    notes = extract_creative_notes_from_workflow_description(user_notes)
 
     cache_key = dressed_body_cache_key(
         model_id=model_id,
@@ -258,6 +261,7 @@ async def run_anchor_pipeline(
             filtered_anchor=filtered or anchor,
             vis=vis,
             notes=notes,
+            lock_hairstyle_style=lock_hairstyle_style,
         )
         urls = [face_url, dressed_url, scene_url]
         out_mode = "A"
@@ -273,6 +277,7 @@ async def run_anchor_pipeline(
             scene_description=scene_description,
             vis=vis,
             notes=notes,
+            lock_hairstyle_style=lock_hairstyle_style,
         )
         urls = [face_url, dressed_url]
         out_mode = "B"

@@ -554,6 +554,15 @@ input::placeholder,textarea::placeholder{color:#5C6066;}
               </div>
             </div>
             </sc-if>
+            <sc-if value="{{ isSwapMode }}" hint-placeholder-val="{{ false }}">
+            <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#0D0E11;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;">
+              <input type="checkbox" checked="{{ lockHairstyleStyleOn }}" onChange="{{ toggleLockHairstyleStyle }}" style="margin-top:2px;accent-color:#D7F452;" />
+              <span>
+                <span style="display:block;font-size:12.5px;font-weight:800;margin-bottom:4px;">{{ t.lockHairstyle }}</span>
+                <span style="display:block;font-size:11px;color:#9BA0A6;line-height:1.45;">{{ t.lockHairstyleHint }}</span>
+              </span>
+            </label>
+            </sc-if>
             <div style="display:flex;gap:10px;align-items:stretch;">
               <sc-for list="{{ curMode.slots }}" as="s" hint-placeholder-count="2">
                 <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
@@ -1492,7 +1501,7 @@ class Component extends DCLogic {
     isMobile: false, chatOpen: 0,
     chatFilter: 'all', chatPlatform: 'all', mobileChat: false,
     msgReact: null, emojiOpen: false, showScrollDown: false, replyDraft: '', noteDraft: '', showScrollDown: false, replyDraft: '', noteDraft: '', reactions: {},
-    contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {}, needsRef: 'no',
+    contentMode: 'sfw', aiModel: 'nano', carouselCount: 4, slotSource: {}, needsRef: 'no', lockHairstyleStyle: true,
     hasFirstFrame: 'yes', vidQuality: '1080', vidFormat: '9:16', vidTime: '5',
     charTab: 'photos', lightbox: null,
     showGenError: false, ffState: 'idle', photoMenu: null,
@@ -1587,6 +1596,8 @@ class Component extends DCLogic {
       templates: 'Шаблоны ответов', addTemplate: 'Шаблон',
       character: 'ПЕРСОНАЖ', format: 'ФОРМАТ КАДРА', prompt: 'ПРОМПТ', optional: 'необязательно',
       generate: 'Сгенерировать', archive: 'Архив', retention: 'хранится ~4 дня', showMore: 'Показать ещё', needRefQ: 'Нужен референс?',
+      lockHairstyle: 'Укладка с модели',
+      lockHairstyleHint: 'Стиль, пробор и длина — с модели. Цвет волос всегда с модели. Снимите, чтобы взять укладку с референса.',
       toVideo: 'в видео', sourceFrame: 'ИСХОДНЫЙ КАДР', orUpload: '…или загрузите свой файл',
       motionPrompt: 'ДВИЖЕНИЕ', motionHint: 'She slowly turns to camera and smiles…', duration: 'ДЛИТЕЛЬНОСТЬ',
       generateVideo: 'Создать видео', save: 'Сохранить', delete: 'Удалить',
@@ -1657,6 +1668,8 @@ class Component extends DCLogic {
       templates: 'Reply templates', addTemplate: 'Template',
       character: 'CHARACTER', format: 'FRAME FORMAT', prompt: 'PROMPT', optional: 'optional',
       generate: 'Generate', archive: 'Archive', retention: 'stored ~4 days', showMore: 'Show more', needRefQ: 'Need a reference?',
+      lockHairstyle: 'Hairstyle from model',
+      lockHairstyleHint: 'Style, part, and length from the model. Hair color always from the model. Uncheck to use styling from the reference.',
       toVideo: 'to video', sourceFrame: 'SOURCE FRAME', orUpload: '…or upload your own file',
       motionPrompt: 'MOTION', motionHint: 'She slowly turns to camera and smiles…', duration: 'DURATION',
       generateVideo: 'Create video', save: 'Save', delete: 'Delete',

@@ -4678,7 +4678,9 @@ async def _accept_studio_refine_job_from_workflow(
             or not (reference_images and plan.model_id is not None)
             else "0"
         ),
-        "lock_model_hairstyle": "1" if (location_change or face_swap) else "0",
+        "lock_model_hairstyle": (
+            "1" if location_change or (face_swap and plan.lock_hairstyle_style) else "0"
+        ),
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "include_realism_engine": "1" if plan.realism_enabled else "0",
         "workflow_selfie_capture": "1" if plan.selfie_capture_enabled else "0",
@@ -5576,6 +5578,7 @@ async def _studio_job_execute_refine_prompt(
                 ),
                 aspect_ratio=aspect_key,
                 force_redress=False,
+                lock_hairstyle_style=effective_lock_hairstyle,
             )
             if anchor_result is not None:
                 refined = anchor_result.refined_prompt
@@ -6943,6 +6946,7 @@ async def _studio_job_execute_motion_first_frame(
                 ),
                 aspect_ratio=aspect_key,
                 force_redress=False,
+                lock_hairstyle_style=effective_lock_hairstyle,
             )
             if anchor_result is not None:
                 log.info(

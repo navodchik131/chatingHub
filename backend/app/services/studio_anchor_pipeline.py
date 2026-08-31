@@ -136,7 +136,34 @@ Dress the person from Image 1 in the exact clothing from Image 2.
 Keep Image 1 body shape, proportions, skin tone, and pose framing as close as practical.
 Transfer from Image 2 only: garment types, colors, patterns, materials, silhouette and fit adapted to Image 1's body.
 Do not copy the face or identity of the person in Image 2.
+Do not copy skin marks, tattoos, scars, or body hair from Image 2 — those belong to the model identity only.
 Neutral clean background preferred. Photorealistic result."""
+
+# Родинки/тату/шрамы — только с модели, никогда с scene donor (Image 3 / текст сцены).
+IDENTITY_MARKS_BLOCK = (
+    "Skin marks (freckles, moles, birthmarks, scars, tattoos): copy ONLY from the model identity "
+    "(Image 1 face reference + model profile anchor text). NEVER copy marks, tattoos, or scars "
+    "from the scene donor — even if they appear prominently on the scene person."
+)
+
+
+def hairstyle_style_block(*, lock_hairstyle_style: bool) -> str:
+    """Укладка/часть/длина — с модели или с рефа; цвет волос всегда с модели."""
+    color_rule = (
+        "Hair color always comes from the model identity (Image 1 + profile anchor) — "
+        "never from the scene donor."
+    )
+    if lock_hairstyle_style:
+        return (
+            f"{color_rule} "
+            "Hairstyle style, part, texture, and length also come from the model identity — "
+            "do not copy the scene person's haircut, bun, ponytail, or styling from the scene donor."
+        )
+    return (
+        f"{color_rule} "
+        "Hairstyle style, part, texture, and length may follow the scene donor — "
+        "copy the visible haircut/styling from the scene while keeping model hair color."
+    )
 
 ANCHOR_HEADERS = ["FACE", "HAIR", "UPPER BODY", "LOWER BODY", "GENERAL BUILD"]
 
@@ -259,6 +286,7 @@ def build_mode_a_prompt(
     filtered_anchor: str,
     vis: AnchorVisibility,
     notes: str = "",
+    lock_hairstyle_style: bool = True,
 ) -> str:
     """Face-swap WITH scene photo as Image 3 — exact Mode A from HTML."""
     exclusions = exclusion_notes(vis)
@@ -284,6 +312,8 @@ def build_mode_a_prompt(
         "(wide open / squinting / winking), eyebrow position, and head tilt. Facial expression is "
         "not part of identity — it must follow Image 3, not default to neutral."
     )
+    prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"
+    prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
     prompt += f"\n\n{REALISM_BLOCK}"
@@ -298,6 +328,7 @@ def build_mode_b_prompt(
     scene_description: str,
     vis: AnchorVisibility,
     notes: str = "",
+    lock_hairstyle_style: bool = True,
 ) -> str:
     """Face-swap WITHOUT scene photo — exact Mode B from HTML."""
     exclusions = exclusion_notes(vis)
@@ -317,6 +348,8 @@ def build_mode_b_prompt(
         "\n"
         f"{filtered_anchor}"
     )
+    prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"
+    prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
     prompt += f"\n\n{REALISM_BLOCK}"

@@ -47,6 +47,7 @@ const initial = {
   replyToMessageId: null,
   slotSource: {},
   needsRef: 'no',
+  lockHairstyleStyle: true,
   hasFirstFrame: 'yes',
   vidMode: 'motion-control',
   vidQuality: '1080',

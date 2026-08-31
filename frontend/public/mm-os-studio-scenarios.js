@@ -97,6 +97,7 @@
       outputAspect: opts.outputAspect,
       wanEditTier: wanTier,
       exifCamera: opts.exifCamera || 'main',
+      lockHairstyleStyle: opts.lockHairstyleStyle !== false,
     }
   }
 
@@ -330,6 +331,7 @@
       wanEditTier: wave.tier,
       realismEnabled: true,
       userPrompt: helpers.userPrompt || '',
+      lockHairstyleStyle: s.lockHairstyleStyle !== false,
     }
   }
 

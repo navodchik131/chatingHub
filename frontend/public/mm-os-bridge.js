@@ -4559,6 +4559,11 @@
       setNeedsRefYes: () => logic.setState({ needsRef: 'yes' }),
       setNeedsRefNo: () => logic.setState({ needsRef: 'no' }),
       isEditMode: s.imgMode === 'edit',
+      isSwapMode: s.imgMode === 'swap',
+      lockHairstyleStyleOn: s.lockHairstyleStyle !== false,
+      toggleLockHairstyleStyle: (e) => {
+        logic.setState({ lockHairstyleStyle: !!e?.target?.checked })
+      },
       charChips,
       modelChips: engine.modelChips,
       modelHint: engine.modelHint,

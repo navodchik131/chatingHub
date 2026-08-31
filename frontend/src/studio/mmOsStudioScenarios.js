@@ -91,6 +91,8 @@ function imageGenData(opts) {
     outputAspect: opts.outputAspect,
     wanEditTier: wanTier,
     exifCamera: opts.exifCamera || 'main',
+    // Face Swap: укладка с модели (default) или с scene ref; цвет всегда с модели (бэкенд).
+    lockHairstyleStyle: opts.lockHairstyleStyle !== false,
   }
 }
 
@@ -324,6 +326,7 @@ function genOptionsFromState(s, store, helpers) {
     wanEditTier: wave.tier,
     realismEnabled: true,
     userPrompt: helpers.userPrompt || '',
+    lockHairstyleStyle: s.lockHairstyleStyle !== false,
   }
 }
 

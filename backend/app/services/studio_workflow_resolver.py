@@ -109,6 +109,7 @@ class WorkflowGenerationPlan:
     selfie_capture_enabled: bool = False
     motion_video_file_id: str = ""
     scenario_type: str | None = None
+    lock_hairstyle_style: bool = True
 
     @property
     def reference_ref_id(self) -> str:
@@ -1515,6 +1516,7 @@ def resolve_workflow_generation_plan(
         wave_model,
         str(gen_data.get("outputResolution") or ""),
     )
+    lock_hairstyle_style = _truthy_lock_hairstyle_style(gen_data.get("lockHairstyleStyle"))
 
     if scenario_type == "scenarioOutfitChange":
         description = enrich_description_for_outfit_change(description)
@@ -1558,7 +1560,17 @@ def resolve_workflow_generation_plan(
         selfie_capture_enabled=selfie_capture_enabled,
         motion_video_file_id=motion_video_file_id,
         scenario_type=scenario_type,
+        lock_hairstyle_style=lock_hairstyle_style,
     )
+
+
+def _truthy_lock_hairstyle_style(raw: Any) -> bool:
+    """True — укладка/часть/длина с модели; False — с scene ref (цвет всё равно с модели)."""
+    if raw is None:
+        return True
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
 
 
 def _node_has_video_url(node: dict[str, Any]) -> bool:
