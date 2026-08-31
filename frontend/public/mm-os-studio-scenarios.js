@@ -304,9 +304,14 @@
     return data.ref_id
   }
 
-  async function resolveRefId(API, store, archiveThumbUrl, source) {
-    if (source.file) return uploadWorkflowReference(API, source.file)
-    if (source.archiveId != null) {
+async function resolveRefId(API, store, archiveThumbUrl, source) {
+    const preferArchive = source && source.preferredSource === 'archive'
+    async function fromFile() {
+      if (!source.file) return null
+      return uploadWorkflowReference(API, source.file)
+    }
+    async function fromArchive() {
+      if (source.archiveId == null) return null
       const item = (store.archiveImages || []).find((x) => x.id === source.archiveId)
       if (!item) throw new Error('Кадр не найден в архиве')
       const url = archiveThumbUrl(item)
@@ -318,6 +323,17 @@
         type: blob.type || 'image/jpeg',
       })
       return uploadWorkflowReference(API, fileObj)
+    }
+    if (preferArchive) {
+      const a = await fromArchive()
+      if (a) return a
+      const f = await fromFile()
+      if (f) return f
+    } else {
+      const f = await fromFile()
+      if (f) return f
+      const a = await fromArchive()
+      if (a) return a
     }
     throw new Error('Загрузите файл или выберите кадр из архива')
   }
@@ -341,7 +357,10 @@
     const slot0 = helpers.resolveSlotSource
       ? helpers.resolveSlotSource(mode, 0)
       : {
-          file: store.uploadFiles.ref,
+          file:
+            store.uploadFiles[helpers.slotUploadKey?.(mode, 0) || 'ref']
+            || store.uploadFiles.ref
+            || null,
           archiveId: store.slotArchivePicks[helpers.slotStateKey(mode, 0)],
         }
 

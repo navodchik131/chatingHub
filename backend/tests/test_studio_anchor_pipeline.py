@@ -3,6 +3,7 @@
 from app.services.studio_anchor_pipeline import (
     REALISM_BLOCK,
     AnchorVisibility,
+    anchor_mode_a_effective_scene_first,
     anchor_mode_a_scene_first,
     build_mode_a_prompt,
     build_mode_b_prompt,
@@ -15,6 +16,7 @@ from app.services.studio_anchor_pipeline import (
     order_mode_a_face_closeup_urls,
     order_mode_a_image_urls,
 )
+from app.services.studio_openai import finalize_anchor_mode_a_wavespeed_prompt
 from app.services.studio_prompt_bundle import extract_creative_notes_from_workflow_description
 
 
@@ -73,6 +75,13 @@ def test_order_mode_a_image_urls():
 def test_anchor_mode_a_scene_first_profile():
     assert anchor_mode_a_scene_first(wave_profile="nsfw") is True
     assert anchor_mode_a_scene_first(wave_profile="regular") is False
+
+
+def test_anchor_mode_a_effective_scene_first_bust_forces_identity_first():
+    """Seedream/WAN (nsfw) на бюсте — identity-first, как у Nano."""
+    assert anchor_mode_a_effective_scene_first(wave_profile="nsfw", bust_portrait=True) is False
+    assert anchor_mode_a_effective_scene_first(wave_profile="nsfw", bust_portrait=False) is True
+    assert anchor_mode_a_effective_scene_first(wave_profile="regular", bust_portrait=True) is False
 
 
 def test_detect_face_closeup_scene():
@@ -135,18 +144,33 @@ def test_detect_bust_portrait_scene():
     )
 
 
+def test_mode_a_bust_portrait_order_identity_first_all_models():
+    """Бюст: triple face + dressed + scene — одинаково для Seedream и Nano."""
+    urls = order_mode_a_image_urls(
+        face_url="f",
+        dressed_url="d",
+        scene_url="s",
+        scene_first=anchor_mode_a_effective_scene_first(
+            wave_profile="nsfw",
+            bust_portrait=True,
+        ),
+        extra_face_copies=2,
+    )
+    assert urls == ["f", "f", "f", "d", "s"]
+
+
 def test_mode_a_bust_portrait_prompt():
     vis = AnchorVisibility(face=True, upper=True, lower=False)
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
     prompt = build_mode_a_prompt(
         filtered_anchor=filtered,
         vis=vis,
-        scene_first=True,
+        scene_first=False,
         bust_portrait=True,
     )
     assert "BUST PORTRAIT FACE SWAP" in prompt
     assert "hand, finger, hair" in prompt
-    assert "Images 2–4" in prompt
+    assert "Images 1–3" in prompt
 
 
 def test_mode_a_bust_includes_upper_body_marks_block():
@@ -231,3 +255,17 @@ def test_dressed_body_cache_key_stable():
     )
     assert a == b
     assert a != c
+
+
+def test_finalize_bust_portrait_nsfw_uses_identity_first_prefix():
+    """Seedream (nsfw) на бюсте — префикс identity-first, не [FACE_SWAP — WAN]."""
+    out = finalize_anchor_mode_a_wavespeed_prompt(
+        "Replace face in scene.",
+        wave_profile="nsfw",
+        lock_model_hairstyle=True,
+        scene_first=False,
+        bust_portrait=True,
+    )
+    assert "[MULTI_IMAGE_EDIT — intentional FACE SWAP]" in out
+    assert "[FACE_SWAP — WAN]" not in out
+    assert "[BUST PORTRAIT]" in out

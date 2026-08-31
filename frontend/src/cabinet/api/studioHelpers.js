@@ -5,20 +5,69 @@ const AI_MODEL_MAP = {
   wan: 'wan-2.7-pro',
 }
 
-function slotUploadKey(mode, index) {
-  if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth'
-  if (mode === 'location') return index === 0 ? 'ref' : 'location-photo'
-  if (mode === 'carousel') return 'carousel'
-  if (mode === 'edit') return index === 0 ? 'ref' : 'edit-detail'
-  return 'ref'
+/** Ключ слота в slotArchivePicks и slotSource: «swap:0», «outfit:1». */
+export function slotStateKey(mode, index) {
+  return `${mode}:${index}`
 }
 
-function resolveSlot(mode, index, uploadFiles, slotArchivePicks) {
+/**
+ * Отдельный upload-key на каждый режим — face swap / outfit / location не делят один файл.
+ * Раньше slot 0 всех режимов использовал общий ключ «ref», из‑за чего реф «течёт» между режимами.
+ */
+export function slotUploadKey(mode, index) {
+  if (mode === 'outfit') return index === 0 ? 'outfit-scene' : 'outfit-cloth'
+  if (mode === 'location') return index === 0 ? 'location-scene' : 'location-photo'
+  if (mode === 'carousel') return 'carousel'
+  if (mode === 'edit') return index === 0 ? 'edit-scene' : 'edit-detail'
+  if (mode === 'swap') return 'swap-scene'
+  if (mode === 'ref') return 'ref-scene'
+  return `${mode}-scene`
+}
+
+/** Старый общий ключ — только fallback для сессий до разделения по режимам. */
+export const LEGACY_SHARED_REF_UPLOAD_KEY = 'ref'
+
+export function slotSourceKind(slotSourceMap, mode, index) {
+  const key = slotStateKey(mode, index)
+  return slotSourceMap?.[key] === 'archive' ? 'archive' : 'upload'
+}
+
+/**
+ * Активный источник слота: учитывает вкладку «Загрузить» / «Архив» (slotSource).
+ * file и archiveId не смешиваются — stale upload не перебивает новый pick из архива.
+ */
+export function resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePicks, slotSourceMap) {
   const uploadKey = slotUploadKey(mode, index)
-  return {
-    file: uploadFiles[uploadKey] || null,
-    archiveId: slotArchivePicks[`${mode}:${index}`] ?? null,
+  const slotKey = slotStateKey(mode, index)
+  const kind = slotSourceKind(slotSourceMap, mode, index)
+  const rawFile = uploadFiles?.[uploadKey] || null
+  const rawArchiveId = slotArchivePicks?.[slotKey] ?? null
+  const legacyFile =
+    !rawFile && index === 0 && uploadFiles?.[LEGACY_SHARED_REF_UPLOAD_KEY]
+      ? uploadFiles[LEGACY_SHARED_REF_UPLOAD_KEY]
+      : null
+
+  if (kind === 'archive') {
+    return {
+      file: null,
+      archiveId: rawArchiveId,
+      uploadKey,
+      slotKey,
+      preferredSource: 'archive',
+    }
   }
+  return {
+    file: rawFile || legacyFile,
+    archiveId: null,
+    uploadKey,
+    slotKey,
+    preferredSource: 'upload',
+  }
+}
+
+function slotHasActiveSource(mode, index, uploadFiles, slotArchivePicks, slotSourceMap) {
+  const src = resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePicks, slotSourceMap)
+  return Boolean(src.file || src.archiveId != null)
 }
 export const FALLBACK_GEN_MODELS = [
   { id: 'nano-banana-2', label: 'Nano Banana', nsfw: false, note: '' },
@@ -110,11 +159,6 @@ export function sameStudioModelId(a, b) {
   return na != null && nb != null && na === nb
 }
 
-function slotHasSource(mode, index, uploadFiles, slotArchivePicks) {
-  const src = resolveSlot(mode, index, uploadFiles, slotArchivePicks)
-  return Boolean(src.file || src.archiveId != null)
-}
-
 /** Валидация формы студии перед генерацией (как mm-os-bridge validateImageGen). */
 export function validateStudioForm(appState, studioStore, t) {
   const errs = []
@@ -122,21 +166,34 @@ export function validateStudioForm(appState, studioStore, t) {
   const slotCounts = { ref: 1, swap: 1, outfit: 2, location: 2, prompt: 0, carousel: 1, edit: 1 }
   const slotN = slotCounts[mode] ?? 0
   const { uploadFiles, slotArchivePicks, selectedModelId } = studioStore
+  const slotSourceMap = appState.slotSource || {}
 
   const hasCarouselSrc =
     Boolean(uploadFiles.carousel) ||
     appState.carouselPickId != null ||
     slotArchivePicks['carousel:0'] != null
 
-  const hasFrame = mode === 'carousel' ? hasCarouselSrc : slotHasSource(mode, 0, uploadFiles, slotArchivePicks)
+  const hasFrame =
+    mode === 'carousel'
+      ? hasCarouselSrc
+      : slotHasActiveSource(mode, 0, uploadFiles, slotArchivePicks, slotSourceMap)
 
   if (slotN > 0 && !hasFrame) errs.push(t.errNoRef)
-  if (mode === 'outfit' && !slotHasSource('outfit', 1, uploadFiles, slotArchivePicks)) errs.push(t.errNoRef)
-  if (mode === 'location' && !slotHasSource('location', 1, uploadFiles, slotArchivePicks)) errs.push(t.errNoRef)
+  if (mode === 'outfit' && !slotHasActiveSource('outfit', 1, uploadFiles, slotArchivePicks, slotSourceMap)) {
+    errs.push(t.errNoRef)
+  }
+  if (mode === 'location' && !slotHasActiveSource('location', 1, uploadFiles, slotArchivePicks, slotSourceMap)) {
+    errs.push(t.errNoRef)
+  }
   if (mode === 'prompt' && !(appState.studioPrompt || '').trim()) errs.push(t.errNoPrompt)
   if (mode === 'edit') {
     if (!(appState.studioPrompt || '').trim()) errs.push(t.errNoPrompt)
-    if (appState.needsRef === 'yes' && !slotHasSource('edit', 1, uploadFiles, slotArchivePicks)) errs.push(t.errNoRef)
+    if (
+      appState.needsRef === 'yes'
+      && !slotHasActiveSource('edit', 1, uploadFiles, slotArchivePicks, slotSourceMap)
+    ) {
+      errs.push(t.errNoRef)
+    }
   }
   if (mode !== 'outfit' && mode !== 'location' && mode !== 'edit' && mode !== 'prompt' && mode !== 'carousel' && !selectedModelId) errs.push(t.errNoChar)
 
@@ -151,13 +208,17 @@ export function sumOutboundMessages(chatterStats) {
   return n
 }
 
+/** Pick из архива — только для текущего режима/слота, без копирования в swap/outfit/ref. */
 export function syncRefArchivePicks(prev, mode, index, archiveId) {
-  const key = `${mode}:${index}`
-  const next = { ...prev, [key]: archiveId }
-  if (mode === 'ref' || mode === 'swap' || mode === 'outfit' || mode === 'location') {
-    for (const m of ['ref', 'swap', 'outfit', 'location']) {
-      next[`${m}:0`] = archiveId
-    }
-  }
+  const key = slotStateKey(mode, index)
+  return { ...prev, [key]: archiveId }
+}
+
+/** Сброс archive pick при загрузке файла в тот же слот. */
+export function clearSlotArchivePick(prev, mode, index) {
+  const key = slotStateKey(mode, index)
+  if (prev[key] == null) return prev
+  const next = { ...prev }
+  delete next[key]
   return next
 }

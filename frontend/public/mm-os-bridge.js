@@ -462,58 +462,57 @@
   }
 
   function slotUploadKey(mode, index) {
-    if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth'
-    if (mode === 'location') return index === 0 ? 'ref' : 'location-photo'
+    if (mode === 'outfit') return index === 0 ? 'outfit-scene' : 'outfit-cloth'
+    if (mode === 'location') return index === 0 ? 'location-scene' : 'location-photo'
     if (mode === 'carousel') return 'carousel'
-    if (mode === 'edit') return index === 0 ? 'ref' : 'edit-detail'
-    return 'ref'
+    if (mode === 'edit') return index === 0 ? 'edit-scene' : 'edit-detail'
+    if (mode === 'swap') return 'swap-scene'
+    if (mode === 'ref') return 'ref-scene'
+    return mode + '-scene'
   }
 
   function slotStateKey(mode, index) {
     return mode + ':' + index
   }
 
-  const REF_SLOT_MODES = ['ref', 'swap', 'outfit', 'location']
-
-  function resolveSlotArchivePick(mode, index) {
-    const slotKey = slotStateKey(mode, index)
-    const direct = store.slotArchivePicks[slotKey]
-    if (direct != null) return direct
-    if (index !== 0) return null
-    if (slotUploadKey(mode, 0) !== 'ref') return null
-    for (const m of REF_SLOT_MODES) {
-      if (m === mode) continue
-      const inherited = store.slotArchivePicks[slotStateKey(m, 0)]
-      if (inherited != null) return inherited
-    }
-    return null
+  function slotSourceKind(mode, index) {
+    const slotSourceMap = store.logic?.state?.slotSource || {}
+    return slotSourceMap[slotStateKey(mode, index)] === 'archive' ? 'archive' : 'upload'
   }
 
   function resolveSlotSource(mode, index) {
     const uploadKey = slotUploadKey(mode, index)
+    const slotKey = slotStateKey(mode, index)
+    const kind = slotSourceKind(mode, index)
+    const rawFile = store.uploadFiles[uploadKey] || null
+    const rawArchiveId = store.slotArchivePicks[slotKey] ?? null
+    const legacyFile =
+      !rawFile && index === 0 && store.uploadFiles.ref ? store.uploadFiles.ref : null
+    if (kind === 'archive') {
+      return {
+        file: null,
+        archiveId: rawArchiveId,
+        uploadKey,
+        slotKey,
+        preferredSource: 'archive',
+      }
+    }
     return {
-      file: store.uploadFiles[uploadKey] || null,
-      archiveId: resolveSlotArchivePick(mode, index),
+      file: rawFile || legacyFile,
+      archiveId: null,
       uploadKey,
-      slotKey: slotStateKey(mode, index),
+      slotKey,
+      preferredSource: 'upload',
     }
   }
 
   function slotHasSource(mode, index) {
     const src = resolveSlotSource(mode, index)
-    return !!(src.file || src.archiveId)
+    return !!(src.file || src.archiveId != null)
   }
 
   function syncRefArchivePicksAcrossModes() {
-    let shared = null
-    for (const m of REF_SLOT_MODES) {
-      const id = store.slotArchivePicks[slotStateKey(m, 0)]
-      if (id != null) shared = id
-    }
-    if (shared == null) return
-    for (const m of REF_SLOT_MODES) {
-      store.slotArchivePicks[slotStateKey(m, 0)] = shared
-    }
+    /* Раньше копировал slot-0 между ref/swap/outfit — убрано: каждый режим свой pick. */
   }
 
   function coerceJobGenerationId(accepted) {
@@ -531,7 +530,7 @@
   function mkArchiveMiniGrid(logic, slotKeyStr) {
     const mode = (slotKeyStr.split(':')[0] || 'ref')
     const index = Number(slotKeyStr.split(':')[1] || 0)
-    const pickedId = resolveSlotArchivePick(mode, index)
+    const pickedId = store.slotArchivePicks[slotKeyStr] ?? null
     return store.archiveImages.slice(0, 8).map((item, i) => {
       const url = archiveThumbUrl(item)
       const pending = isArchivePending(item)
@@ -548,16 +547,16 @@
         pick: pending
           ? () => {}
           : () => {
+              const parts = slotKeyStr.split(':')
+              const pickMode = parts[0] || 'ref'
+              const pickIndex = Number(parts[1] || 0)
+              const uploadKey = slotUploadKey(pickMode, pickIndex)
               store.slotArchivePicks[slotKeyStr] = item.id
-              syncRefArchivePicksAcrossModes()
-              if (slotKeyStr.endsWith(':0') || slotKeyStr.includes('ref')) {
-                delete store.uploadFiles.ref
-                delete store.uploadFiles.carousel
-              }
-              if (slotKeyStr.endsWith(':1')) {
-                delete store.uploadFiles['outfit-cloth']
-                delete store.uploadFiles['location-photo']
-              }
+              delete store.uploadFiles[uploadKey]
+              revokeUploadPreview(uploadKey)
+              if (uploadKey === 'carousel') delete store.uploadFiles.carousel
+              const slotSource = { ...(store.logic?.state?.slotSource || {}), [slotKeyStr]: 'archive' }
+              store.logic?.setState({ slotSource })
               logic.forceUpdate()
             },
       }
@@ -2388,11 +2387,30 @@
     if (vid) vid.currentTime = 0.15
   }
 
+  function slotIndexFromUploadKey(uploadKey) {
+    if (uploadKey === 'outfit-cloth' || uploadKey === 'location-photo' || uploadKey === 'edit-detail') return 1
+    return 0
+  }
+
+  function modeFromUploadKey(uploadKey, fallbackMode) {
+    if (uploadKey === 'outfit-cloth') return 'outfit'
+    if (uploadKey === 'location-photo') return 'location'
+    if (uploadKey === 'edit-detail') return 'edit'
+    if (uploadKey === 'carousel') return 'carousel'
+    if (uploadKey.endsWith('-scene')) return uploadKey.replace(/-scene$/, '')
+    return fallbackMode
+  }
+
+  function slotKeyFromUploadKey(uploadKey, fallbackMode) {
+    const mode = modeFromUploadKey(uploadKey, fallbackMode)
+    return slotStateKey(mode, slotIndexFromUploadKey(uploadKey))
+  }
+
   function renderArchivePickPreview(zone, uploadKey) {
     const mode = store.logic?.state?.imgMode || 'ref'
-    const slotIndex =
-      uploadKey === 'outfit-cloth' || uploadKey === 'location-photo' ? 1 : 0
-    const archiveId = resolveSlotArchivePick(mode, slotIndex)
+    const slotIndex = slotIndexFromUploadKey(uploadKey)
+    const pickMode = modeFromUploadKey(uploadKey, mode)
+    const archiveId = store.slotArchivePicks[slotStateKey(pickMode, slotIndex)] ?? null
     if (archiveId == null) return false
     const item = store.archiveImages.find((x) => x.id === archiveId)
     const url = item ? archiveThumbUrl(item) : null
@@ -2429,11 +2447,8 @@
       clear.textContent = '×'
       clear.addEventListener('click', (e) => {
         e.stopPropagation()
-        const sk = slotStateKey(mode, slotIndex)
+        const sk = slotStateKey(pickMode, slotIndex)
         delete store.slotArchivePicks[sk]
-        if (slotIndex === 0) {
-          for (const m of REF_SLOT_MODES) delete store.slotArchivePicks[slotStateKey(m, 0)]
-        }
         clearUploadZone(zone, uploadKey)
         store.logic?.forceUpdate()
       })
@@ -2593,10 +2608,15 @@
         const activeKey = uploadZoneKey(zone) || key
         store.uploadFiles[activeKey] = file
         renderUploadPreview(zone, activeKey, file)
+        const imgMode = store.logic?.state?.imgMode || 'ref'
+        const slotKeyForUpload = slotKeyFromUploadKey(activeKey, imgMode)
+        if (store.slotArchivePicks?.[slotKeyForUpload] != null) {
+          delete store.slotArchivePicks[slotKeyForUpload]
+        }
+        const slotSource = { ...(store.logic?.state?.slotSource || {}), [slotKeyForUpload]: 'upload' }
+        store.logic?.setState({ slotSource })
         if (activeKey === 'ref' || activeKey === 'carousel') {
-          Object.keys(store.slotArchivePicks || {}).forEach((k) => {
-            if (k.startsWith((store.logic?.state?.imgMode || 'ref') + ':')) delete store.slotArchivePicks[k]
-          })
+          delete store.uploadFiles.carousel
         }
         if (activeKey === 'carousel') {
           store.logic?.setState({ carSource: 'upload', carouselPickId: null })

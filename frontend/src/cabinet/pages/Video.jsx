@@ -327,7 +327,12 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
               }}
               hover={disabled ? {} : modeSt.hover}
               onClick={() => {
-                if (!disabled) setS({ vidMode: m.id });
+                if (!disabled) {
+                  // Смена режима видео — сброс кадра/драйвинга, иначе тянется реф прошлого режима.
+                  cabinet.setUploadFile('motion-frame', null);
+                  cabinet.clearFirstFrameArchivePick();
+                  setS({ vidMode: m.id, carouselPickId: null, ffState: 'idle' });
+                }
               }}
               aria-pressed={on}
               aria-disabled={disabled}

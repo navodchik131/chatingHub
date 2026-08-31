@@ -171,8 +171,23 @@ FACE_IDENTITY_LOCK_BLOCK = (
 
 
 def anchor_mode_a_scene_first(*, wave_profile: str) -> bool:
-    """WAN/Seedream: scene первым (canvas). Nano regular: identity первым, scene последним."""
+    """Seedream/WAN (nsfw): scene первым. Nano (regular): identity первым, scene последним."""
     return (wave_profile or "").strip().lower() != "regular"
+
+
+def anchor_mode_a_effective_scene_first(
+    *,
+    wave_profile: str,
+    bust_portrait: bool = False,
+) -> bool:
+    """Порядок URL/prompt для Mode A face_swap.
+
+    Бюст (лицо крупно в кадре): всегда identity-first — одинаково для Seedream, WAN и Nano.
+    Обычный кадр: по wave_profile (regular → identity-first, nsfw → scene-first).
+    """
+    if bust_portrait:
+        return False
+    return anchor_mode_a_scene_first(wave_profile=wave_profile)
 
 
 def order_mode_a_image_urls(

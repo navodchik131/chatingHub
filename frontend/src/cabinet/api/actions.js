@@ -8,6 +8,9 @@ import {
   isNsfwMode,
   normalizeWaveModel,
   waveModelFromState,
+  slotUploadKey,
+  slotStateKey,
+  resolveActiveSlotSource,
 } from './studioHelpers'
 import { apiJson, apiJsonOptional, normalizePhotoKind } from './helpers'
 
@@ -1094,29 +1097,11 @@ export function ensureStudioScenarios() {
   return Promise.reject(new Error('Workflow-сценарии не загружены'))
 }
 
-function slotUploadKey(mode, index) {
-  if (mode === 'outfit') return index === 0 ? 'ref' : 'outfit-cloth'
-  if (mode === 'location') return index === 0 ? 'ref' : 'location-photo'
-  if (mode === 'carousel') return 'carousel'
-  if (mode === 'edit') return index === 0 ? 'ref' : 'edit-detail'
-  return 'ref'
+function resolveSlotSource(mode, index, uploadFiles, slotArchivePicks, slotSourceMap) {
+  return resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePicks, slotSourceMap)
 }
 
-function slotStateKey(mode, index) {
-  return `${mode}:${index}`
-}
-
-function resolveSlotSource(mode, index, uploadFiles, slotArchivePicks) {
-  const uploadKey = slotUploadKey(mode, index)
-  return {
-    file: uploadFiles[uploadKey] || null,
-    archiveId: slotArchivePicks[slotStateKey(mode, index)] ?? null,
-    uploadKey,
-    slotKey: slotStateKey(mode, index),
-  }
-}
-
-export { resolveSlotSource }
+export { resolveSlotSource, resolveActiveSlotSource, slotUploadKey, slotStateKey }
 
 /** Генерация изображений через workflow execute (как mm-os-bridge). */
 export async function runImageGeneration({ appState, studioStore, userPrompt, workflowDemoLimited = false, workspaceId = null }) {
@@ -1139,7 +1124,7 @@ export async function runImageGeneration({ appState, studioStore, userPrompt, wo
     slotStateKey,
     slotUploadKey,
     resolveSlotSource: (m, i) =>
-      resolveSlotSource(m, i, studioStore.uploadFiles, studioStore.slotArchivePicks),
+      resolveSlotSource(m, i, studioStore.uploadFiles, studioStore.slotArchivePicks, appState.slotSource),
     userPrompt,
   }
 

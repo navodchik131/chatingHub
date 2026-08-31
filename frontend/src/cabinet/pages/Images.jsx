@@ -9,11 +9,12 @@ import { useApp } from '../hooks/useApp';
 import { color, line, font, G } from '../styles/tokens';
 import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHoverOff } from '../styles/mixins';
 import { modeDefs } from '../data/catalog';
-import { resolveSlotSource, archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
+import { archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
 import { formatArchiveErrorMessage } from '../api/helpers';
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import {
-  validateStudioForm, syncRefArchivePicks, enginesForNsfw, sameStudioModelId,
+  validateStudioForm, syncRefArchivePicks, clearSlotArchivePick, resolveActiveSlotSource,
+  enginesForNsfw, sameStudioModelId,
   normalizeWaveModel, waveModelFromState, isNsfwMode, isUiSimplified, effectiveStudioState,
 } from '../api/studioHelpers';
 import { quoteStudioImageCredits, formatImageCostBadge, quoteCabinetImageGenerationCredits } from '../../studioImagePricing';
@@ -196,7 +197,9 @@ function Slot({ slot, index }) {
   const mode = s.imgMode;
   const key = `${mode}:${index}`;
   const src = s.slotSource?.[key] || 'upload';
-  const { uploadKey, archiveId } = resolveSlotSource(mode, index, cabinet.uploadFiles, cabinet.slotArchivePicks);
+  const { uploadKey, archiveId } = resolveActiveSlotSource(
+    mode, index, cabinet.uploadFiles, cabinet.slotArchivePicks, s.slotSource,
+  );
   const hasFile = Boolean(cabinet.uploadFiles[uploadKey]);
   const previewUrl = cabinet.uploadPreviewUrls?.[uploadKey] || '';
   const archiveItems = (cabinet.archiveImages || []).slice(0, 12);
@@ -221,10 +224,14 @@ function Slot({ slot, index }) {
 
       {slot.archive ? (
         <div style={{ display: 'flex', gap: 3, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 8, padding: 3 }}>
-          <div style={seg(src === 'upload')} onClick={() => setS({ slotSource: { ...s.slotSource, [key]: 'upload' } })}>
+          <div style={seg(src === 'upload')} onClick={() => {
+            setS({ slotSource: { ...s.slotSource, [key]: 'upload' } });
+          }}>
             {t.srcUpload}
           </div>
-          <div style={seg(src === 'archive')} onClick={() => setS({ slotSource: { ...s.slotSource, [key]: 'archive' } })}>
+          <div style={seg(src === 'archive')} onClick={() => {
+            setS({ slotSource: { ...s.slotSource, [key]: 'archive' } });
+          }}>
             {t.srcArchive}
           </div>
         </div>
@@ -256,7 +263,12 @@ function Slot({ slot, index }) {
                 background: thumb ? `url(${thumb}) center/cover` : G[i % 6],
               }}
               hover={thumbSt.hover}
-              onClick={() => cabinet.setSlotArchivePicks((prev) => syncRefArchivePicks(prev, mode, index, item.id))}
+              onClick={() => {
+                // Архив: сбрасываем файл этого режима, иначе stale upload перебивает pick.
+                cabinet.setUploadFile(uploadKey, null);
+                cabinet.setSlotArchivePicks((prev) => syncRefArchivePicks(prev, mode, index, item.id));
+                setS({ slotSource: { ...s.slotSource, [key]: 'archive' } });
+              }}
             />
           );})}
         </div>
@@ -269,7 +281,11 @@ function Slot({ slot, index }) {
             style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) cabinet.setUploadFile(uploadKey, file);
+              if (file) {
+                cabinet.setUploadFile(uploadKey, file);
+                cabinet.setSlotArchivePicks((prev) => clearSlotArchivePick(prev, mode, index));
+                setS({ slotSource: { ...s.slotSource, [key]: 'upload' } });
+              }
               e.target.value = '';
             }}
           />
@@ -448,7 +464,7 @@ export default function Images() {
               key={m.id}
               style={modeSt.base}
               hover={modeSt.hover}
-              onClick={() => setS({ imgMode: m.id })}
+              onClick={() => setS({ imgMode: m.id, showGenError: false })}
               aria-pressed={on}
             >
               <div
