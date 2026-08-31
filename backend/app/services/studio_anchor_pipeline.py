@@ -173,6 +173,62 @@ def order_mode_a_image_urls(
     return [face_url, dressed_url, scene_url]
 
 
+def order_mode_a_face_closeup_urls(
+    *,
+    face_url: str,
+    scene_url: str,
+    scene_first: bool,
+    duplicate_face: bool = False,
+) -> list[str]:
+    """Крупный план лица: только scene + face (без dressed body). WAN — дублируем face для веса."""
+    if scene_first:
+        urls = [scene_url, face_url]
+        if duplicate_face:
+            urls.append(face_url)
+        return urls
+    return [face_url, scene_url]
+
+
+def detect_face_closeup_scene(
+    vis: AnchorVisibility,
+    scene_description: str = "",
+) -> bool:
+    """Кадр в основном лицо — dressed body только мешает финальному swap."""
+    if not vis.face:
+        return False
+    t = (scene_description or "").lower()
+    if re.search(r"shot type[^\n:]*:\s*[^\n]*close[- ]?up", t, re.I):
+        return True
+    if re.search(r"close[- ]?up", t, re.I) and not vis.upper:
+        return True
+    # Лицо в кадре, торс/ноги вне кропа — типичный headshot.
+    if not vis.upper and not vis.lower:
+        return True
+    return False
+
+
+def detect_face_closeup_from_bytes(scene_bytes: bytes) -> bool:
+    """Fallback без Grok: квадратный/портретный tight crop часто = headshot."""
+    if not scene_bytes or len(scene_bytes) < 64:
+        return False
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+
+        with Image.open(BytesIO(scene_bytes)) as im:
+            w, h = im.size
+        short = min(w, h)
+        long = max(w, h)
+        if short < 320:
+            return True
+        if long / max(short, 1) <= 1.4 and short >= 480:
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def hairstyle_style_block(*, lock_hairstyle_style: bool) -> str:
     """Укладка/часть/длина — с модели или с рефа; цвет волос всегда с модели."""
     color_rule = (
@@ -345,6 +401,53 @@ def build_mode_a_prompt(
         f"from Image {scene_i}: smile type and intensity, whether teeth are showing, eye state "
         "(wide open / squinting / winking), eyebrow position, and head tilt. Facial expression is "
         f"not part of identity — it must follow Image {scene_i}, not default to neutral."
+    )
+    prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
+    prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"
+    prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
+    if exclusions:
+        prompt += f"\n\n{exclusions}"
+    prompt += f"\n\n{REALISM_BLOCK}"
+    if (notes or "").strip():
+        prompt += f"\n\n{notes.strip()}"
+    return prompt
+
+
+def build_mode_a_face_closeup_prompt(
+    *,
+    filtered_anchor: str,
+    vis: AnchorVisibility,
+    notes: str = "",
+    lock_hairstyle_style: bool = True,
+    scene_first: bool = False,
+) -> str:
+    """Face-swap close-up: только scene + face (2–3 URL), без body/outfit ref."""
+    exclusions = exclusion_notes(vis)
+    if scene_first:
+        scene_i, face_i = 1, 2
+    else:
+        face_i, scene_i = 1, 2
+
+    prompt = (
+        f"Image {scene_i} = target close-up portrait scene: keep the exact crop, head scale in frame, "
+        "camera distance, head angle, gaze, lighting, shadows, and background.\n"
+        f"Image {face_i} = facial identity reference ONLY. The output must show THIS person's face — "
+        "not the original sitter from the scene reference.\n"
+        "\n"
+        f"Replace the entire face in Image {scene_i} with the identity from Image {face_i}. "
+        f"Do not preserve the original sitter's bone structure, eye shape, nose, lips, jaw, or skin identity.\n"
+        "\n"
+        f"{filtered_anchor}\n"
+        "\n"
+        f"Preserve from Image {scene_i} ONLY: framing, crop edges, head pose, gaze vs lens, lighting on skin, "
+        "background, and expression mood — but expression must be applied on top of Image {face_i} bone structure, "
+        f"not by keeping the stranger's face.\n"
+        f"Do not zoom out, widen the frame, or reveal body parts not present in Image {scene_i}."
+    )
+    prompt += (
+        "\n\nCRITICAL CLOSE-UP FACE SWAP: This is a tight face/portrait frame. "
+        "Identity likeness from the facial reference image is the top priority — "
+        "never output the scene sitter's face even if expression/lighting match the scene."
     )
     prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
     prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"

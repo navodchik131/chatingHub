@@ -14,11 +14,15 @@ from app.services.studio_anchor_pipeline import (
     SCENE_ANALYSIS_PROMPT,
     AnchorVisibility,
     anchor_mode_a_scene_first,
+    build_mode_a_face_closeup_prompt,
     build_mode_a_prompt,
     build_mode_b_prompt,
+    detect_face_closeup_from_bytes,
+    detect_face_closeup_scene,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
     load_cached_dressed_body,
+    order_mode_a_face_closeup_urls,
     order_mode_a_image_urls,
     parse_visibility_from_scene_text,
     pick_face_and_body_images,
@@ -50,6 +54,7 @@ class AnchorPipelineResult:
     dressed_body_bytes: bytes | None = None
     outfit_generation_id: int | None = None
     scene_first: bool = False
+    face_closeup: bool = False
 
 
 async def _analyze_scene_text(
@@ -173,14 +178,14 @@ async def run_anchor_pipeline(
     if not pub.lower().startswith("https://"):
         raise RuntimeError("PUBLIC_APP_URL must be https:// for anchor pipeline")
 
-    # Visibility: prefer HTML SCENE_ANALYSIS format; re-analyze if stale / wrong schema.
     scene_description = (existing_scene_description or "").strip()
+    # Для face_swap всегда анализируем сцену — нужны VISIBILITY и close-up для выбора режима.
     looks_like_html_scene = bool(
         scene_description
         and re.search(r"(?im)^ENVIRONMENT\s*:", scene_description)
         and re.search(r"(?im)^VISIBILITY\s*:", scene_description)
     )
-    if (not looks_like_html_scene) and llm_credentials is not None:
+    if llm_credentials is not None and (mode_n == "face_swap" or not looks_like_html_scene):
         try:
             scene_description = await _analyze_scene_text(
                 scene_bytes=scene_bytes,
@@ -196,6 +201,12 @@ async def run_anchor_pipeline(
         vis = parse_visibility_from_scene_text(scene_description)
     else:
         vis = visibility_from_identity_visibility(identity_visibility)
+
+    face_closeup = mode_n == "face_swap" and detect_face_closeup_scene(
+        vis, scene_description
+    )
+    if mode_n == "face_swap" and not face_closeup:
+        face_closeup = detect_face_closeup_from_bytes(scene_bytes)
 
     anchor = profile_text_to_identity_anchor(model_profile_text)
     filtered = filter_anchor_by_visibility(anchor, vis) if anchor else ""
@@ -229,52 +240,72 @@ async def run_anchor_pipeline(
     scene_tok = create_pose_reference_access_token(user_id=owner_id, file_id=scene_fid)
     scene_url = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
 
-    if dressed_bytes is None:
-        log.info(
-            "anchor wardrobe prep model=%s key=%s…",
-            model_id,
-            cache_key[:12],
-        )
-        dressed_bytes = await _dress_body_via_wavespeed(
-            api_key=wavespeed_api_key,
-            body_url=body_url,
-            scene_url=scene_url,
-            wave_profile=wave_profile,
-            wan_edit_tier=wan_edit_tier,
-            wave_model_id=wave_model_id,
-            aspect_ratio=aspect_ratio,
-        )
-        save_cached_dressed_body(
-            cache_key,
-            dressed_bytes,
-            meta={"model_id": model_id, "mode": mode_n},
-        )
+    dressed_url = ""
+    if not face_closeup:
+        if dressed_bytes is None:
+            log.info(
+                "anchor wardrobe prep model=%s key=%s…",
+                model_id,
+                cache_key[:12],
+            )
+            dressed_bytes = await _dress_body_via_wavespeed(
+                api_key=wavespeed_api_key,
+                body_url=body_url,
+                scene_url=scene_url,
+                wave_profile=wave_profile,
+                wan_edit_tier=wan_edit_tier,
+                wave_model_id=wave_model_id,
+                aspect_ratio=aspect_ratio,
+            )
+            save_cached_dressed_body(
+                cache_key,
+                dressed_bytes,
+                meta={"model_id": model_id, "mode": mode_n},
+            )
 
-    dressed_fid = save_pose_reference_bytes(
-        owner_id=owner_id,
-        raw=dressed_bytes,
-        content_type="image/jpeg",
-    )
-    dressed_tok = create_pose_reference_access_token(user_id=owner_id, file_id=dressed_fid)
-    dressed_url = f"{pub}/api/studio/public-pose-reference?t={quote(dressed_tok, safe='')}"
+        dressed_fid = save_pose_reference_bytes(
+            owner_id=owner_id,
+            raw=dressed_bytes,
+            content_type="image/jpeg",
+        )
+        dressed_tok = create_pose_reference_access_token(user_id=owner_id, file_id=dressed_fid)
+        dressed_url = f"{pub}/api/studio/public-pose-reference?t={quote(dressed_tok, safe='')}"
+    else:
+        log.info("anchor face close-up: skip wardrobe prep model=%s", model_id)
+        dressed_bytes = None
+        from_cache = False
 
     scene_first = False
     if mode_n == "face_swap":
-        # Mode A — порядок URL под WaveSpeed: WAN=scene first, Nano=identity first.
         scene_first = anchor_mode_a_scene_first(wave_profile=wave_profile)
-        prompt = build_mode_a_prompt(
-            filtered_anchor=filtered or anchor,
-            vis=vis,
-            notes=notes,
-            lock_hairstyle_style=lock_hairstyle_style,
-            scene_first=scene_first,
-        )
-        urls = order_mode_a_image_urls(
-            face_url=face_url,
-            dressed_url=dressed_url,
-            scene_url=scene_url,
-            scene_first=scene_first,
-        )
+        if face_closeup:
+            prompt = build_mode_a_face_closeup_prompt(
+                filtered_anchor=filtered or anchor,
+                vis=vis,
+                notes=notes,
+                lock_hairstyle_style=lock_hairstyle_style,
+                scene_first=scene_first,
+            )
+            urls = order_mode_a_face_closeup_urls(
+                face_url=face_url,
+                scene_url=scene_url,
+                scene_first=scene_first,
+                duplicate_face=scene_first,
+            )
+        else:
+            prompt = build_mode_a_prompt(
+                filtered_anchor=filtered or anchor,
+                vis=vis,
+                notes=notes,
+                lock_hairstyle_style=lock_hairstyle_style,
+                scene_first=scene_first,
+            )
+            urls = order_mode_a_image_urls(
+                face_url=face_url,
+                dressed_url=dressed_url,
+                scene_url=scene_url,
+                scene_first=scene_first,
+            )
         out_mode = "A"
     else:
         # Mode B — scene as text only
@@ -303,4 +334,5 @@ async def run_anchor_pipeline(
         cache_key=cache_key,
         dressed_body_bytes=dressed_bytes,
         scene_first=scene_first if mode_n == "face_swap" else False,
+        face_closeup=face_closeup if mode_n == "face_swap" else False,
     )

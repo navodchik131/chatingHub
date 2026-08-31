@@ -6,9 +6,12 @@ from app.services.studio_anchor_pipeline import (
     anchor_mode_a_scene_first,
     build_mode_a_prompt,
     build_mode_b_prompt,
+    detect_face_closeup_from_bytes,
+    detect_face_closeup_scene,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
     hairstyle_style_block,
+    order_mode_a_face_closeup_urls,
     order_mode_a_image_urls,
 )
 from app.services.studio_prompt_bundle import extract_creative_notes_from_workflow_description
@@ -69,6 +72,37 @@ def test_order_mode_a_image_urls():
 def test_anchor_mode_a_scene_first_profile():
     assert anchor_mode_a_scene_first(wave_profile="nsfw") is True
     assert anchor_mode_a_scene_first(wave_profile="regular") is False
+
+
+def test_detect_face_closeup_scene():
+    vis = AnchorVisibility(face=True, hair=True, upper=False, lower=False)
+    assert detect_face_closeup_scene(vis, "CAMERA:\n- Shot type: close-up\n")
+    assert not detect_face_closeup_scene(
+        AnchorVisibility(face=True, upper=True, lower=True),
+        "CAMERA:\n- Shot type: full body\n",
+    )
+
+
+def test_order_mode_a_face_closeup_urls():
+    assert order_mode_a_face_closeup_urls(
+        face_url="f", scene_url="s", scene_first=True, duplicate_face=True
+    ) == ["s", "f", "f"]
+    assert order_mode_a_face_closeup_urls(
+        face_url="f", scene_url="s", scene_first=False
+    ) == ["f", "s"]
+
+
+def test_detect_face_closeup_from_bytes_square():
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (900, 900), color=(128, 128, 128)).save(buf, format="JPEG")
+        assert detect_face_closeup_from_bytes(buf.getvalue()) is True
+    except ImportError:
+        pass
 
 
 def test_mode_a_hairstyle_lock_from_model_vs_scene():
