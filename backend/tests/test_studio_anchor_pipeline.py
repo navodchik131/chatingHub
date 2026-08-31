@@ -3,7 +3,6 @@
 from app.services.studio_anchor_pipeline import (
     REALISM_BLOCK,
     AnchorVisibility,
-    anchor_mode_a_effective_scene_first,
     anchor_mode_a_scene_first,
     build_mode_a_prompt,
     build_mode_b_prompt,
@@ -77,13 +76,6 @@ def test_anchor_mode_a_scene_first_profile():
     assert anchor_mode_a_scene_first(wave_profile="regular") is False
 
 
-def test_anchor_mode_a_effective_scene_first_bust_forces_identity_first():
-    """Seedream/WAN (nsfw) на бюсте — identity-first, как у Nano."""
-    assert anchor_mode_a_effective_scene_first(wave_profile="nsfw", bust_portrait=True) is False
-    assert anchor_mode_a_effective_scene_first(wave_profile="nsfw", bust_portrait=False) is True
-    assert anchor_mode_a_effective_scene_first(wave_profile="regular", bust_portrait=True) is False
-
-
 def test_detect_face_closeup_scene():
     # Чистый headshot — без торса в кадре.
     vis = AnchorVisibility(face=True, hair=True, upper=False, lower=False)
@@ -136,7 +128,20 @@ def test_order_mode_a_image_urls_extra_face():
 def test_detect_bust_portrait_scene():
     assert detect_bust_portrait_scene(
         AnchorVisibility(face=True, upper=True, lower=False),
-        "CAMERA:\n- Shot type: close-up\n",
+        "CAMERA:\n- Shot type: close-up chest-up\n",
+    )
+    assert detect_bust_portrait_scene(
+        AnchorVisibility(face=True, upper=True, lower=False),
+        "Pose: finger on lip, playful smile\n",
+    )
+    # Обычный поясной/полный — не bust.
+    assert not detect_bust_portrait_scene(
+        AnchorVisibility(face=True, upper=True, lower=False),
+        "CAMERA:\n- Shot type: medium waist-up\n",
+    )
+    assert not detect_bust_portrait_scene(
+        AnchorVisibility(face=True, upper=True, lower=True),
+        "full body standing\n",
     )
     assert not detect_bust_portrait_scene(
         AnchorVisibility(face=True, upper=False, lower=False),
@@ -144,19 +149,16 @@ def test_detect_bust_portrait_scene():
     )
 
 
-def test_mode_a_bust_portrait_order_identity_first_all_models():
-    """Бюст: triple face + dressed + scene — одинаково для Seedream и Nano."""
+def test_mode_a_bust_portrait_order_scene_first_nsfw():
+    """Бюст на Seedream/WAN: scene-first + triple face (не identity-first)."""
     urls = order_mode_a_image_urls(
         face_url="f",
         dressed_url="d",
         scene_url="s",
-        scene_first=anchor_mode_a_effective_scene_first(
-            wave_profile="nsfw",
-            bust_portrait=True,
-        ),
+        scene_first=anchor_mode_a_scene_first(wave_profile="nsfw"),
         extra_face_copies=2,
     )
-    assert urls == ["f", "f", "f", "d", "s"]
+    assert urls == ["s", "f", "f", "f", "d"]
 
 
 def test_mode_a_bust_portrait_prompt():
@@ -165,12 +167,12 @@ def test_mode_a_bust_portrait_prompt():
     prompt = build_mode_a_prompt(
         filtered_anchor=filtered,
         vis=vis,
-        scene_first=False,
+        scene_first=True,
         bust_portrait=True,
     )
     assert "BUST PORTRAIT FACE SWAP" in prompt
     assert "hand, finger, hair" in prompt
-    assert "Images 1–3" in prompt
+    assert "Images 2–4" in prompt
 
 
 def test_mode_a_bust_includes_upper_body_marks_block():
@@ -257,15 +259,15 @@ def test_dressed_body_cache_key_stable():
     assert a != c
 
 
-def test_finalize_bust_portrait_nsfw_uses_identity_first_prefix():
-    """Seedream (nsfw) на бюсте — префикс identity-first, не [FACE_SWAP — WAN]."""
+def test_finalize_bust_portrait_nsfw_uses_scene_first_prefix():
+    """Seedream (nsfw) на бюсте — scene-first префикс, не Nano identity-first."""
     out = finalize_anchor_mode_a_wavespeed_prompt(
         "Replace face in scene.",
         wave_profile="nsfw",
         lock_model_hairstyle=True,
-        scene_first=False,
+        scene_first=True,
         bust_portrait=True,
     )
-    assert "[MULTI_IMAGE_EDIT — intentional FACE SWAP]" in out
-    assert "[FACE_SWAP — WAN]" not in out
+    assert "[FACE_SWAP — WAN]" in out
+    assert "[MULTI_IMAGE_EDIT — intentional FACE SWAP]" not in out
     assert "[BUST PORTRAIT]" in out

@@ -175,21 +175,6 @@ def anchor_mode_a_scene_first(*, wave_profile: str) -> bool:
     return (wave_profile or "").strip().lower() != "regular"
 
 
-def anchor_mode_a_effective_scene_first(
-    *,
-    wave_profile: str,
-    bust_portrait: bool = False,
-) -> bool:
-    """Порядок URL/prompt для Mode A face_swap.
-
-    Бюст (лицо крупно в кадре): всегда identity-first — одинаково для Seedream, WAN и Nano.
-    Обычный кадр: по wave_profile (regular → identity-first, nsfw → scene-first).
-    """
-    if bust_portrait:
-        return False
-    return anchor_mode_a_scene_first(wave_profile=wave_profile)
-
-
 def order_mode_a_image_urls(
     *,
     face_url: str,
@@ -247,10 +232,27 @@ def detect_bust_portrait_scene(
     vis: AnchorVisibility,
     scene_description: str = "",
 ) -> bool:
-    """Бюст / до груди: лицо + торс в кадре — scene ref доминирует, нужен усиленный face swap."""
+    """Только tight chest-up / крупное лицо в кадре — не любой кадр с видимым торсом."""
     if not (vis.face and vis.upper):
         return False
-    return True
+    # Полный рост / по колено — обычный Mode A, не bust.
+    if vis.lower:
+        return False
+    t = (scene_description or "").lower()
+    bust_framing = re.search(
+        r"chest[- ]?up|bust(?:\s|/|-)|head and shoulders|shoulders up|"
+        r"tight crop|close[- ]?up|portrait crop|face (?:fills|dominates|large)|"
+        r"forehead to (?:chest|breast|upper chest)|shot type:\s*close",
+        t,
+        re.I,
+    )
+    hand_on_face = re.search(
+        r"(hand|finger|knuckle).{0,40}(lip|mouth|chin|cheek)|"
+        r"(lip|mouth|chin|cheek).{0,40}(hand|finger)",
+        t,
+        re.I,
+    )
+    return bool(bust_framing or hand_on_face)
 
 
 BUST_PORTRAIT_FACE_BLOCK = (

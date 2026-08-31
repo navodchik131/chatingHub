@@ -158,26 +158,30 @@ def finalize_anchor_mode_a_wavespeed_prompt(
     """Префикс/суффикс как у обычного face_swap — anchor раньше их не получал."""
     p = (prompt or "").strip()
     wp = (wave_profile or "").strip().lower()
-    # Бюст: identity-first и для Seedream/WAN (nsfw), не только Nano — scene-first там слабее.
-    identity_first = wp == "regular" or bust_portrait
-    bust_suffix = (
+    bust_suffix_nano = (
         "\n\n[BUST PORTRAIT] Multiple early identity images are the SAME model face — "
         "they must fully replace the large face in the last scene image, including when a hand touches the lips."
     )
-    if identity_first:
+    bust_suffix_scene_first = (
+        "\n\n[BUST PORTRAIT] Repeated model face URLs after Image 1 are the SAME identity — "
+        "override the scene sitter's large in-frame face completely; keep hand-on-lip pose only."
+    )
+    if wp == "regular":
         head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
         out = head.strip() if not p else head + p
         out = out.rstrip() + _nano_banana_pose_last_suffix(
             lock_model_hairstyle=lock_model_hairstyle
         )
         if bust_portrait:
-            out += bust_suffix
+            out += bust_suffix_nano
         return out
     if scene_first:
         out = wavespeed_prompt_with_face_swap_first(
             p,
             lock_model_hairstyle=lock_model_hairstyle,
         )
+        if bust_portrait:
+            out += bust_suffix_scene_first
         return out
     return p
 

@@ -13,7 +13,7 @@ from app.services.studio_anchor_pipeline import (
     DRESS_BODY_PROMPT,
     SCENE_ANALYSIS_PROMPT,
     AnchorVisibility,
-    anchor_mode_a_effective_scene_first,
+    anchor_mode_a_scene_first,
     build_mode_a_face_closeup_prompt,
     build_mode_a_prompt,
     build_mode_b_prompt,
@@ -281,11 +281,8 @@ async def run_anchor_pipeline(
 
     scene_first = False
     if mode_n == "face_swap":
-        # bust_portrait → identity-first для любой модели (Seedream/WAN/Nano).
-        scene_first = anchor_mode_a_effective_scene_first(
-            wave_profile=wave_profile,
-            bust_portrait=bust_portrait,
-        )
+        # Seedream/WAN: scene-first; Nano regular: identity-first. Не менять для bust — иначе ломается swap.
+        scene_first = anchor_mode_a_scene_first(wave_profile=wave_profile)
         if face_closeup:
             prompt = build_mode_a_face_closeup_prompt(
                 filtered_anchor=filtered or anchor,
