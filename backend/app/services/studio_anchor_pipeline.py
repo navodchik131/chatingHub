@@ -142,9 +142,35 @@ Neutral clean background preferred. Photorealistic result."""
 # Родинки/тату/шрамы — только с модели, никогда с scene donor (Image 3 / текст сцены).
 IDENTITY_MARKS_BLOCK = (
     "Skin marks (freckles, moles, birthmarks, scars, tattoos): copy ONLY from the model identity "
-    "(Image 1 face reference + model profile anchor text). NEVER copy marks, tattoos, or scars "
+    "(face reference image + model profile anchor text). NEVER copy marks, tattoos, or scars "
     "from the scene donor — even if they appear prominently on the scene person."
 )
+
+# Жёсткий лок лица — модели часто «держат» лицо со scene ref без явного запрета.
+FACE_IDENTITY_LOCK_BLOCK = (
+    "CRITICAL FACE REPLACEMENT: The output face must be unmistakably the person from the "
+    "facial identity reference image — never the original sitter from the scene reference. "
+    "Do not blend, average, or softly merge faces. Structural features (eye shape, nose, lips, "
+    "jawline, cheek structure, face oval) come only from the facial identity reference. "
+    "If the body/outfit reference shows any face, ignore it completely for facial identity."
+)
+
+
+def anchor_mode_a_scene_first(*, wave_profile: str) -> bool:
+    """WAN/Seedream: scene первым (canvas). Nano regular: identity первым, scene последним."""
+    return (wave_profile or "").strip().lower() != "regular"
+
+
+def order_mode_a_image_urls(
+    *,
+    face_url: str,
+    dressed_url: str,
+    scene_url: str,
+    scene_first: bool,
+) -> list[str]:
+    if scene_first:
+        return [scene_url, face_url, dressed_url]
+    return [face_url, dressed_url, scene_url]
 
 
 def hairstyle_style_block(*, lock_hairstyle_style: bool) -> str:
@@ -287,31 +313,40 @@ def build_mode_a_prompt(
     vis: AnchorVisibility,
     notes: str = "",
     lock_hairstyle_style: bool = True,
+    scene_first: bool = False,
 ) -> str:
-    """Face-swap WITH scene photo as Image 3 — exact Mode A from HTML."""
+    """Face-swap WITH scene photo — Mode A (HTML), с порядком картинок под WaveSpeed."""
     exclusions = exclusion_notes(vis)
+    if scene_first:
+        # WAN / Seedream: Image 1 = scene canvas, Image 2 = face, Image 3 = dressed body.
+        scene_i, face_i, body_i = 1, 2, 3
+    else:
+        # Nano regular: identity first, scene last (как _nano_banana_reorder).
+        face_i, body_i, scene_i = 1, 2, 3
+
     prompt = (
-        "Image 1 = facial identity reference only. Use this face, and only this face.\n"
-        "Image 2 = body proportions and outfit reference. The person's body shape and the clothing "
+        f"Image {scene_i} = target scene: recreate this exact pose, camera angle, framing, and lighting.\n"
+        f"Image {face_i} = facial identity reference only. Use this face, and only this face.\n"
+        f"Image {body_i} = body proportions and outfit reference. The person's body shape and the clothing "
         "shown here should be transferred exactly as-is.\n"
-        "Image 3 = target scene: recreate this exact pose, camera angle, framing, and lighting.\n"
         "\n"
-        "Replace the person in Image 3 entirely with the identity from Image 1 and Image 2.\n"
+        f"Replace the person in Image {scene_i} entirely with the identity from Image {face_i} and Image {body_i}.\n"
         "\n"
         f"{filtered_anchor}\n"
         "\n"
-        "Do not preserve the body silhouette, bust size, waist width, hip width, face, or outfit of "
-        "the person in Image 3 — replace all of it with Image 1 and Image 2.\n"
+        f"Do not preserve the body silhouette, bust size, waist width, hip width, face, or outfit of "
+        f"the person in Image {scene_i} — replace all of it with Image {face_i} and Image {body_i}.\n"
         "\n"
-        "Preserve exactly from Image 3: pose, camera distance and angle, framing, lighting direction "
+        f"Preserve exactly from Image {scene_i}: pose, camera distance and angle, framing, lighting direction "
         "and color temperature, shadows, background.\n"
         "\n"
-        "Do not blend structural facial features — eye shape, nose shape, lip shape, face shape, "
-        "jawline — between Image 1 and Image 3. However, facial expression must be copied exactly "
-        "from Image 3: smile type and intensity, whether teeth are showing, eye state "
+        f"Do not blend structural facial features — eye shape, nose shape, lip shape, face shape, "
+        f"jawline — between Image {face_i} and Image {scene_i}. However, facial expression must be copied exactly "
+        f"from Image {scene_i}: smile type and intensity, whether teeth are showing, eye state "
         "(wide open / squinting / winking), eyebrow position, and head tilt. Facial expression is "
-        "not part of identity — it must follow Image 3, not default to neutral."
+        f"not part of identity — it must follow Image {scene_i}, not default to neutral."
     )
+    prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
     prompt += f"\n\n{IDENTITY_MARKS_BLOCK}"
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:

@@ -175,6 +175,7 @@ from app.services.studio_openai import (
     describe_motion_video_first_frame_scene_openai,
     describe_motion_video_frames_openai,
     describe_reference_image_openai,
+    finalize_anchor_mode_a_wavespeed_prompt,
     finalize_masked_fullframe_nano_prompt,
     finalize_masked_fullframe_wan_prompt,
     finalize_nano_banana_studio_prompt,
@@ -5929,6 +5930,13 @@ async def _studio_job_execute_refine_prompt(
                 image_urls = list(anchor_result.image_urls)
                 user_pose_ref_prepended = False
                 wavespeed_prompt = (refined or "").strip()
+                if mode_n == "face_swap" and anchor_result.mode == "A":
+                    wavespeed_prompt = finalize_anchor_mode_a_wavespeed_prompt(
+                        wavespeed_prompt,
+                        wave_profile=wave_profile_n,
+                        lock_model_hairstyle=effective_lock_hairstyle,
+                        scene_first=anchor_result.scene_first,
+                    )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
                     size_for_ws = None
@@ -7118,6 +7126,13 @@ async def _studio_job_execute_motion_first_frame(
             image_urls = list(anchor_result.image_urls)
             user_pose_ref_prepended = False
             wavespeed_prompt = (refined or "").strip()
+            if mode_n == "face_swap" and anchor_result.mode == "A":
+                wavespeed_prompt = finalize_anchor_mode_a_wavespeed_prompt(
+                    wavespeed_prompt,
+                    wave_profile=wave_profile_n,
+                    lock_model_hairstyle=effective_lock_hairstyle,
+                    scene_first=anchor_result.scene_first,
+                )
             if workflow_first_frame:
                 from app.services.studio_model_bootstrap import (
                     append_motion_first_frame_overlay_removal,

@@ -3,11 +3,13 @@
 from app.services.studio_anchor_pipeline import (
     REALISM_BLOCK,
     AnchorVisibility,
+    anchor_mode_a_scene_first,
     build_mode_a_prompt,
     build_mode_b_prompt,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
     hairstyle_style_block,
+    order_mode_a_image_urls,
 )
 from app.services.studio_prompt_bundle import extract_creative_notes_from_workflow_description
 
@@ -38,10 +40,35 @@ def test_mode_a_prompt_matches_html_contract():
     assert "Image 1 = facial identity reference only" in prompt
     assert "Image 2 = body proportions and outfit reference" in prompt
     assert "Image 3 = target scene" in prompt
+    assert "CRITICAL FACE REPLACEMENT" in prompt
     assert "FACE:" in prompt
     assert "NEVER copy marks, tattoos, or scars" in prompt
     assert REALISM_BLOCK in prompt
     assert prompt.endswith("extra note")
+
+
+def test_mode_a_scene_first_reorders_prompt_indices():
+    vis = AnchorVisibility()
+    filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
+    prompt = build_mode_a_prompt(filtered_anchor=filtered, vis=vis, scene_first=True)
+    assert prompt.startswith("Image 1 = target scene")
+    assert "Image 2 = facial identity reference only" in prompt
+    assert "Image 3 = body proportions and outfit reference" in prompt
+    assert "Replace the person in Image 1 entirely" in prompt
+
+
+def test_order_mode_a_image_urls():
+    assert order_mode_a_image_urls(
+        face_url="f", dressed_url="d", scene_url="s", scene_first=True
+    ) == ["s", "f", "d"]
+    assert order_mode_a_image_urls(
+        face_url="f", dressed_url="d", scene_url="s", scene_first=False
+    ) == ["f", "d", "s"]
+
+
+def test_anchor_mode_a_scene_first_profile():
+    assert anchor_mode_a_scene_first(wave_profile="nsfw") is True
+    assert anchor_mode_a_scene_first(wave_profile="regular") is False
 
 
 def test_mode_a_hairstyle_lock_from_model_vs_scene():

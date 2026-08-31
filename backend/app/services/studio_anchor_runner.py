@@ -13,11 +13,13 @@ from app.services.studio_anchor_pipeline import (
     DRESS_BODY_PROMPT,
     SCENE_ANALYSIS_PROMPT,
     AnchorVisibility,
+    anchor_mode_a_scene_first,
     build_mode_a_prompt,
     build_mode_b_prompt,
     dressed_body_cache_key,
     filter_anchor_by_visibility,
     load_cached_dressed_body,
+    order_mode_a_image_urls,
     parse_visibility_from_scene_text,
     pick_face_and_body_images,
     profile_text_to_identity_anchor,
@@ -39,7 +41,7 @@ log = logging.getLogger(__name__)
 class AnchorPipelineResult:
     refined_prompt: str
     image_urls: list[str]
-    """Order: face, dressed_body, [scene for Mode A]."""
+    """WaveSpeed URL order (scene-first for WAN, identity-first for Nano)."""
     mode: str  # "A" | "B"
     dressed_from_cache: bool
     scene_description: str
@@ -47,6 +49,7 @@ class AnchorPipelineResult:
     cache_key: str
     dressed_body_bytes: bytes | None = None
     outfit_generation_id: int | None = None
+    scene_first: bool = False
 
 
 async def _analyze_scene_text(
@@ -255,15 +258,23 @@ async def run_anchor_pipeline(
     dressed_tok = create_pose_reference_access_token(user_id=owner_id, file_id=dressed_fid)
     dressed_url = f"{pub}/api/studio/public-pose-reference?t={quote(dressed_tok, safe='')}"
 
+    scene_first = False
     if mode_n == "face_swap":
-        # Mode A — scene photo is Image 3
+        # Mode A — порядок URL под WaveSpeed: WAN=scene first, Nano=identity first.
+        scene_first = anchor_mode_a_scene_first(wave_profile=wave_profile)
         prompt = build_mode_a_prompt(
             filtered_anchor=filtered or anchor,
             vis=vis,
             notes=notes,
             lock_hairstyle_style=lock_hairstyle_style,
+            scene_first=scene_first,
         )
-        urls = [face_url, dressed_url, scene_url]
+        urls = order_mode_a_image_urls(
+            face_url=face_url,
+            dressed_url=dressed_url,
+            scene_url=scene_url,
+            scene_first=scene_first,
+        )
         out_mode = "A"
     else:
         # Mode B — scene as text only
@@ -291,4 +302,5 @@ async def run_anchor_pipeline(
         visibility=vis,
         cache_key=cache_key,
         dressed_body_bytes=dressed_bytes,
+        scene_first=scene_first if mode_n == "face_swap" else False,
     )

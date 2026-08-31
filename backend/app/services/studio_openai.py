@@ -117,7 +117,6 @@ def wavespeed_prompt_with_face_swap_first(
     lock_model_hairstyle: bool = True,
     pose_prefix_kind: str | None = None,
 ) -> str:
-    """WAN: первое фото — сцена/донор; следующие URL — студийная модель (целевая личность)."""
     kind = (pose_prefix_kind or "face_visible").strip().lower()
     if kind in ("face_hidden", "headless"):
         prefix = _wavespeed_face_swap_prefix_face_hidden(lock_model_hairstyle=lock_model_hairstyle)
@@ -146,6 +145,30 @@ def wavespeed_prompt_with_face_swap_first(
     if not p:
         return prefix.strip()
     return prefix + p
+
+
+def finalize_anchor_mode_a_wavespeed_prompt(
+    prompt: str,
+    *,
+    wave_profile: str,
+    lock_model_hairstyle: bool,
+    scene_first: bool,
+) -> str:
+    """Префикс/суффикс как у обычного face_swap — anchor раньше их не получал."""
+    p = (prompt or "").strip()
+    wp = (wave_profile or "").strip().lower()
+    if wp == "regular":
+        head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+        out = head.strip() if not p else head + p
+        return out.rstrip() + _nano_banana_pose_last_suffix(
+            lock_model_hairstyle=lock_model_hairstyle
+        )
+    if scene_first:
+        return wavespeed_prompt_with_face_swap_first(
+            p,
+            lock_model_hairstyle=lock_model_hairstyle,
+        )
+    return p
 
 
 def _wavespeed_pose_ref_prefix_face_hidden(*, lock_model_hairstyle: bool) -> str:
