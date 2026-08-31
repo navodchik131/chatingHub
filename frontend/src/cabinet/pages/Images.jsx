@@ -82,7 +82,7 @@ function aspectCss(ratio) {
 
 /** Archive lightbox — shared by the Images page. */
 export function Lightbox() {
-  const { t, lang, lightbox, setS, go, cabinet } = useApp();
+  const { t, lang, lightbox, s, setS, go, cabinet } = useApp();
   if (lightbox == null) return null;
 
   const item = typeof lightbox === 'object'
