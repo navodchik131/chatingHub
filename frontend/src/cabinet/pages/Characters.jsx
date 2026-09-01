@@ -10,6 +10,7 @@ import { fieldLbl, inputSt, borderHoverOff, borderHoverLime, selectSt } from '..
 import { mapCharacter, mapCharHistory } from '../api/mappers';
 import { photoTagDefs, photoKindShortLabel, normalizePhotoKind } from '../api/helpers';
 import CharacterGenPanel from '../components/CharacterGenPanel';
+import TabMedia from '../components/CharacterMediaTab';
 
 function CharacterCreateModal({ open, name, setName, onClose, onCreate, t, lang }) {
   if (!open) return null;
@@ -60,6 +61,7 @@ const histIcons = { image: IcoImage, face: IcoFace, film: IcoFilm, star: IcoStar
 
 const charTabDefs = (lang) => [
   { id: 'photos', label: lang === 'ru' ? 'Фото и внешность' : 'Photos & look' },
+  { id: 'media', label: lang === 'ru' ? 'Медиатека' : 'Media library' },
   { id: 'persona', label: lang === 'ru' ? 'Персона (AI-компаньон)' : 'Persona (AI companion)' },
   { id: 'exif', label: lang === 'ru' ? 'EXIF «как с телефона»' : 'EXIF "like a phone"' },
   { id: 'history', label: lang === 'ru' ? 'История модели' : 'Model history' },
@@ -695,7 +697,7 @@ function CharacterDetail() {
 
   const tabs = charTabDefs(lang);
   const TabBody = {
-    photos: TabPhotos, persona: TabPersona, exif: TabExif, history: TabHistory,
+    photos: TabPhotos, media: TabMedia, persona: TabPersona, exif: TabExif, history: TabHistory,
   }[s.charTab];
 
   return (

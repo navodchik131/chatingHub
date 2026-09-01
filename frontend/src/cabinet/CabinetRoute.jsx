@@ -42,6 +42,8 @@ export const CABINET_PAGES = new Set([
   'seedance-director',
   'seedance-sale',
   'characters',
+  'references',
+  'news',
   'donations',
   'billing',
   'partner',

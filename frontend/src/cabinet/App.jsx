@@ -17,6 +17,8 @@ import ShotBatchRender from './pages/ShotBatchRender';
 import ShotBatchWizard from './pages/ShotBatchWizard';
 import SeedanceSale from './pages/SeedanceSale';
 import Characters from './pages/Characters';
+import ReferenceLibrary from './pages/ReferenceLibrary';
+import News from './pages/News';
 import Donations from './pages/Donations';
 import Billing from './pages/Billing';
 import Connections from './pages/Connections';
@@ -40,6 +42,8 @@ const pages = {
   'shot-batch-wizard': ShotBatchWizard,
   'seedance-sale': SeedanceSale,
   characters: Characters,
+  references: ReferenceLibrary,
+  news: News,
   donations: Donations,
   billing: Billing,
   connections: Connections,

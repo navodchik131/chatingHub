@@ -12,6 +12,7 @@ export function canAccessPage(pageId, me, opRights) {
     case 'video':
     case 'seedance-sale':
     case 'characters':
+    case 'references':
     case 'workflow':
       return !!r.studio
     case 'donations':

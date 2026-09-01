@@ -85,7 +85,7 @@ def test_companion_prompt_v4_chatter():
         reply_too_similar_to_recent,
     )
 
-    assert PROMPT_VERSION == "v9-funnel-handoff"
+    assert PROMPT_VERSION == "v10-media-library"
 
     out_msg = Message(
         id=2,

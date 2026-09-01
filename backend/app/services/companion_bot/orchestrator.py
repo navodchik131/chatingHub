@@ -29,6 +29,7 @@ from app.services.companion_bot.generate import generate_companion_reply
 from app.services.companion_bot.prompt import PROMPT_VERSION, last_fan_message_text, resolve_target_lang
 from app.services.companion_bot.reply_target import resolve_reply_to_message_id
 from app.services.companion_bot.send import broadcast_companion_message, send_companion_outbound
+from app.services.companion_bot.media_delivery import deliver_companion_media_from_snapshot
 from app.services.plan_entitlements import companion_allowed_for_subscription
 from app.services.realtime import hub
 
@@ -479,6 +480,24 @@ async def approve_and_send_companion_draft(
         followup=followup,
         state_snapshot=snapshot,
     )
+
+    media_rows = await deliver_companion_media_from_snapshot(
+        session,
+        owner_id=owner_user_id,
+        conv=conv,
+        state_snapshot=snapshot,
+        bot_response_event_id=event.id,
+        reply_to_message_id=reply_to_id,
+        sender_user_id=sender_user_id,
+    )
+    for media_row in media_rows:
+        await session.refresh(media_row, attribute_names=["attachments"])
+        await broadcast_companion_message(
+            owner_id=owner_user_id,
+            conv_id=conv.id,
+            row=media_row,
+        )
+
     return row
 
 

@@ -12,7 +12,7 @@ from app.services.companion_bot.persona import CompanionPersona, format_companio
 from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
-PROMPT_VERSION = "v9-funnel-handoff"
+PROMPT_VERSION = "v10-media-library"
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -693,6 +693,18 @@ def _daily_lore_block(daily_state_json: str | None) -> str:
     )
 
 
+def _media_library_rules_block() -> str:
+    return (
+        "MEDIA LIBRARY (companion bot):\n"
+        "- Free/teaser photos ship automatically AFTER your text when the system allows — "
+        "keep text short; don't describe pixels.\n"
+        "- Paid exclusives: offer price + payment link when hinted; never send the file until they pay.\n"
+        "- If MEDIA LIBRARY hint says deflect — no promises, no «sending now».\n"
+        "- Never resend the same vibe/series twice; if they ask again, tease something new or deflect.\n"
+        "- Text first, photo second — like a real chatter, not a spam bot.\n"
+    )
+
+
 def build_companion_system_prompt(
     *,
     persona_name: str,
@@ -752,6 +764,7 @@ def build_companion_system_prompt(
         + _daily_lore_block(daily_state_json)
         + checkin_note
         + (_funnel_stage_rules(signals) if funnel else "")
+        + _media_library_rules_block()
         + f"Character sheet (voice & facts for {persona_name}):\n{profile_block}\n\n"
         f"Relationship warmth: {relationship_score}/100.\n"
         f"Mood subtext: {mood_line}.\n"
@@ -776,6 +789,7 @@ def build_companion_user_prompt(
     fan_image_description: str | None = None,
     trigger_message: Message | None = None,
     persona: CompanionPersona | None = None,
+    media_hint: str | None = None,
 ) -> str:
     transcript = _format_transcript(messages, conv.user_display_name, persona=persona)
     signals = analyze_thread_signals(messages)
@@ -833,16 +847,23 @@ def build_companion_user_prompt(
     if avoid:
         ban_block += f"REGENERATION: your previous draft was too repetitive. Write differently.\n{avoid}\n\n"
 
+    media_block = ""
+    hint = (media_hint or "").strip()
+    if hint:
+        media_block = f"\n{hint}\n"
+
     if followup:
         return (
             f"Conversation so far:\n\n{tail}\n"
             f"{ban_block}"
+            f"{media_block}"
             f"{focus}"
             "Write ONE follow-up as the character (fan has not replied to your last message)."
         )
     return (
         f"Conversation so far:\n\n{tail}\n"
         f"{ban_block}"
+        f"{media_block}"
         f"{focus}"
         "Write the next reply. No reset, no repeated beats from your recent messages."
     )

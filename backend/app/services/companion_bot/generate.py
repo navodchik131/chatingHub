@@ -31,6 +31,7 @@ from app.services.companion_bot.prompt import (
     reply_too_similar_to_recent,
     resolve_target_lang,
 )
+from app.services.companion_bot.media_planner import plan_companion_media
 from app.services.companion_bot.style_rag import format_style_examples_block
 from app.services.studio_keys import load_owner_studio_billing, studio_llm_credentials
 from app.services.studio_openai import _chat_completion_text
@@ -185,6 +186,20 @@ async def generate_companion_reply(
     if style_block:
         system += "\n" + style_block
 
+    # План медиатеки до LLM — модель знает, отправится ли фото и не обещает лишнего.
+    media_plan = await plan_companion_media(
+        session,
+        owner_id=owner_id,
+        conv=conv,
+        messages=messages,
+        studio_model_id=studio_model_id,
+        relationship_score=state.relationship_score,
+        followup=followup,
+        trigger_message=trigger_message,
+        fan_image_description=fan_image_description,
+        manual_category=conv.manual_category,
+    )
+
     model = companion_chat_model()
     recent = recent_outbound_texts(messages, limit=4)
     signals = analyze_thread_signals(messages)
@@ -200,6 +215,7 @@ async def generate_companion_reply(
             fan_image_description=fan_image_description,
             trigger_message=trigger_message,
             persona=persona,
+            media_hint=media_plan.llm_hint,
         )
         raw = await _chat_completion_text(
             model=model,
@@ -258,5 +274,6 @@ async def generate_companion_reply(
         "vision_used": bool(fan_image_description),
         "style_rag": bool(style_block),
         "style_rag_source": "db" if "team's real chats" in style_block else ("static" if style_block else "none"),
+        "media_plan": media_plan.to_dict(),
     }
     return reply, target_lang, model, state.relationship_score, snapshot

@@ -1,5 +1,5 @@
 import { IcoGrid, IcoChat, IcoImage, IcoFilm, IcoStar, IcoFlow,
-  IcoHeart, IcoCard, IcoPlug, IcoTeam, IcoSpark, IcoLayers, IcoLifeBuoy, IcoUser, IcoHandshake,
+  IcoHeart, IcoCard, IcoPlug, IcoTeam, IcoSpark, IcoLayers, IcoLifeBuoy, IcoUser, IcoHandshake, IcoBook,
 } from '../components/Icons';
 
 /** Sidebar groups — badges come from live cabinet data via computeNavBadges. */
@@ -23,6 +23,8 @@ export const navGroups = (t, badges = {}, { isPartner = false, evolinkEnabled = 
         badge: 'Best',
       }] : []),
       { id: 'characters', label: t.navCharacters, Icon: IcoStar },
+      { id: 'references', label: t.navReferences, Icon: IcoLayers },
+      { id: 'news', label: t.navNews, Icon: IcoBook },
       { id: 'workflow', label: t.navWorkflow, Icon: IcoFlow, badge: badges.workflow },
     ],
   },
@@ -46,7 +48,8 @@ export const navGroups = (t, badges = {}, { isPartner = false, evolinkEnabled = 
 
 export const pageTitles = (t) => ({
   overview: t.navOverview, dialogs: t.navDialogs, images: t.navImages,
-  video: t.navVideo, 'seedance-sale': t.navSeedanceSale, characters: t.navCharacters, workflow: t.navWorkflow,
+  video: t.navVideo, 'seedance-sale': t.navSeedanceSale, characters: t.navCharacters,
+  references: t.navReferences, news: t.navNews, workflow: t.navWorkflow,
   donations: t.navDonations, billing: t.navBilling, partner: t.navPartner, connections: t.navConnections,
   team: t.navTeam, support: t.navSupport, profile: t.navProfile,
 });
@@ -65,6 +68,8 @@ export const moreItemDefs = (t, lang) => [
   { label: t.navVideo, desc: t.videoDesc, Icon: IcoFilm, go: 'video' },
   { label: t.navSeedanceSale, desc: t.seedanceSaleDesc, Icon: IcoSpark, go: 'seedance-sale' },
   { label: t.navCharacters, desc: lang === 'ru' ? 'Ваши виртуальные модели' : 'Your virtual models', Icon: IcoStar, go: 'characters' },
+  { label: t.navReferences, desc: lang === 'ru' ? 'Референсы для студии' : 'Studio references', Icon: IcoLayers, go: 'references' },
+  { label: t.navNews, desc: lang === 'ru' ? 'Обновления сервиса' : 'Product updates', Icon: IcoBook, go: 'news' },
   { label: t.navWorkflow, desc: lang === 'ru' ? 'Узловой конструктор (Pro)' : 'Node builder (Pro)', Icon: IcoFlow, go: 'workflow' },
   { label: t.navBilling, desc: t.billingNavDesc, Icon: IcoCard, go: 'billing' },
   { label: t.navConnections, desc: t.connectionsDesc, Icon: IcoPlug, go: 'connections' },

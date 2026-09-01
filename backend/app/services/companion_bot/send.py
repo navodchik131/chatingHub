@@ -39,9 +39,16 @@ async def send_companion_outbound(
     reply_to_message_id: int | None,
     bot_response_event_id: int,
     sender_user_id: int | None = None,
+    image_bytes: bytes | None = None,
+    image_mime: str | None = None,
+    video_bytes: bytes | None = None,
+    video_mime: str | None = None,
+    companion_media_asset_id: int | None = None,
+    donation_unlock_event_id: int | None = None,
 ) -> Message:
     outgoing = (text or "").strip()
-    if not outgoing:
+    has_media = bool(image_bytes or video_bytes)
+    if not outgoing and not has_media:
         raise ValueError("empty outbound text")
 
     platform_message_id: str | None = None
@@ -75,8 +82,10 @@ async def send_companion_outbound(
             chat_id=cid,
             topic_id=tid,
             text=outgoing,
-            image_bytes=None,
-            image_mime=None,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
+            video_bytes=video_bytes,
+            video_mime=video_mime,
             reply_to_telegram_message_id=tg_reply_id,
         )
         if sent_id is not None:
@@ -105,8 +114,10 @@ async def send_companion_outbound(
             session_encrypted=row_tu.session_encrypted,
             peer_user_id=peer_id,
             text=outgoing,
-            image_bytes=None,
-            image_mime=None,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
+            video_bytes=video_bytes,
+            video_mime=video_mime,
             reply_to_telegram_message_id=tg_reply_id,
         )
         if sent_id is not None:
@@ -130,8 +141,8 @@ async def send_companion_outbound(
                 access_token=fv_tok,
                 fan_uuid=conv.external_chat_id,
                 text=outgoing,
-                image_bytes=None,
-                image_mime=None,
+                image_bytes=image_bytes,
+                image_mime=image_mime,
                 reply_to_message_uuid=fv_reply_uuid,
             )
         except HTTPException as e:
@@ -158,8 +169,8 @@ async def send_companion_outbound(
             recipient_id=conv.external_chat_id,
             owner_id=owner_id,
             text=outgoing,
-            image_bytes=None,
-            image_mime=None,
+            image_bytes=image_bytes,
+            image_mime=image_mime,
         )
         _ = ig_reply_mid
     else:
@@ -178,13 +189,18 @@ async def send_companion_outbound(
     if not stored_original.strip():
         stored_original = outgoing
 
-    meta = json.dumps(
-        {
-            "companion_bot": True,
-            "bot_response_event_id": bot_response_event_id,
-        },
-        ensure_ascii=False,
-    )
+    meta_payload: dict = {
+        "companion_bot": True,
+        "bot_response_event_id": bot_response_event_id,
+    }
+    if companion_media_asset_id is not None:
+        meta_payload["companion_media_asset_id"] = int(companion_media_asset_id)
+    if has_media:
+        meta_payload["companion_media"] = True
+    if donation_unlock_event_id is not None:
+        meta_payload["companion_donation_unlock"] = True
+        meta_payload["creator_donation_event_id"] = int(donation_unlock_event_id)
+    meta = json.dumps(meta_payload, ensure_ascii=False)
     conv.updated_at = datetime.now(timezone.utc)
     row = await add_message(
         session,

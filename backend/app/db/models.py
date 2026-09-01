@@ -1161,6 +1161,192 @@ class CompanionStyleExample(Base):
     )
 
 
+class CompanionMediaPack(Base):
+    """Серия/пак фото или видео для companion bot — бот может отправить несколько кадров из одной серии."""
+
+    __tablename__ = "companion_media_packs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    studio_model_id: Mapped[int] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """Сколько кадров из серии отправлять за раз (обычно 3–4)."""
+    max_send_count: Mapped[int] = mapped_column(Integer, default=4, server_default="4")
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    studio_model: Mapped[UserStudioModel] = relationship("UserStudioModel")
+    assets: Mapped[list["CompanionMediaAsset"]] = relationship(
+        "CompanionMediaAsset",
+        back_populates="pack",
+        cascade="all, delete-orphan",
+        order_by="CompanionMediaAsset.sort_order",
+    )
+
+
+class CompanionMediaAsset(Base):
+    """Файл в медиатеке companion bot: фото/видео с описанием, тегами и embedding для семантического поиска."""
+
+    __tablename__ = "companion_media_assets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    studio_model_id: Mapped[int] = mapped_column(
+        ForeignKey("user_studio_models.id", ondelete="CASCADE"), index=True
+    )
+    pack_id: Mapped[int | None] = mapped_column(
+        ForeignKey("companion_media_packs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    media_type: Mapped[str] = mapped_column(String(16), default="photo", server_default="photo")
+    relative_path: Mapped[str] = mapped_column(String(512))
+    content_type: Mapped[str] = mapped_column(String(64), default="image/jpeg", server_default="image/jpeg")
+    studio_generation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("studio_generations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tier: Mapped[str] = mapped_column(String(16), default="teaser", server_default="teaser")
+    """Цена платного контента в центах USD (0 = бесплатно)."""
+    price_usd_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    pack: Mapped[CompanionMediaPack | None] = relationship(
+        "CompanionMediaPack", back_populates="assets"
+    )
+    studio_model: Mapped[UserStudioModel] = relationship("UserStudioModel")
+
+
+class CompanionMediaSendLog(Base):
+    """Журнал отправок: один и тот же asset не отправляется одному фану повторно."""
+
+    __tablename__ = "companion_media_send_logs"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "asset_id",
+            name="uq_companion_media_send_conv_asset",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    asset_id: Mapped[int] = mapped_column(
+        ForeignKey("companion_media_assets.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class CreatorReference(Base):
+    """Простая библиотека референсов креатора (фото/видео + описание)."""
+
+    __tablename__ = "creator_references"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_type: Mapped[str] = mapped_column(String(16), default="photo", server_default="photo")
+    relative_path: Mapped[str] = mapped_column(String(512))
+    content_type: Mapped[str] = mapped_column(String(64), default="image/jpeg", server_default="image/jpeg")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class CreatorReferenceLike(Base):
+    __tablename__ = "creator_reference_likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "reference_id", name="uq_creator_reference_like"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    reference_id: Mapped[int] = mapped_column(
+        ForeignKey("creator_references.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class PlatformNewsPost(Base):
+    """Новости платформы — заголовок, краткое описание и полный текст."""
+
+    __tablename__ = "platform_news_posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title_ru: Mapped[str] = mapped_column(String(256))
+    title_en: Mapped[str] = mapped_column(String(256))
+    summary_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class PlatformNewsLike(Base):
+    __tablename__ = "platform_news_likes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "news_id", name="uq_platform_news_like"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    news_id: Mapped[int] = mapped_column(
+        ForeignKey("platform_news_posts.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class CompanionJob(Base):
     """Персистентная очередь задач companion bot (переживает рестарт API)."""
 

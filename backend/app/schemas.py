@@ -1894,3 +1894,135 @@ class AdminSupportTicketReplyIn(BaseModel):
 
 class AdminSupportTicketStatusPatchIn(BaseModel):
     status: Literal["submitted", "in_review", "answered", "closed"]
+
+
+class CompanionMediaPackIn(BaseModel):
+    studio_model_id: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=4000)
+    tags: list[str] = Field(default_factory=list)
+    max_send_count: int = Field(default=4, ge=1, le=10)
+    status: Literal["active", "disabled"] = "active"
+
+
+class CompanionMediaPackPatchIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=4000)
+    tags: list[str] | None = None
+    max_send_count: int | None = Field(default=None, ge=1, le=10)
+    status: Literal["active", "disabled"] | None = None
+
+
+class CompanionMediaPackOut(BaseModel):
+    id: int
+    studio_model_id: int
+    name: str
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    max_send_count: int
+    status: str
+    asset_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompanionMediaAssetFromGenerationIn(BaseModel):
+    studio_model_id: int = Field(ge=1)
+    studio_generation_id: int = Field(ge=1)
+    pack_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, max_length=256)
+    description: str | None = Field(default=None, max_length=4000)
+    tags: list[str] = Field(default_factory=list)
+    tier: Literal["free", "teaser", "paid"] = "teaser"
+    price_usd_cents: int = Field(default=0, ge=0, le=500_000)
+    sort_order: int | None = Field(default=None, ge=0)
+
+
+class CompanionMediaAssetPatchIn(BaseModel):
+    pack_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, max_length=256)
+    description: str | None = Field(default=None, max_length=4000)
+    tags: list[str] | None = None
+    tier: Literal["free", "teaser", "paid"] | None = None
+    price_usd_cents: int | None = Field(default=None, ge=0, le=500_000)
+    status: Literal["active", "disabled"] | None = None
+    sort_order: int | None = Field(default=None, ge=0)
+
+
+class CompanionMediaAssetOut(BaseModel):
+    id: int
+    studio_model_id: int
+    pack_id: int | None = None
+    pack_name: str | None = None
+    sort_order: int
+    media_type: str
+    relative_path: str
+    content_type: str
+    studio_generation_id: int | None = None
+    title: str | None = None
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    has_embedding: bool = False
+    tier: str
+    price_usd_cents: int = 0
+    status: str
+    sent_count: int = 0
+    fan_count: int = 0
+    preview_url: str
+    match_score: float | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompanionMediaReindexOut(BaseModel):
+    indexed: int
+    failed: int
+    total: int
+
+
+class CompanionMediaSearchIn(BaseModel):
+    studio_model_id: int = Field(ge=1)
+    query: str = Field(min_length=1, max_length=2000)
+    conversation_id: int | None = Field(default=None, ge=1)
+    expand_pack: bool = True
+    tier: Literal["free", "teaser", "paid"] | None = None
+
+
+class CompanionMediaSearchOut(BaseModel):
+    assets: list[CompanionMediaAssetOut] = Field(default_factory=list)
+    matched_asset_id: int | None = None
+    pack_id: int | None = None
+    reason: str
+
+
+class CreatorReferenceOut(BaseModel):
+    id: int
+    title: str | None = None
+    description: str | None = None
+    media_type: str
+    content_type: str
+    likes_count: int = 0
+    liked_by_me: bool = False
+    preview_url: str
+    created_at: datetime
+
+
+class CreatorReferenceLikeOut(BaseModel):
+    liked: bool
+    likes_count: int
+
+
+class PlatformNewsOut(BaseModel):
+    id: int
+    title: str
+    summary: str | None = None
+    body: str | None = None
+    is_pinned: bool = False
+    published_at: datetime
+    likes_count: int = 0
+    liked_by_me: bool = False
+
+
+class PlatformNewsLikeOut(BaseModel):
+    liked: bool
+    likes_count: int

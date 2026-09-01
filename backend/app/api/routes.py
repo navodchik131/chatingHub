@@ -18,6 +18,9 @@ from app.api.partner_routes import redirect_router as partner_redirect_router
 from app.api.partner_routes import router as partner_router
 from app.api.referral_routes import router as referral_router
 from app.api.chat_routes import router as chat_router
+from app.api.companion_media_routes import router as companion_media_router
+from app.api.news_routes import router as news_router
+from app.api.reference_routes import router as reference_router
 from app.api.creator_donation_routes import router as creator_donation_router
 from app.api.integrations_routes import router as integrations_router
 from app.api.telegram_user_routes import router as telegram_user_router
@@ -39,6 +42,9 @@ router.include_router(push_router)
 router.include_router(webhooks_router)
 router.include_router(tribute_router)
 router.include_router(creator_donation_router)
+router.include_router(companion_media_router)
+router.include_router(reference_router)
+router.include_router(news_router)
 router.include_router(integrations_router)
 router.include_router(telegram_user_router)
 router.include_router(billing_router)

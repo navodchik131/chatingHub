@@ -1140,3 +1140,113 @@ export async function runImageGeneration({ appState, studioStore, userPrompt, wo
   if (!built) throw new Error('Неизвестный режим генерации')
   return executeWorkflowGraph(built.graph, built.targetNodeId, { workflowDemoLimited, workspaceId })
 }
+
+/** ── Медиатека companion bot ── */
+export async function fetchCompanionMediaPacks(studioModelId) {
+  return apiJson(`/api/companion-media/packs?studio_model_id=${studioModelId}`)
+}
+
+export async function fetchCompanionMediaAssets(studioModelId, packId = null) {
+  const qs = packId ? `&pack_id=${packId}` : ''
+  return apiJson(`/api/companion-media/assets?studio_model_id=${studioModelId}${qs}`)
+}
+
+export async function createCompanionMediaPack(body) {
+  return apiJson('/api/companion-media/packs', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateCompanionMediaPack(packId, body) {
+  return apiJson(`/api/companion-media/packs/${packId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteCompanionMediaPack(packId) {
+  await apiJson(`/api/companion-media/packs/${packId}`, { method: 'DELETE' })
+}
+
+export async function uploadCompanionMediaAsset({ studioModelId, file, fields = {} }) {
+  const fd = new FormData()
+  fd.append('studio_model_id', String(studioModelId))
+  fd.append('file', file)
+  Object.entries(fields).forEach(([k, v]) => {
+    if (v != null && v !== '') fd.append(k, String(v))
+  })
+  const res = await apiFetch('/api/companion-media/assets/upload', { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'upload failed')
+  return data
+}
+
+export async function importCompanionMediaFromGeneration(body) {
+  return apiJson('/api/companion-media/assets/from-generation', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateCompanionMediaAsset(assetId, body) {
+  return apiJson(`/api/companion-media/assets/${assetId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteCompanionMediaAsset(assetId) {
+  await apiJson(`/api/companion-media/assets/${assetId}`, { method: 'DELETE' })
+}
+
+export async function reindexCompanionMedia(studioModelId) {
+  return apiJson(`/api/companion-media/reindex?studio_model_id=${studioModelId}`, { method: 'POST' })
+}
+
+export async function searchCompanionMedia(body) {
+  return apiJson('/api/companion-media/search', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+/** ── Библиотека референсов ── */
+export async function fetchReferences(mediaType = null) {
+  const qs = mediaType ? `?media_type=${mediaType}` : ''
+  return apiJson(`/api/references${qs}`)
+}
+
+export async function uploadReference({ file, title, description }) {
+  const fd = new FormData()
+  fd.append('file', file)
+  if (title) fd.append('title', title)
+  if (description) fd.append('description', description)
+  const res = await apiFetch('/api/references', { method: 'POST', body: fd })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'upload failed')
+  return data
+}
+
+export async function deleteReference(referenceId) {
+  await apiJson(`/api/references/${referenceId}`, { method: 'DELETE' })
+}
+
+export async function toggleReferenceLike(referenceId) {
+  return apiJson(`/api/references/${referenceId}/like`, { method: 'POST' })
+}
+
+/** ── Новости ── */
+export async function fetchNews(lang) {
+  const qs = lang ? `?lang=${encodeURIComponent(lang)}` : ''
+  return apiJson(`/api/news${qs}`)
+}
+
+export async function fetchNewsDetail(newsId, lang) {
+  const qs = lang ? `?lang=${encodeURIComponent(lang)}` : ''
+  return apiJson(`/api/news/${newsId}${qs}`)
+}
+
+export async function toggleNewsLike(newsId) {
+  return apiJson(`/api/news/${newsId}/like`, { method: 'POST' })
+}

@@ -221,18 +221,29 @@ async def apply_creator_donation_webhook(
         raw_meta=json.dumps(body, ensure_ascii=False)[:8000],
     )
     session.add(row)
+    await session.flush()
+    event_id = row.id
     await session.commit()
     log.info(
-        "creator donation stored link=%s user=%s amount_minor=%s payer=%s",
+        "creator donation stored link=%s user=%s amount_minor=%s payer=%s event_id=%s",
         link.id,
         link.user_id,
         amount_minor,
         payer_tg,
+        event_id,
     )
+
+    # Companion bot: автоотправка promised paid контента после оплаты.
+    if payer_tg is not None and amount_minor > 0 and norm in _CREATOR_DONATION_EVENTS:
+        from app.services.companion_bot.media_unlock import schedule_companion_donation_unlock
+
+        schedule_companion_donation_unlock(creator_donation_event_id=event_id)
+
     return {
         "ok": True,
         "stored": external_id,
         "creator_user_id": link.user_id,
         "amount_minor": amount_minor,
         "payer_telegram_user_id": payer_tg,
+        "creator_donation_event_id": event_id,
     }

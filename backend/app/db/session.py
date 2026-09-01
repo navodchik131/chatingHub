@@ -453,6 +453,9 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_instagram_companion_columns)
         await conn.run_sync(_migrate_conversation_peer_avatar_url)
         await conn.run_sync(_migrate_connection_companion_columns)
+        await conn.run_sync(_migrate_companion_media_library)
+        await conn.run_sync(_migrate_creator_references)
+        await conn.run_sync(_migrate_platform_news)
     await refresh_companion_goal_columns_ready()
 
 
@@ -1076,6 +1079,99 @@ def _migrate_companion_bot(sync_conn) -> None:
             sync_conn.execute(
                 text("ALTER TABLE user_studio_models ADD COLUMN companion_persona_json TEXT")
             )
+
+
+def _migrate_companion_media_library(sync_conn) -> None:
+    """Таблицы медиатеки companion bot: паки, ассеты, журнал отправок."""
+    from sqlalchemy import inspect, text
+
+    from app.db.models import CompanionMediaAsset, CompanionMediaPack, CompanionMediaSendLog
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("companion_media_packs"):
+        CompanionMediaPack.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("companion_media_assets"):
+        CompanionMediaAsset.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("companion_media_send_logs"):
+        CompanionMediaSendLog.__table__.create(sync_conn, checkfirst=True)
+
+    if insp.has_table("companion_media_assets"):
+        cols = {c["name"] for c in insp.get_columns("companion_media_assets")}
+        if "price_usd_cents" not in cols:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE companion_media_assets "
+                    "ADD COLUMN price_usd_cents INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+
+
+def _migrate_creator_references(sync_conn) -> None:
+    from sqlalchemy import inspect
+
+    from app.db.models import CreatorReference, CreatorReferenceLike
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("creator_references"):
+        CreatorReference.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("creator_reference_likes"):
+        CreatorReferenceLike.__table__.create(sync_conn, checkfirst=True)
+
+
+def _migrate_platform_news(sync_conn) -> None:
+    from datetime import datetime, timezone
+
+    from sqlalchemy import inspect, text
+
+    from app.db.models import PlatformNewsLike, PlatformNewsPost
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("platform_news_posts"):
+        PlatformNewsPost.__table__.create(sync_conn, checkfirst=True)
+    if not insp.has_table("platform_news_likes"):
+        PlatformNewsLike.__table__.create(sync_conn, checkfirst=True)
+
+    if not insp.has_table("platform_news_posts"):
+        return
+    count = sync_conn.execute(text("SELECT COUNT(*) FROM platform_news_posts")).scalar()
+    if int(count or 0) > 0:
+        return
+    now = datetime.now(timezone.utc)
+    seed = [
+        {
+            "title_ru": "Медиатека для AI-компаньона",
+            "title_en": "AI companion media library",
+            "summary_ru": "Загружайте фото и видео с тегами — бот найдёт их по смыслу и не будет повторять отправки.",
+            "summary_en": "Upload tagged photos and videos — the bot finds them by meaning and won't resend.",
+            "body_ru": (
+                "В карточке персонажа появилась вкладка «Медиатека»: файлы, паки по 3–4 кадра, "
+                "семантический поиск и цена в $. Бот использует те же embeddings, что и в тесте поиска."
+            ),
+            "body_en": (
+                "Character cards now have a Media library tab: assets, 3–4 frame packs, "
+                "semantic search and USD pricing. The bot uses the same embeddings as search test."
+            ),
+            "is_pinned": 1,
+        },
+        {
+            "title_ru": "Библиотека референсов",
+            "title_en": "Reference library",
+            "summary_ru": "Храните свои референсы с коротким описанием — отдельно фото и видео.",
+            "summary_en": "Store your references with a short note — photos and videos separated.",
+            "body_ru": "Раздел в меню «Студия»: загрузка файла, описание, фильтр фото/видео.",
+            "body_en": "New Studio menu section: upload a file, add a note, filter photo/video.",
+            "is_pinned": 0,
+        },
+    ]
+    for row in seed:
+        sync_conn.execute(
+            text(
+                "INSERT INTO platform_news_posts "
+                "(title_ru, title_en, summary_ru, summary_en, body_ru, body_en, is_pinned, published_at, created_at) "
+                "VALUES (:title_ru, :title_en, :summary_ru, :summary_en, :body_ru, :body_en, :is_pinned, :published_at, :created_at)"
+            ),
+            {**row, "published_at": now, "created_at": now},
+        )
 
 
 def _migrate_roadmap_v1(sync_conn) -> None:
