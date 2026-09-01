@@ -92,22 +92,23 @@ def _wavespeed_pose_ref_prefix_no_face(*, lock_model_hairstyle: bool) -> str:
 
 def _wavespeed_face_swap_prefix_face_hidden(*, lock_model_hairstyle: bool) -> str:
     hair_clause = (
-        "**Visible hair mass** (back/side) follows the pose reference crop; color/texture from MODEL only. "
+        "**Visible hair mass** (back/side) follows Image 3 pose crop; color/texture from Image 1 MODEL only. "
         if lock_model_hairstyle
-        else "Hair visible in the pose reference may keep that layout; color from MODEL when applicable. "
+        else "Hair visible in Image 3 may keep that layout; color from Image 1 when applicable. "
     )
     return (
-        "[BODY_IDENTITY_SWAP — WAN] **Image 1** is the **SOURCE snapshot** (scene + pose framing). "
-        "Following URL(s): **studio portraits of OUR target MODEL** — **body proportions and skin tone on visible anatomy only**. "
-        "**Replace** every visible epidermis region of the Image‑1 performer with MODEL identity continuously — "
+        "[BODY_IDENTITY_SWAP — WAN] **Image 1** = **MODEL face** (identity anchor when partially visible). "
+        "**Image 2** = **MODEL body** proportions reference. "
+        "**Image 3** = **SOURCE snapshot** (scene + pose framing — replace sitter epidermis only). "
+        "**Replace** every visible epidermis region of the Image 3 performer with MODEL identity continuously — "
         "same underlying undertone and highlight texture **as one person** on shoulders, back, neck, arms, legs in **this** lighting. "
         "**Harmonize** white balance and subsurface dispersion so shoulders, back, and torso **do not** read like mismatched halves. "
-        "Preserve strictly from Image 1: **camera geometry** (FoV crop, viewpoint, body yaw, head orientation), limb articulation, "
+        "Preserve strictly from Image 3: **camera geometry** (FoV crop, viewpoint, body yaw, head orientation), limb articulation, "
         "garment seams, shadows on fabric — **not** micro-skin pigmentation from the incidental sitter. "
-        "**Do NOT** turn the subject toward camera, invent eyes/nose/mouth, or paste a front face from model references — "
-        "face is NOT visible in Image 1. "
+        "**Do NOT** turn the subject toward camera, invent eyes/nose/mouth, or paste a front face from Image 3 — "
+        "face is NOT visible in Image 3. "
         f"{hair_clause}"
-        "MODEL thumbnails win for body proportions and skin tone; Image 1 defines room + illumination topology.\n\n"
+        "Images 1–2 win for body proportions and skin tone; Image 3 defines room + illumination topology.\n\n"
     )
 
 
@@ -117,6 +118,7 @@ def wavespeed_prompt_with_face_swap_first(
     lock_model_hairstyle: bool = True,
     pose_prefix_kind: str | None = None,
 ) -> str:
+    """Face swap WAN/Seedream: Image1=face, Image2=body, Image3=scene reference."""
     kind = (pose_prefix_kind or "face_visible").strip().lower()
     if kind in ("face_hidden", "headless"):
         prefix = _wavespeed_face_swap_prefix_face_hidden(lock_model_hairstyle=lock_model_hairstyle)
@@ -126,20 +128,21 @@ def wavespeed_prompt_with_face_swap_first(
         return prefix + p
 
     hair_clause = (
-        "**Hairstyle** (cut/color/texture) берётся из JSON-брифа и thumbnails модели — не как у незнакомого человека на Image 1. "
+        "**Hairstyle** (cut/color/texture) берётся из JSON-брифа и Image 1 — не как у незнакомого человека на Image 3. "
         if lock_model_hairstyle
-        else "Причёска может оставаться ближе к исходному кадру, если это явно нужно пользователю; "
+        else "Причёска может оставаться ближе к Image 3, если это явно нужно пользователю; "
     )
     prefix = (
-        "[FACE_SWAP — WAN] **Image 1** is the **SOURCE snapshot** (scene + incidental sitter framing). "
-        "Following URL(s): **studio portraits of OUR target MODEL** — **WHO only**. "
-        "**Replace** recognizable face and every visible epidermis region of the Image‑1 performer with MODEL identity continuously — "
+        "[FACE_SWAP — WAN] **Image 1** = **MODEL face** (identity WHO). "
+        "**Image 2** = **MODEL body** proportions and outfit reference. "
+        "**Image 3** = **SOURCE snapshot** (scene + incidental sitter framing — pose/camera/light only). "
+        "**Replace** recognizable face and every visible epidermis region of the Image 3 performer with MODEL identity continuously — "
         "same underlying undertone and highlight texture **as one person** chin→neck→upper chest/decollete→arms/legs in **this** lighting. "
         "**Harmonize** white balance and subsurface dispersion so cheeks / shoulders / torso **do not** read like mismatched halves. "
-        "Preserve strictly from Image 1: **camera geometry** (FoV crop, viewpoint, body/head yaw, gaze vs lens), limb articulation, garment seams, shadows on fabric/plastic — "
-        "**not** micro-skin pigmentation from the incidental sitter — MODEL thumbnails supply complexion/identity. "
+        "Preserve strictly from Image 3: **camera geometry** (FoV crop, viewpoint, body/head yaw, gaze vs lens), limb articulation, garment seams, shadows on fabric/plastic — "
+        "**not** micro-skin pigmentation from the incidental sitter — Images 1–2 supply complexion/identity. "
         f"{hair_clause}"
-        "**No** residual stranger facial microtexture; thumbnails win for likeness; Image 1 defines room + illumination topology.\n\n"
+        "**No** residual stranger facial microtexture; Images 1–2 win for likeness; Image 3 defines room + illumination topology.\n\n"
     )
     p = (refined_prompt or "").strip()
     if not p:
@@ -162,9 +165,9 @@ def finalize_anchor_mode_a_wavespeed_prompt(
         "\n\n[BUST PORTRAIT] Multiple early identity images are the SAME model face — "
         "they must fully replace the large face in the last scene image, including when a hand touches the lips."
     )
-    bust_suffix_scene_first = (
-        "\n\n[BUST PORTRAIT] Repeated model face URLs after Image 1 are the SAME identity — "
-        "override the scene sitter's large in-frame face completely; keep hand-on-lip pose only."
+    bust_suffix_identity_first = (
+        "\n\n[BUST PORTRAIT] Repeated model face URLs at Image 1 (and copies) are the SAME identity — "
+        "they must fully replace the large face in the last scene image, including when a hand touches the lips."
     )
     if wp == "regular":
         head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
@@ -175,15 +178,13 @@ def finalize_anchor_mode_a_wavespeed_prompt(
         if bust_portrait:
             out += bust_suffix_nano
         return out
-    if scene_first:
-        out = wavespeed_prompt_with_face_swap_first(
-            p,
-            lock_model_hairstyle=lock_model_hairstyle,
-        )
-        if bust_portrait:
-            out += bust_suffix_scene_first
-        return out
-    return p
+    out = wavespeed_prompt_with_face_swap_first(
+        p,
+        lock_model_hairstyle=lock_model_hairstyle,
+    )
+    if bust_portrait:
+        out += bust_suffix_identity_first
+    return out
 
 
 def _wavespeed_pose_ref_prefix_face_hidden(*, lock_model_hairstyle: bool) -> str:

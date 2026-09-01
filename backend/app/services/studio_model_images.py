@@ -348,6 +348,39 @@ def select_prompt_only_wavespeed_identity_images(
     return picked
 
 
+def select_face_swap_wavespeed_identity_images(
+    imgs: list[UserStudioModelImage],
+    *,
+    max_count: int = 2,
+) -> list[UserStudioModelImage]:
+    """Face swap: Image1=face, Image2=body — scene ref добавляется последним в routes."""
+    if not imgs:
+        return []
+    cap = max(1, min(3, int(max_count)))
+    by_kind: dict[str, list[UserStudioModelImage]] = {}
+    for im in imgs:
+        k = (im.image_kind or "other").lower()
+        by_kind.setdefault(k, []).append(im)
+
+    picked: list[UserStudioModelImage] = []
+
+    def take(kind: str) -> None:
+        if len(picked) >= cap:
+            return
+        for im in by_kind.get(kind, []):
+            if im not in picked:
+                picked.append(im)
+                return
+
+    take("face")
+    take("body")
+    if len(picked) < cap:
+        take("turnaround")
+    if not picked:
+        return imgs[:cap]
+    return picked[:cap]
+
+
 def select_grok_compose_wavespeed_identity_images(
     imgs: list[UserStudioModelImage],
     *,

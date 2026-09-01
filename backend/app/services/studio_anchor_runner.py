@@ -281,7 +281,6 @@ async def run_anchor_pipeline(
 
     scene_first = False
     if mode_n == "face_swap":
-        # Seedream/WAN: scene-first; Nano regular: identity-first. Не менять для bust — иначе ломается swap.
         scene_first = anchor_mode_a_scene_first(wave_profile=wave_profile)
         if face_closeup:
             prompt = build_mode_a_face_closeup_prompt(
@@ -289,13 +288,10 @@ async def run_anchor_pipeline(
                 vis=vis,
                 notes=notes,
                 lock_hairstyle_style=lock_hairstyle_style,
-                scene_first=scene_first,
             )
             urls = order_mode_a_face_closeup_urls(
                 face_url=face_url,
                 scene_url=scene_url,
-                scene_first=scene_first,
-                duplicate_face=scene_first,
             )
         else:
             extra_faces = 2 if bust_portrait else 0
@@ -304,14 +300,13 @@ async def run_anchor_pipeline(
                 vis=vis,
                 notes=notes,
                 lock_hairstyle_style=lock_hairstyle_style,
-                scene_first=scene_first,
                 bust_portrait=bust_portrait,
+                extra_face_copies=extra_faces,
             )
             urls = order_mode_a_image_urls(
                 face_url=face_url,
                 dressed_url=dressed_url,
                 scene_url=scene_url,
-                scene_first=scene_first,
                 extra_face_copies=extra_faces,
             )
         out_mode = "A"

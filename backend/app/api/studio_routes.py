@@ -231,6 +231,7 @@ from app.services.studio_model_images import (
     assert_studio_image_kind,
     model_images_for_wavespeed_profile,
     model_reference_photos_block,
+    select_face_swap_wavespeed_identity_images,
     select_grok_compose_wavespeed_identity_images,
     select_model_scene_wavespeed_identity_images,
     select_prompt_only_wavespeed_identity_images,
@@ -4632,7 +4633,7 @@ async def _accept_studio_refine_job_from_workflow(
             # Точечный edit кадра: Grok пишет промпт, WaveSpeed получает только photo-base.
             studio_mode = "photo_edit"
         elif plan.scenario_type == "scenarioFaceSwap" or dual_ref_identity:
-            # face_swap: scene ref must be Image 1 in WaveSpeed (pose/camera/background lock).
+            # face_swap: Image1=face, Image2=body, Image3=scene ref (pose last).
             studio_mode = "face_swap"
         elif plan.model_id is not None:
             studio_mode = "model_scene"
@@ -5923,6 +5924,7 @@ async def _studio_job_execute_refine_prompt(
         else:
             image_urls: list[str] = []
             user_pose_ref_prepended = False
+            face_swap_scene_url: str | None = None
             ws_identity_legend: str | None = None
             workflow_prompt_only_t2i = False
             pose_is_last_after_reorder = False
@@ -6064,10 +6066,15 @@ async def _studio_job_execute_refine_prompt(
                     ptok = create_pose_reference_access_token(
                         user_id=oid, file_id=fid
                     )
-                    image_urls.append(
+                    scene_pub_url = (
                         f"{pub}/api/studio/public-pose-reference?t={quote(ptok, safe='')}"
                     )
-                    user_pose_ref_prepended = True
+                    # Face swap: scene ref — последний (Image 3), модель face/body — первыми.
+                    if mode_n == "face_swap" and mid is not None:
+                        face_swap_scene_url = scene_pub_url
+                    else:
+                        image_urls.append(scene_pub_url)
+                        user_pose_ref_prepended = True
                 except Exception as e:
                     log.warning(
                         "studio: не удалось сохранить референс для WaveSpeed: %s",
@@ -6123,15 +6130,6 @@ async def _studio_job_execute_refine_prompt(
                 elif mode_n == "face_swap":
                     if mid is None:
                         attach_model_urls = False
-                    elif user_pose_ref_prepended:
-                        attach_model_urls = bool(
-                            select_grok_compose_wavespeed_identity_images(
-                                imgs_for_ws,
-                                pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
-                                    reference_scene
-                                ),
-                            )
-                        )
                     else:
                         attach_model_urls = bool(imgs_model)
                 elif mode_n == "no_face":
@@ -6153,12 +6151,9 @@ async def _studio_job_execute_refine_prompt(
                         imgs_ws_order = select_prompt_only_wavespeed_identity_images(
                             imgs_for_ws, wave_profile=wave_profile_n
                         )
-                    elif mode_n == "face_swap" and user_pose_ref_prepended:
-                        imgs_ws_order = select_grok_compose_wavespeed_identity_images(
+                    elif mode_n == "face_swap":
+                        imgs_ws_order = select_face_swap_wavespeed_identity_images(
                             imgs_for_ws,
-                            pose_reference_nude=reference_pose_is_nude_or_minimal_coverage(
-                                reference_scene
-                            ),
                         )
                     elif wave_profile_n == "nsfw" and user_pose_ref_prepended:
                         imgs_ws_order = select_wan_identity_images_with_pose_ref(
@@ -6181,13 +6176,23 @@ async def _studio_job_execute_refine_prompt(
                         image_urls.append(
                             f"{pub}/api/studio/public-model-image?t={quote(tok, safe='')}"
                         )
+                    if face_swap_scene_url:
+                        image_urls.append(face_swap_scene_url)
+                        user_pose_ref_prepended = True
                     if imgs_ws_order:
-                        # WAN pose-first: identity legend starts at Image 2. Pose-last (Nano / model_scene): Image 1.
-                        will_pose_be_last = (
-                            user_pose_ref_prepended
-                            and workflow_scenario != "scenarioLocationChange"
-                            and mode_n != "photo_edit"
-                            and wave_profile_n == "regular"
+                        # Face swap: Image1=face, Image2=body, scene ref last.
+                        will_pose_be_last = bool(
+                            face_swap_scene_url
+                            or (
+                                mode_n == "face_swap"
+                                and user_pose_ref_prepended
+                            )
+                            or (
+                                user_pose_ref_prepended
+                                and workflow_scenario != "scenarioLocationChange"
+                                and mode_n != "photo_edit"
+                                and wave_profile_n == "regular"
+                            )
                         )
                         legend_offset = 0 if will_pose_be_last else (1 if user_pose_ref_prepended else 0)
                         ws_identity_legend = wavespeed_identity_image_legend(
@@ -6235,7 +6240,9 @@ async def _studio_job_execute_refine_prompt(
 
                     pose_is_last_after_reorder = False
                     if workflow_scenario != "scenarioLocationChange":
-                        if wave_profile_n == "regular" and user_pose_ref_prepended and mode_n != "photo_edit" and len(image_urls) >= 2:
+                        if mode_n == "face_swap" and user_pose_ref_prepended and len(image_urls) >= 2:
+                            pose_is_last_after_reorder = True
+                        elif wave_profile_n == "regular" and user_pose_ref_prepended and mode_n != "photo_edit" and len(image_urls) >= 2:
                             pose_is_last_after_reorder = True
                             image_urls = _nano_banana_reorder_image_urls(
                                 image_urls,

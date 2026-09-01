@@ -582,8 +582,8 @@ def test_nano_face_swap_grok_main_prose_uses_identity_first_prefix() -> None:
     assert "Attached images = one saved model" not in out
 
 
-def test_wan_face_swap_grok_main_prose_keeps_scene_as_image_1() -> None:
-    """NSFW / WAN / Seedream(nsfw): scene stays first; face_swap prefix wins over grok_main_prose."""
+def test_wan_face_swap_grok_main_prose_uses_identity_first_prefix() -> None:
+    """NSFW / WAN / Seedream: Image1=face, Image2=body, Image3=scene."""
     from app.services.studio_openai import finalize_wavespeed_studio_prompt
 
     prose = (
@@ -595,13 +595,11 @@ def test_wan_face_swap_grok_main_prose_keeps_scene_as_image_1() -> None:
         studio_mode="face_swap",
         user_image_first=True,
         prompt_brief_mode="grok_main_prose",
+        user_pose_reference_is_last=True,
     )
     assert "[FACE_SWAP — WAN]" in out
-    assert "Image 1" in out
-    assert "SOURCE snapshot" in out
-    assert "model identity wins" not in out.lower() or "FACE_SWAP" in out
-    # Must not fall through to generic model-scene / generate-scene prose prefix alone.
-    assert out.startswith("[FACE_SWAP — WAN]")
+    assert "Image 1" in out and "MODEL face" in out
+    assert "Image 3" in out and "SOURCE snapshot" in out
 
 
 def test_wan_face_swap_rear_view_uses_body_prefix_not_face_gaze() -> None:

@@ -1,7 +1,7 @@
 """Anchor Studio prompts — exact copy from anchor-studio_3.html.
 
 Used for Face Swap (Mode A: with scene photo) and From-reference (Mode B: scene as text).
-Image contract:
+Image contract (единый порядок для всех профилей WaveSpeed):
   Mode A: Image1=face, Image2=body+outfit (dressed), Image3=scene photo
   Mode B: Image1=face, Image2=body+outfit (dressed); scene described in text only
 """
@@ -171,8 +171,9 @@ FACE_IDENTITY_LOCK_BLOCK = (
 
 
 def anchor_mode_a_scene_first(*, wave_profile: str) -> bool:
-    """Seedream/WAN (nsfw): scene первым. Nano (regular): identity первым, scene последним."""
-    return (wave_profile or "").strip().lower() != "regular"
+    """Face swap: всегда identity-first (face → body/dressed → scene)."""
+    _ = wave_profile
+    return False
 
 
 def order_mode_a_image_urls(
@@ -180,16 +181,12 @@ def order_mode_a_image_urls(
     face_url: str,
     dressed_url: str,
     scene_url: str,
-    scene_first: bool,
+    scene_first: bool = False,
     extra_face_copies: int = 0,
 ) -> list[str]:
-    """extra_face_copies — повтор face URL для усиления identity (бюст, лицо крупно в кадре)."""
+    """Image1=face, Image2=body/outfit, Image3=scene. extra_face_copies — повтор face для бюста."""
+    _ = scene_first
     copies = max(0, min(int(extra_face_copies), 3))
-    if scene_first:
-        urls = [scene_url, face_url]
-        urls.extend([face_url] * copies)
-        urls.append(dressed_url)
-        return urls
     urls = [face_url]
     urls.extend([face_url] * copies)
     urls.extend([dressed_url, scene_url])
@@ -200,16 +197,15 @@ def order_mode_a_face_closeup_urls(
     *,
     face_url: str,
     scene_url: str,
-    scene_first: bool,
+    scene_first: bool = False,
     duplicate_face: bool = False,
 ) -> list[str]:
-    """Крупный план лица: только scene + face (без dressed body). WAN — дублируем face для веса."""
-    if scene_first:
-        urls = [scene_url, face_url]
-        if duplicate_face:
-            urls.append(face_url)
-        return urls
-    return [face_url, scene_url]
+    """Close-up: Image1=face, Image2=scene (без dressed body)."""
+    _ = scene_first
+    urls = [face_url, scene_url]
+    if duplicate_face:
+        urls.insert(1, face_url)
+    return urls
 
 
 def detect_face_closeup_scene(
@@ -407,19 +403,19 @@ def build_mode_a_prompt(
     lock_hairstyle_style: bool = True,
     scene_first: bool = False,
     bust_portrait: bool = False,
+    extra_face_copies: int = 0,
 ) -> str:
-    """Face-swap WITH scene photo — Mode A (HTML), с порядком картинок под WaveSpeed."""
+    """Face-swap WITH scene photo — Mode A: Image1=face, Image2=body/outfit, Image3=scene."""
+    _ = scene_first
     exclusions = exclusion_notes(vis)
-    if scene_first:
-        # WAN / Seedream: Image 1 = scene canvas, Image 2 = face, Image 3 = dressed body.
-        scene_i, face_i, body_i = 1, 2, 3
-    else:
-        # Nano regular: identity first, scene last (как _nano_banana_reorder).
-        face_i, body_i, scene_i = 1, 2, 3
+    face_count = 1 + max(0, min(int(extra_face_copies), 3))
+    face_i = 1
+    body_i = face_count + 1
+    scene_i = face_count + 2
 
     face_ref_label = (
-        f"Images {face_i}–{face_i + 2} = the SAME facial identity reference (repeated for emphasis). "
-        if bust_portrait
+        f"Images {face_i}–{face_i + extra_face_copies} = the SAME facial identity reference (repeated for emphasis). "
+        if bust_portrait and extra_face_copies > 0
         else f"Image {face_i} = facial identity reference only. "
     )
 
@@ -479,13 +475,13 @@ def build_mode_a_face_closeup_prompt(
     notes: str = "",
     lock_hairstyle_style: bool = True,
     scene_first: bool = False,
+    duplicate_face: bool = False,
 ) -> str:
-    """Face-swap close-up: только scene + face (2–3 URL), без body/outfit ref."""
+    """Close-up face swap: Image1=face, Image2=scene (Image2 может дублировать face)."""
+    _ = scene_first
     exclusions = exclusion_notes(vis)
-    if scene_first:
-        scene_i, face_i = 1, 2
-    else:
-        face_i, scene_i = 1, 2
+    face_i = 1
+    scene_i = 3 if duplicate_face else 2
 
     prompt = (
         f"Image {scene_i} = target close-up portrait scene: keep the exact crop, head scale in frame, "

@@ -53,26 +53,26 @@ def test_mode_a_prompt_matches_html_contract():
 
 
 def test_mode_a_scene_first_reorders_prompt_indices():
+    """scene_first устарел — промпт всегда Image1=face, Image2=body, Image3=scene."""
     vis = AnchorVisibility()
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
     prompt = build_mode_a_prompt(filtered_anchor=filtered, vis=vis, scene_first=True)
-    assert prompt.startswith("Image 1 = target scene")
-    assert "Image 2 = facial identity reference only" in prompt
-    assert "Image 3 = body proportions and outfit reference" in prompt
-    assert "Replace the person in Image 1 entirely" in prompt
+    assert "Image 1 = facial identity reference only" in prompt
+    assert "Image 2 = body proportions and outfit reference" in prompt
+    assert "Image 3 = target scene" in prompt
 
 
 def test_order_mode_a_image_urls():
     assert order_mode_a_image_urls(
         face_url="f", dressed_url="d", scene_url="s", scene_first=True
-    ) == ["s", "f", "d"]
+    ) == ["f", "d", "s"]
     assert order_mode_a_image_urls(
         face_url="f", dressed_url="d", scene_url="s", scene_first=False
     ) == ["f", "d", "s"]
 
 
 def test_anchor_mode_a_scene_first_profile():
-    assert anchor_mode_a_scene_first(wave_profile="nsfw") is True
+    assert anchor_mode_a_scene_first(wave_profile="nsfw") is False
     assert anchor_mode_a_scene_first(wave_profile="regular") is False
 
 
@@ -102,7 +102,7 @@ def test_identity_marks_block_upper_body():
 def test_order_mode_a_face_closeup_urls():
     assert order_mode_a_face_closeup_urls(
         face_url="f", scene_url="s", scene_first=True, duplicate_face=True
-    ) == ["s", "f", "f"]
+    ) == ["f", "f", "s"]
     assert order_mode_a_face_closeup_urls(
         face_url="f", scene_url="s", scene_first=False
     ) == ["f", "s"]
@@ -115,7 +115,7 @@ def test_order_mode_a_image_urls_extra_face():
         scene_url="s",
         scene_first=True,
         extra_face_copies=2,
-    ) == ["s", "f", "f", "f", "d"]
+    ) == ["f", "f", "f", "d", "s"]
     assert order_mode_a_image_urls(
         face_url="f",
         dressed_url="d",
@@ -150,7 +150,7 @@ def test_detect_bust_portrait_scene():
 
 
 def test_mode_a_bust_portrait_order_scene_first_nsfw():
-    """Бюст на Seedream/WAN: scene-first + triple face (не identity-first)."""
+    """Бюст: face×3, dressed body, scene — identity-first."""
     urls = order_mode_a_image_urls(
         face_url="f",
         dressed_url="d",
@@ -158,7 +158,7 @@ def test_mode_a_bust_portrait_order_scene_first_nsfw():
         scene_first=anchor_mode_a_scene_first(wave_profile="nsfw"),
         extra_face_copies=2,
     )
-    assert urls == ["s", "f", "f", "f", "d"]
+    assert urls == ["f", "f", "f", "d", "s"]
 
 
 def test_mode_a_bust_portrait_prompt():
@@ -167,12 +167,14 @@ def test_mode_a_bust_portrait_prompt():
     prompt = build_mode_a_prompt(
         filtered_anchor=filtered,
         vis=vis,
-        scene_first=True,
         bust_portrait=True,
+        extra_face_copies=2,
     )
     assert "BUST PORTRAIT FACE SWAP" in prompt
     assert "hand, finger, hair" in prompt
-    assert "Images 2–4" in prompt
+    assert "Images 1–3" in prompt
+    assert "Image 4 = body proportions" in prompt
+    assert "Image 5 = target scene" in prompt
 
 
 def test_mode_a_bust_includes_upper_body_marks_block():
@@ -259,15 +261,17 @@ def test_dressed_body_cache_key_stable():
     assert a != c
 
 
-def test_finalize_bust_portrait_nsfw_uses_scene_first_prefix():
-    """Seedream (nsfw) на бюсте — scene-first префикс, не Nano identity-first."""
+def test_finalize_bust_portrait_nsfw_uses_identity_first_prefix():
+    """Seedream (nsfw) на бюсте — identity-first префикс."""
     out = finalize_anchor_mode_a_wavespeed_prompt(
         "Replace face in scene.",
         wave_profile="nsfw",
         lock_model_hairstyle=True,
-        scene_first=True,
+        scene_first=False,
         bust_portrait=True,
     )
     assert "[FACE_SWAP — WAN]" in out
+    assert "Image 1" in out and "MODEL face" in out
+    assert "Image 3" in out and "SOURCE snapshot" in out
     assert "[MULTI_IMAGE_EDIT — intentional FACE SWAP]" not in out
     assert "[BUST PORTRAIT]" in out
