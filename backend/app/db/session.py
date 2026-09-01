@@ -1151,7 +1151,7 @@ def _migrate_platform_news(sync_conn) -> None:
                 "Character cards now have a Media library tab: assets, 3–4 frame packs, "
                 "semantic search and USD pricing. The bot uses the same embeddings as search test."
             ),
-            "is_pinned": 1,
+            "is_pinned": True,
         },
         {
             "title_ru": "Библиотека референсов",
@@ -1160,7 +1160,7 @@ def _migrate_platform_news(sync_conn) -> None:
             "summary_en": "Store your references with a short note — photos and videos separated.",
             "body_ru": "Раздел в меню «Студия»: загрузка файла, описание, фильтр фото/видео.",
             "body_en": "New Studio menu section: upload a file, add a note, filter photo/video.",
-            "is_pinned": 0,
+            "is_pinned": False,
         },
     ]
     for row in seed:
