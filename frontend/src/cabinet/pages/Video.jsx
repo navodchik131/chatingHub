@@ -11,6 +11,7 @@ import { archiveThumbUrl, archiveDownloadUrl, archiveVideoUrl, isArchivePending,
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import { sameStudioModelId, enginesForNsfw, isUiSimplified } from '../api/studioHelpers';
 import { formatArchiveErrorMessage } from '../api/helpers';
+import { formatArchivePipelineLabel } from '../api/archivePipelineLabel';
 import { normalizeBillingPlan } from '../../billing/planCatalog';
 import {
   computeEvolinkVideoCreditCost,
@@ -393,6 +394,7 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
               const pending = isArchivePending(item);
               const failed = (item.status || '').trim() === 'failed';
               const model = (cabinet.models || []).find((m) => m.id === item.studio_model_id);
+              const pipelineLabel = formatArchivePipelineLabel(item, lang);
               const ratio = item.output_aspect || '9:16';
               return (
               <Hoverable
@@ -510,10 +512,26 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                   </div>
                   )}
                 </div>
-                <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
-                  {downloadUrl && !pending && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: color.textDim }}>MP4</span>
+                <div style={{ padding: '8px 10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || item.model_name || '—'}</span>
+                    {downloadUrl && !pending && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: color.textDim }}>MP4</span>
+                    )}
+                  </div>
+                  {pipelineLabel && (
+                    <div style={{
+                      marginTop: 4,
+                      fontSize: 9.5,
+                      color: color.textDim,
+                      lineHeight: 1.35,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    >
+                      {pipelineLabel}
+                    </div>
                   )}
                 </div>
               </Hoverable>
@@ -548,6 +566,7 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                 const pending = isArchivePending(item);
                 const failed = (item.status || '').trim() === 'failed';
                 const model = (cabinet.models || []).find((m) => m.id === item.studio_model_id);
+                const pipelineLabel = formatArchivePipelineLabel(item, lang);
                 const ratio = item.output_aspect || '9:16';
                 return (
                 <Hoverable
@@ -641,8 +660,24 @@ export function VideoStudioPage({ backend = 'wavespeed' }) {
                     </div>
                     )}
                   </div>
-                  <div style={{ padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
+                  <div style={{ padding: '8px 10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || item.model_name || '—'}</span>
+                    </div>
+                    {pipelineLabel && (
+                      <div style={{
+                        marginTop: 4,
+                        fontSize: 9.5,
+                        color: color.textDim,
+                        lineHeight: 1.35,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      >
+                        {pipelineLabel}
+                      </div>
+                    )}
                   </div>
                 </Hoverable>
               );})}

@@ -92,6 +92,8 @@ export default function MotionControlWizard({
   const [trimMode, setTrimMode] = useState('full');
   const [trimIn, setTrimIn] = useState(0);
   const [trimOut, setTrimOut] = useState(5);
+  /** Конвертация реф-видео в силуэт (edge-outline) перед отправкой в Seedance. */
+  const [useMotionOutline, setUseMotionOutline] = useState(true);
   const motionVideoPreviewUrl = cabinet.uploadPreviewUrls?.['motion-video'] || '';
 
   const durationSec = cabinet.motionVideoDurationSec || 5;
@@ -129,6 +131,7 @@ export default function MotionControlWizard({
       if (saved.trimMode) setTrimMode(saved.trimMode);
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
+      if (typeof saved.useMotionOutline === 'boolean') setUseMotionOutline(saved.useMotionOutline);
       if (saved.motionVideoFileId) {
         cabinet.restoreMotionVideoSession?.(saved.motionVideoFileId, saved.motionVideoDurationSec);
       }
@@ -213,6 +216,7 @@ export default function MotionControlWizard({
       trimMode,
       trimIn,
       trimOut,
+      useMotionOutline,
       motionVideoFileId: cabinet.motionVideoFileId,
       motionVideoDurationSec: cabinet.motionVideoDurationSec,
     });
@@ -237,6 +241,7 @@ export default function MotionControlWizard({
     trimMode,
     trimIn,
     trimOut,
+    useMotionOutline,
   ]);
 
   const dressWaveProfile = s.contentMode === 'sfw' ? 'regular' : 'nsfw';
@@ -469,6 +474,7 @@ export default function MotionControlWizard({
         trimStartSec: trimMode === 'part' ? trimIn : null,
         trimEndSec: trimMode === 'part' ? trimOut : null,
         durationSeconds: Math.ceil(clipDuration),
+        useMotionOutline,
       });
     } catch {
       /* ошибка уже в cabinet.setError */
@@ -593,9 +599,34 @@ export default function MotionControlWizard({
                   trimOut={trimOut}
                   onTrimIn={setTrimIn}
                   onTrimOut={setTrimOut}
+                  useMotionOutline={useMotionOutline}
                   lang={lang}
                 />
               )}
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  marginTop: 12,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  color: color.textMid,
+                  lineHeight: 1.45,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={useMotionOutline}
+                  onChange={(e) => setUseMotionOutline(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: color.lime }}
+                />
+                <span>
+                  {lang === 'ru'
+                    ? 'Перевести референс в силуэты (контур движения) — лучше подменяет модель. Без галочки уйдёт оригинальное цветное видео.'
+                    : 'Convert reference to motion silhouettes (edge outline) for better model swap. Unchecked sends the original color clip.'}
+                </span>
+              </label>
             </>
           )}
         </div>

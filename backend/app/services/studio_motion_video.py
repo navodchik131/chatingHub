@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Any
 
 from app.config import BACKEND_DIR, settings
 
@@ -463,6 +464,42 @@ def resolve_motion_video_uploaded(owner_id: int, file_id: str) -> Path | None:
     if path is not None:
         return path
     return resolve_motion_video_source(owner_id, file_id)
+
+
+def motion_outline_requested(params: dict[str, Any]) -> bool:
+    """Нужна ли contour/silhouette-обработка референс-видео для этой задачи."""
+    from app.config import settings
+
+    mc_wizard = str(params.get("motion_control_wizard") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if mc_wizard:
+        return str(params.get("use_motion_outline") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+    return bool(settings.motion_outline_enabled)
+
+
+def resolve_motion_video_for_render(
+    owner_id: int,
+    file_id: str,
+    *,
+    use_outline: bool,
+) -> Path | None:
+    """Цветной исходник или outline-версия — в зависимости от флага."""
+    if use_outline:
+        return resolve_motion_video_file(owner_id, file_id) or resolve_motion_video_source(
+            owner_id, file_id
+        )
+    return resolve_motion_video_source(owner_id, file_id) or resolve_motion_video_file(
+        owner_id, file_id
+    )
 
 
 def extract_first_frame_jpeg(video_path: Path) -> bytes:

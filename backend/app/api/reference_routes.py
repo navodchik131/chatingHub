@@ -10,12 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import get_current_user
 from app.db.models import CreatorReference, User
 from app.db.session import get_session
-from app.schemas import CreatorReferenceLikeOut, CreatorReferenceOut
+from app.schemas import CreatorReferenceLikeOut, CreatorReferenceOut, CreatorReferencePatchIn
 from app.services.creator_references.library import (
     create_creator_reference,
     delete_creator_reference,
     list_creator_references,
     toggle_creator_reference_like,
+    update_creator_reference_tags,
 )
 from app.services.creator_references.storage import (
     decode_creator_reference_access_token,
@@ -47,11 +48,16 @@ async def references_create(
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
     description: str | None = Form(default=None),
+    tags: str | None = Form(default=None),
+    upload_batch_id: str | None = Form(default=None),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CreatorReferenceOut:
     _assert_owner(user)
     raw = await file.read()
+    tag_list: list[str] | None = None
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     row = await create_creator_reference(
         session,
         viewer=user,
@@ -60,6 +66,28 @@ async def references_create(
         filename=file.filename,
         title=title,
         description=description,
+        tags=tag_list,
+        upload_batch_id=upload_batch_id,
+    )
+    await session.commit()
+    return CreatorReferenceOut.model_validate(row)
+
+
+@router.patch("/{reference_id}", response_model=CreatorReferenceOut)
+async def references_patch(
+    reference_id: int,
+    body: CreatorReferencePatchIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CreatorReferenceOut:
+    _assert_owner(user)
+    if body.tags is None:
+        raise HTTPException(status_code=400, detail="tags required")
+    row = await update_creator_reference_tags(
+        session,
+        viewer=user,
+        reference_id=reference_id,
+        tags=body.tags,
     )
     await session.commit()
     return CreatorReferenceOut.model_validate(row)

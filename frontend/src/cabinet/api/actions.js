@@ -568,6 +568,7 @@ export async function runMotionVideo(params) {
   fd.append('generate_audio', params.generateAudio === false ? '0' : '1')
   if (params.seedanceVariant) fd.append('seedance_variant', String(params.seedanceVariant))
   if (params.motionControlWizard) fd.append('motion_control_wizard', '1')
+  if (params.useMotionOutline) fd.append('use_motion_outline', '1')
   if (params.turnaroundGenerationId) {
     fd.append('turnaround_generation_id', String(params.turnaroundGenerationId))
   }
@@ -1217,15 +1218,35 @@ export async function fetchReferences(mediaType = null) {
   return apiJson(`/api/references${qs}`)
 }
 
-export async function uploadReference({ file, title, description }) {
+export async function uploadReference({ file, tags, uploadBatchId }) {
   const fd = new FormData()
   fd.append('file', file)
-  if (title) fd.append('title', title)
-  if (description) fd.append('description', description)
+  if (tags?.length) fd.append('tags', tags.join(','))
+  if (uploadBatchId) fd.append('upload_batch_id', uploadBatchId)
   const res = await apiFetch('/api/references', { method: 'POST', body: fd })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(formatHttpApiError(res, data) || 'upload failed')
   return data
+}
+
+export async function uploadReferenceBatch({ files, tags }) {
+  if (!files?.length) return []
+  // Один batch_id связывает файлы, загруженные одним действием.
+  const batchId = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().replace(/-/g, '')
+    : String(Date.now())
+  const out = []
+  for (const file of files) {
+    out.push(await uploadReference({ file, tags, uploadBatchId: files.length > 1 ? batchId : null }))
+  }
+  return out
+}
+
+export async function updateReferenceTags(referenceId, tags) {
+  return apiJson(`/api/references/${referenceId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tags }),
+  })
 }
 
 export async function deleteReference(referenceId) {

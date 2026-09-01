@@ -1274,7 +1274,7 @@ class CompanionMediaSendLog(Base):
 
 
 class CreatorReference(Base):
-    """Простая библиотека референсов креатора (фото/видео + описание)."""
+    """Простая библиотека референсов креатора (фото/видео + теги)."""
 
     __tablename__ = "creator_references"
 
@@ -1284,6 +1284,9 @@ class CreatorReference(Base):
     )
     title: Mapped[str | None] = mapped_column(String(256), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """Группа файлов, загруженных одним действием (пак картинок)."""
+    upload_batch_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     media_type: Mapped[str] = mapped_column(String(16), default="photo", server_default="photo")
     relative_path: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(64), default="image/jpeg", server_default="image/jpeg")

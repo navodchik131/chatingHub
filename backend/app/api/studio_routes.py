@@ -141,6 +141,7 @@ from app.services.studio_generation_placeholders import (
     mark_carousel_placeholders_failed_from,
 )
 from app.services.studio_outfit_anchor import exclude_hidden_outfit_anchors_from_archive
+from app.services.studio_generation_pipeline import resolve_generation_pipeline
 from app.services.studio_generation_status import StudioGenerationStatus
 from app.services.studio_generation_storage import (
     attach_studio_generation_wavespeed_task,
@@ -430,6 +431,8 @@ def _studio_generation_to_out(
     arch_base: str,
     owner_id: int,
     name_by_id: dict[int, str],
+    pipeline_key: str | None = None,
+    engine_label: str | None = None,
 ) -> StudioGenerationOut | None:
     media = generation_media_kind(row)
     st = (row.status or StudioGenerationStatus.READY).strip()
@@ -487,7 +490,31 @@ def _studio_generation_to_out(
         image_url=image_url,
         video_url=video_url,
         video_backend=(getattr(row, "video_backend", None) or "wavespeed").strip().lower(),
+        pipeline_key=pipeline_key,
+        engine_label=engine_label,
     )
+
+
+async def _studio_jobs_by_generation_rows(
+    session: AsyncSession,
+    rows: list[StudioGeneration],
+) -> dict[int, StudioJob]:
+    """Подгрузка job для меток пайплайна в архиве."""
+    job_ids = {int(r.studio_job_id) for r in rows if r.studio_job_id}
+    if not job_ids:
+        return {}
+    loaded = list(
+        (await session.scalars(select(StudioJob).where(StudioJob.id.in_(job_ids)))).all()
+    )
+    return {j.id: j for j in loaded}
+
+
+def _pipeline_for_generation_row(
+    row: StudioGeneration,
+    jobs_by_id: dict[int, StudioJob],
+) -> tuple[str | None, str | None]:
+    job = jobs_by_id.get(int(row.studio_job_id)) if row.studio_job_id else None
+    return resolve_generation_pipeline(row, job)
 
 
 def _studio_job_status_out(job: StudioJob) -> StudioJobStatusOut:
@@ -2626,14 +2653,33 @@ async def api_list_motion_renders(
     base = _public_app_base(request)
     if not base:
         return StudioMotionRendersPageOut(items=[], has_more=False)
+    gen_ids = [r.studio_generation_id for r in rows if r.studio_generation_id]
+    gens_by_id: dict[int, StudioGeneration] = {}
+    jobs_by_id: dict[int, StudioJob] = {}
+    if gen_ids:
+        gen_rows = list(
+            (await session.scalars(
+                select(StudioGeneration).where(
+                    StudioGeneration.user_id == oid,
+                    StudioGeneration.id.in_(gen_ids),
+                )
+            )).all()
+        )
+        gens_by_id = {g.id: g for g in gen_rows}
+        jobs_by_id = await _studio_jobs_by_generation_rows(session, gen_rows)
     out_items: list[StudioMotionRenderOut] = []
     for r in rows:
         img = ""
+        pipeline_key: str | None = None
+        engine_label: str | None = None
         if r.studio_generation_id is not None:
             tok = create_generation_image_access_token(
                 user_id=oid, generation_id=r.studio_generation_id
             )
             img = f"{base}/api/studio/public-generation-image?t={quote(tok, safe='')}"
+            gen_row = gens_by_id.get(int(r.studio_generation_id))
+            if gen_row is not None:
+                pipeline_key, engine_label = _pipeline_for_generation_row(gen_row, jobs_by_id)
         url = (r.video_url or "").strip()
         if url:
             out_items.append(
@@ -2645,6 +2691,8 @@ async def api_list_motion_renders(
                     video_url=url,
                     frame_image_url=img or url,
                     video_backend=(getattr(r, "video_backend", None) or "wavespeed").strip().lower(),
+                    pipeline_key=pipeline_key,
+                    engine_label=engine_label,
                 )
             )
     return StudioMotionRendersPageOut(items=out_items, has_more=has_more)
@@ -2808,9 +2856,18 @@ async def api_list_studio_generations(
         qm = await session.execute(select(UserStudioModel).where(UserStudioModel.id.in_(model_ids)))
         for m in qm.scalars().all():
             name_by_id[m.id] = m.name
+    jobs_by_id = await _studio_jobs_by_generation_rows(session, rows)
     out_items: list[StudioGenerationOut] = []
     for r in rows:
-        item = _studio_generation_to_out(r, arch_base=base, owner_id=oid, name_by_id=name_by_id)
+        pipeline_key, engine_label = _pipeline_for_generation_row(r, jobs_by_id)
+        item = _studio_generation_to_out(
+            r,
+            arch_base=base,
+            owner_id=oid,
+            name_by_id=name_by_id,
+            pipeline_key=pipeline_key,
+            engine_label=engine_label,
+        )
         if item is not None:
             out_items.append(item)
 
@@ -2901,11 +2958,20 @@ async def api_list_pending_studio_generations(
         qm = await session.execute(select(UserStudioModel).where(UserStudioModel.id.in_(model_ids)))
         for m in qm.scalars().all():
             name_by_id[m.id] = m.name
+    jobs_by_id = await _studio_jobs_by_generation_rows(session, rows)
     out_items: list[StudioGenerationOut] = []
     for r in rows:
         if not generation_is_pending_in_ui(r):
             continue
-        item = _studio_generation_to_out(r, arch_base=base, owner_id=oid, name_by_id=name_by_id)
+        pipeline_key, engine_label = _pipeline_for_generation_row(r, jobs_by_id)
+        item = _studio_generation_to_out(
+            r,
+            arch_base=base,
+            owner_id=oid,
+            name_by_id=name_by_id,
+            pipeline_key=pipeline_key,
+            engine_label=engine_label,
+        )
         if item is not None:
             out_items.append(item)
     return StudioGenerationsPendingOut(items=out_items, poll_after_seconds=12)
@@ -7760,6 +7826,7 @@ async def api_studio_motion_render_video(
     prompt_only_mode: str = Form("0"),
     video_backend: str = Form("wavespeed"),
     motion_control_wizard: str = Form("0"),
+    use_motion_outline: str = Form("0"),
     trim_mode: str = Form("full"),
     trim_start_sec: str = Form(""),
     trim_end_sec: str = Form(""),
@@ -8069,6 +8136,9 @@ async def api_studio_motion_render_video(
             "prompt_only_mode": "1" if prompt_only else "0",
             "video_backend": vb,
             "motion_control_wizard": "1" if mc_wizard else "0",
+            "use_motion_outline": (
+                "1" if _truthy_wavespeed_flag(use_motion_outline) else "0"
+            ),
             "trim_mode": trim_mode_n,
             "trim_start_sec": trim_start_f,
             "trim_end_sec": trim_end_f,
@@ -8147,6 +8217,7 @@ async def api_seedance_sale_render_video(
     auto_motion_prompt: str = Form("0"),
     prompt_only_mode: str = Form("0"),
     motion_control_wizard: str = Form("0"),
+    use_motion_outline: str = Form("0"),
     trim_mode: str = Form("full"),
     trim_start_sec: str = Form(""),
     trim_end_sec: str = Form(""),
@@ -8176,6 +8247,7 @@ async def api_seedance_sale_render_video(
         prompt_only_mode=prompt_only_mode,
         video_backend="evolink",
         motion_control_wizard=motion_control_wizard,
+        use_motion_outline=use_motion_outline,
         trim_mode=trim_mode,
         trim_start_sec=trim_start_sec,
         trim_end_sec=trim_end_sec,
@@ -8241,6 +8313,8 @@ async def _studio_job_execute_motion_render_video(
     user: User,
 ) -> dict[str, Any]:
     params = studio_jobs.job_params(job)
+    from app.services.studio_motion_video import motion_outline_requested
+
     if str(params.get("video_backend") or "wavespeed").strip().lower() == "evolink":
         from app.services.studio_evolink_motion import execute_evolink_motion_render_video
 
@@ -8468,23 +8542,21 @@ async def _studio_job_execute_motion_render_video(
     motion_summary: str | None = motion_timeline or None
     vpath = None
     if mv_id:
-        # Motion Control wizard → video-edit по цветному клипу, без contour/silhouette.
-        if settings.motion_outline_enabled and not motion_control_wizard:
+        use_outline = motion_outline_requested(params)
+        if use_outline:
             from app.services.motion_video_outline import ensure_motion_outline_ready
 
             await ensure_motion_outline_ready(oid, mv_id)
         from app.services.studio_motion_video import (
             resolve_motion_video_file,
-            resolve_motion_video_source,
+            resolve_motion_video_for_render,
+            save_motion_video_bytes,
         )
 
-        vpath = resolve_motion_video_source(oid, mv_id) or resolve_motion_video_file(oid, mv_id)
+        vpath = resolve_motion_video_for_render(oid, mv_id, use_outline=use_outline)
         if vpath is not None and vpath.is_file():
             from app.services.studio_motion_pricing import motion_video_duration_seconds
-            from app.services.studio_motion_video import (
-                prepare_motion_video_file_for_duration,
-                save_motion_video_bytes,
-            )
+            from app.services.studio_motion_video import prepare_motion_video_file_for_duration
 
             if (
                 motion_control_wizard

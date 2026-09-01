@@ -18,6 +18,8 @@ export type StudioArchiveItem = {
   video_url: string | null
   /** Linked motion render when known (positive generation archive row). */
   motion_render_id?: number | null
+  pipeline_key?: string | null
+  engine_label?: string | null
 }
 
 export type StudioGenerationsPage = {
@@ -88,6 +90,8 @@ export type MotionRenderArchiveSource = {
   studio_model_id?: number | null
   video_url: string
   frame_image_url: string
+  pipeline_key?: string | null
+  engine_label?: string | null
 }
 
 const OPTIMISTIC_STUDIO_ARCHIVE_ID_FLOOR = -1_000_000_000
@@ -220,6 +224,9 @@ export function mergeVideoArchiveWithMotionRenders(
         if (!(cur.video_url || '').trim()) {
           next = { ...next, video_url: url, status: 'ready' }
         }
+        if (r.pipeline_key && !cur.pipeline_key) {
+          next = { ...next, pipeline_key: r.pipeline_key, engine_label: r.engine_label || cur.engine_label }
+        }
         enriched[idx] = next
         seenUrls.add(url)
         continue
@@ -242,6 +249,8 @@ export function mergeVideoArchiveWithMotionRenders(
       job_id: null,
       image_url: frame || url,
       video_url: url,
+      pipeline_key: r.pipeline_key || null,
+      engine_label: r.engine_label || null,
     })
   }
 

@@ -22,6 +22,7 @@ export default function MotionTrimTimeline({
   trimOut,
   onTrimIn,
   onTrimOut,
+  useMotionOutline = true,
   lang = 'ru',
 }) {
   const videoRef = useRef(null);
@@ -372,9 +373,13 @@ export default function MotionTrimTimeline({
       </div>
 
       <div style={{ fontSize: 10.5, color: color.textDim, lineHeight: 1.45, marginTop: 8 }}>
-        {lang === 'ru'
-          ? 'Потяните жёлтые ручки по краям выделения. В Seedance уйдёт цветной фрагмент без силуэтной обработки.'
-          : 'Drag the yellow handles. The color clip is sent to Seedance without silhouette processing.'}
+        {useMotionOutline
+          ? (lang === 'ru'
+            ? 'Потяните жёлтые ручки. В Seedance уйдёт контурное видео (силуэт движения) — внешность берётся из развёртки.'
+            : 'Drag the yellow handles. Seedance receives an edge-outline motion clip; appearance comes from the turnaround sheet.')
+          : (lang === 'ru'
+            ? 'Потяните жёлтые ручки. В Seedance уйдёт цветной фрагмент без силуэтной обработки.'
+            : 'Drag the yellow handles. The color clip is sent to Seedance without silhouette processing.')}
       </div>
     </div>
   );

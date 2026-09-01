@@ -517,6 +517,8 @@ class StudioMotionRenderOut(BaseModel):
     video_url: str
     frame_image_url: str
     video_backend: str = "wavespeed"
+    pipeline_key: str | None = None
+    engine_label: str | None = None
 
 
 class StudioMotionRendersPageOut(BaseModel):
@@ -576,6 +578,8 @@ class StudioGenerationOut(BaseModel):
     image_url: str = ""
     video_url: str | None = None
     video_backend: str = "wavespeed"
+    pipeline_key: str | None = None
+    engine_label: str | None = None
 
 
 class StudioGenerationsPageOut(BaseModel):
@@ -1999,12 +2003,18 @@ class CreatorReferenceOut(BaseModel):
     id: int
     title: str | None = None
     description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    upload_batch_id: str | None = None
     media_type: str
     content_type: str
     likes_count: int = 0
     liked_by_me: bool = False
     preview_url: str
     created_at: datetime
+
+
+class CreatorReferencePatchIn(BaseModel):
+    tags: list[str] | None = None
 
 
 class CreatorReferenceLikeOut(BaseModel):

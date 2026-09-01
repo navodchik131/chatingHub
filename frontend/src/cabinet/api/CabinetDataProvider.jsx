@@ -1342,6 +1342,7 @@ export function CabinetDataProvider({ children }) {
           trimMode: wizard?.trimMode || 'full',
           trimStartSec: wizard?.trimStartSec,
           trimEndSec: wizard?.trimEndSec,
+          useMotionOutline: wizard?.useMotionOutline !== false,
         })
         setArchive((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
       } catch (e) {

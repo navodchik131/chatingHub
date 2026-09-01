@@ -11,6 +11,7 @@ import { cardPickStyle, modeCardStyle, refThumbStyle, refUploadStyle, borderHove
 import { modeDefs } from '../data/catalog';
 import { archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/actions';
 import { formatArchiveErrorMessage } from '../api/helpers';
+import { formatArchivePipelineLabel } from '../api/archivePipelineLabel';
 import { downloadArchiveBlob } from '../api/archiveDownload';
 import {
   validateStudioForm, syncRefArchivePicks, clearSlotArchivePick, resolveActiveSlotSource,
@@ -766,6 +767,7 @@ export default function Images() {
               const pending = isArchivePending(item);
               const failed = (item.status || '').trim() === 'failed';
               const model = cabinet.models.find((m) => m.id === item.studio_model_id);
+              const pipelineLabel = formatArchivePipelineLabel(item, lang);
               return (
               <Hoverable
                 key={item.id || i}
@@ -871,11 +873,24 @@ export default function Images() {
                 </div>
                 <div style={{ padding: '8px 10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                    <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || '—'}</span>
+                    <span style={{ fontWeight: 700, fontSize: 11 }}>{model?.name || item.model_name || '—'}</span>
                     <span style={{ fontFamily: font.mono, fontSize: 8.5, color: failed ? color.red : color.textGhost }}>
                       {failed ? (lang === 'ru' ? 'ошибка' : 'failed') : (item.aspect_ratio || item.output_aspect || '9:16')}
                     </span>
                   </div>
+                  {pipelineLabel && (
+                    <div style={{
+                      fontSize: 9.5,
+                      color: color.textDim,
+                      lineHeight: 1.35,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    >
+                      {pipelineLabel}
+                    </div>
+                  )}
                 </div>
               </Hoverable>
             );})}

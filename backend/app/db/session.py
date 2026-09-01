@@ -1107,7 +1107,7 @@ def _migrate_companion_media_library(sync_conn) -> None:
 
 
 def _migrate_creator_references(sync_conn) -> None:
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
 
     from app.db.models import CreatorReference, CreatorReferenceLike
 
@@ -1116,6 +1116,21 @@ def _migrate_creator_references(sync_conn) -> None:
         CreatorReference.__table__.create(sync_conn, checkfirst=True)
     if not insp.has_table("creator_reference_likes"):
         CreatorReferenceLike.__table__.create(sync_conn, checkfirst=True)
+
+    if insp.has_table("creator_references"):
+        cols = {c["name"] for c in insp.get_columns("creator_references")}
+        if "tags_json" not in cols:
+            sync_conn.execute(text("ALTER TABLE creator_references ADD COLUMN tags_json TEXT"))
+        if "upload_batch_id" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE creator_references ADD COLUMN upload_batch_id VARCHAR(32)")
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_creator_references_upload_batch_id "
+                    "ON creator_references(upload_batch_id)"
+                )
+            )
 
 
 def _migrate_platform_news(sync_conn) -> None:
