@@ -110,7 +110,8 @@ def _wavespeed_face_swap_prefix_scene_first(*, lock_model_hairstyle: bool) -> st
         "same undertone and highlight texture **as one person** in **this** scene lighting. "
         "**Harmonize** white balance so cheeks / shoulders / torso do not read as mismatched halves. "
         "Preserve strictly from Image 1: camera geometry, limb articulation, garment seams, shadows on fabric — "
-        "**not** micro-skin pigmentation from the incidental sitter. "
+        "**not** micro-skin pigmentation from the incidental sitter, **not** watermarks/captions/URLs/social handles. "
+        "**Strip** any on-image text, logos, or platform branding from Image 1 — inpaint those areas clean. "
         f"{hair_clause}"
         "**No** residual stranger facial microtexture; Image 2 wins for likeness; Image 1 defines room + illumination topology.\n\n"
     )
@@ -193,6 +194,7 @@ def wavespeed_prompt_with_face_swap_first(
         "**Harmonize** white balance and subsurface dispersion so cheeks / shoulders / torso **do not** read like mismatched halves. "
         "Preserve strictly from Image 3: **camera geometry** (FoV crop, viewpoint, body/head yaw, gaze vs lens), limb articulation, garment seams, shadows on fabric/plastic — "
         "**not** micro-skin pigmentation from the incidental sitter — Images 1–2 supply complexion/identity. "
+        "**Do NOT** copy watermarks, captions, social handles, URLs, or platform branding from the scene reference. "
         f"{hair_clause}"
         "**No** residual stranger facial microtexture; Images 1–2 win for likeness; Image 3 defines room + illumination topology.\n\n"
     )
@@ -239,6 +241,10 @@ def finalize_anchor_mode_a_wavespeed_prompt(
     )
     if bust_portrait:
         out += bust_suffix_identity_first
+    from app.services.studio_anchor_pipeline import SCENE_OVERLAY_EXCLUSION_BLOCK
+
+    if "OVERLAYS_AND_TEXT" not in out:
+        out += f"\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
     return out
 
 

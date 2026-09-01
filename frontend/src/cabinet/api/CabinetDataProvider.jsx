@@ -1468,6 +1468,18 @@ export function CabinetDataProvider({ children }) {
     [run, refreshAll],
   )
 
+  const renameCharacter = useCallback(
+    async (charId, name) => {
+      const trimmed = String(name ?? '').trim()
+      if (!trimmed) throw new Error('Укажите имя персонажа')
+      await run(async () => {
+        await actions.patchStudioModel(charId, { name: trimmed })
+        await refreshAll()
+      })
+    },
+    [run, refreshAll],
+  )
+
   const saveCharacterPersona = useCallback(
     async (charId, persona) => {
       await run(async () => {
@@ -1905,6 +1917,7 @@ export function CabinetDataProvider({ children }) {
       restoreMotionVideoSession,
       refreshMe,
       createCharacter,
+      renameCharacter,
       saveCharacterProfile,
       saveCharacterPersona,
       uploadCharacterPhoto,
@@ -2031,6 +2044,7 @@ export function CabinetDataProvider({ children }) {
       restoreMotionVideoSession,
       refreshMe,
       createCharacter,
+      renameCharacter,
       saveCharacterProfile,
       saveCharacterPersona,
       uploadCharacterPhoto,

@@ -419,7 +419,12 @@ function TabPhotos() {
 function TabPersona() {
   const { t, lang } = useApp();
   const { charId, model, cabinet } = useActiveChar();
+  const [charNameEdit, setCharNameEdit] = useState('');
   const [persona, setPersona] = useState({});
+
+  useEffect(() => {
+    setCharNameEdit(model?.name ?? '');
+  }, [charId, model?.name]);
 
   useEffect(() => {
     const p = model?.companion_persona || {};
@@ -458,8 +463,31 @@ function TabPersona() {
     void cabinet.saveCharacterPersona(charId, out);
   };
 
+  const saveName = () => {
+    if (!charId) return;
+    void cabinet.renameCharacter(charId, charNameEdit);
+  };
+
   return (
     <Panel style={{ padding: 18, maxWidth: 560 }}>
+      <Field
+        label={t.charRenameLabel}
+        value={charNameEdit}
+        onChange={(e) => setCharNameEdit(e.target.value)}
+        placeholder={lang === 'ru' ? 'Например, Mia' : 'e.g. Mia'}
+        style={{ marginBottom: 12 }}
+      />
+      <Hoverable
+        style={{
+          marginBottom: 18, background: 'rgba(215,244,82,.12)', border: '1px solid rgba(215,244,82,.3)',
+          borderRadius: 9, padding: 10, textAlign: 'center', fontSize: 12,
+          fontWeight: 800, color: color.lime, cursor: 'pointer',
+        }}
+        hover={{ background: 'rgba(215,244,82,.2)' }}
+        onClick={saveName}
+      >
+        {t.charRenameSave}
+      </Hoverable>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {fields.map((pf, i) => (
           <Field

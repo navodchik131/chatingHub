@@ -49,6 +49,8 @@ def test_mode_a_prompt_matches_html_contract():
     assert "CRITICAL FACE REPLACEMENT" in prompt
     assert "FACE:" in prompt
     assert "NEVER copy marks, tattoos, or scars" in prompt
+    assert "OVERLAYS_AND_TEXT" in prompt
+    assert "OnlyFans" in prompt
     assert REALISM_BLOCK in prompt
     assert prompt.endswith("extra note")
 

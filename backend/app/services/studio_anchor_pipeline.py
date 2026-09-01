@@ -31,6 +31,15 @@ REALISM_BLOCK = (
     "filter, no plastic skin, no over-smoothing, no AI-perfect symmetry."
 )
 
+# Сцена-реф часто с OnlyFans/IG водяными знаками — при scene-first edit canvas их нельзя сохранять.
+SCENE_OVERLAY_EXCLUSION_BLOCK = (
+    "OVERLAYS_AND_TEXT (mandatory): The scene reference may contain watermarks, captions, "
+    "subtitles, logos, stickers, social handles, @usernames, URLs, platform branding "
+    "(OnlyFans, Fansly, Instagram, Telegram, etc.), timecode, or UI overlays. "
+    "Do NOT reproduce, preserve, or transfer any of them into the output — rebuild those "
+    "areas as clean photograph (skin, fabric, or environment). No on-screen text or graphics."
+)
+
 VISIBILITY_ONLY_PROMPT = """Look at this photo and determine only which parts of the person are visible in frame. Output in this EXACT format, nothing else:
 
 VISIBILITY:
@@ -126,7 +135,13 @@ VISIBILITY:
 - Upper body (torso, chest, arms): [visible / not visible]
 - Lower body (hips, legs, feet): [visible / not visible]
 
-Do not include: face shape, facial features, eye color, hair color/style, skin tone, body build, bust/waist/hip proportions, height, or any other identity-related detail. Output ONLY the structured description, no preamble or explanation."""
+Do not include: face shape, facial features, eye color, hair color/style, skin tone, body build, bust/waist/hip proportions, height, or any other identity-related detail.
+
+OVERLAYS (ignore completely — do NOT describe or transcribe):
+- Watermarks, captions, subtitles, logos, stickers, social handles, @usernames, URLs, platform branding (OnlyFans, Fansly, Instagram, etc.), timecode, channel bugs, UI overlays, or any on-image text/graphics.
+- Describe the underlying scene as if those overlays did not exist.
+
+Output ONLY the structured description, no preamble or explanation."""
 
 # Wardrobe prep is not in the HTML file itself — Image 2 is assumed already dressed.
 # This prompt produces that Image 2 from model body + scene/outfit donor.
@@ -487,6 +502,7 @@ def build_mode_a_prompt(
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
+    prompt += f"\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
     prompt += f"\n\n{REALISM_BLOCK}"
     if (notes or "").strip():
         prompt += f"\n\n{notes.strip()}"
@@ -542,6 +558,7 @@ def build_mode_a_face_closeup_prompt(
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
+    prompt += f"\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
     prompt += f"\n\n{REALISM_BLOCK}"
     if (notes or "").strip():
         prompt += f"\n\n{notes.strip()}"
