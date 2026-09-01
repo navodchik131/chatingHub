@@ -291,17 +291,22 @@ async def run_anchor_pipeline(
 
     scene_first = False
     if mode_n == "face_swap":
-        scene_first = anchor_mode_a_scene_first(wave_profile=wave_profile)
+        scene_first = anchor_mode_a_scene_first(
+            wave_profile=wave_profile,
+            wave_model_id=wave_model_id,
+        )
         if face_closeup:
             prompt = build_mode_a_face_closeup_prompt(
                 filtered_anchor=filtered or anchor,
                 vis=vis,
                 notes=notes,
                 lock_hairstyle_style=lock_hairstyle_style,
+                scene_first=scene_first,
             )
             urls = order_mode_a_face_closeup_urls(
                 face_url=face_url,
                 scene_url=scene_url,
+                scene_first=scene_first,
             )
         else:
             extra_faces = 2 if bust_portrait else 0
@@ -313,11 +318,13 @@ async def run_anchor_pipeline(
                 bust_portrait=bust_portrait,
                 extra_face_copies=extra_faces,
                 raw_body_ref=True,
+                scene_first=scene_first,
             )
             urls = order_mode_a_image_urls(
                 face_url=face_url,
                 dressed_url=dressed_url,
                 scene_url=scene_url,
+                scene_first=scene_first,
                 extra_face_copies=extra_faces,
             )
         out_mode = "A"

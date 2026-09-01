@@ -171,10 +171,11 @@ FACE_IDENTITY_LOCK_BLOCK = (
 )
 
 
-def anchor_mode_a_scene_first(*, wave_profile: str) -> bool:
-    """Face swap: всегда identity-first (face → body/dressed → scene)."""
+def anchor_mode_a_scene_first(*, wave_profile: str, wave_model_id: str = "") -> bool:
+    """Seedream edit: сцена первой (edit canvas + aspect ratio). WAN/Nano — identity-first."""
     _ = wave_profile
-    return False
+    model = (wave_model_id or "").strip().lower()
+    return model.startswith("seedream")
 
 
 def order_mode_a_image_urls(
@@ -185,9 +186,13 @@ def order_mode_a_image_urls(
     scene_first: bool = False,
     extra_face_copies: int = 0,
 ) -> list[str]:
-    """Image1=face, Image2=body/outfit, Image3=scene. extra_face_copies — повтор face для бюста."""
-    _ = scene_first
+    """Identity-first: face→body→scene. Seedream scene-first: scene→face(×N)→body."""
     copies = max(0, min(int(extra_face_copies), 3))
+    if scene_first:
+        urls = [scene_url, face_url]
+        urls.extend([face_url] * copies)
+        urls.append(dressed_url)
+        return urls
     urls = [face_url]
     urls.extend([face_url] * copies)
     urls.extend([dressed_url, scene_url])
@@ -201,8 +206,12 @@ def order_mode_a_face_closeup_urls(
     scene_first: bool = False,
     duplicate_face: bool = False,
 ) -> list[str]:
-    """Close-up: Image1=face, Image2=scene (без dressed body)."""
-    _ = scene_first
+    """Close-up: identity-first face→scene; Seedream scene-first scene→face."""
+    if scene_first:
+        urls = [scene_url, face_url]
+        if duplicate_face:
+            urls.append(face_url)
+        return urls
     urls = [face_url, scene_url]
     if duplicate_face:
         urls.insert(1, face_url)
@@ -407,13 +416,17 @@ def build_mode_a_prompt(
     extra_face_copies: int = 0,
     raw_body_ref: bool = True,
 ) -> str:
-    """Face-swap WITH scene photo — Mode A: Image1=face, Image2=body, Image3=scene."""
-    _ = scene_first
+    """Face-swap WITH scene photo — Mode A: Image1=face/body/scene or scene/face/body (Seedream)."""
     exclusions = exclusion_notes(vis)
     face_count = 1 + max(0, min(int(extra_face_copies), 3))
-    face_i = 1
-    body_i = face_count + 1
-    scene_i = face_count + 2
+    if scene_first:
+        scene_i = 1
+        face_i = 2
+        body_i = 2 + face_count
+    else:
+        face_i = 1
+        body_i = face_count + 1
+        scene_i = face_count + 2
 
     face_ref_label = (
         f"Images {face_i}–{face_i + extra_face_copies} = the SAME facial identity reference (repeated for emphasis). "
@@ -489,16 +502,24 @@ def build_mode_a_face_closeup_prompt(
     scene_first: bool = False,
     duplicate_face: bool = False,
 ) -> str:
-    """Close-up face swap: Image1=face, Image2=scene (Image2 может дублировать face)."""
-    _ = scene_first
+    """Close-up face swap: identity-first or Seedream scene-first."""
     exclusions = exclusion_notes(vis)
-    face_i = 1
-    scene_i = 3 if duplicate_face else 2
+    if scene_first:
+        scene_i = 1
+        face_i = 2
+        if duplicate_face:
+            face_ref_extra = f" Images {face_i}–{face_i + 1} are the SAME identity."
+        else:
+            face_ref_extra = ""
+    else:
+        face_i = 1
+        scene_i = 3 if duplicate_face else 2
+        face_ref_extra = ""
 
     prompt = (
         f"Image {scene_i} = target close-up portrait scene: keep the exact crop, head scale in frame, "
         "camera distance, head angle, gaze, lighting, shadows, and background.\n"
-        f"Image {face_i} = facial identity reference ONLY. The output must show THIS person's face — "
+        f"Image {face_i} = facial identity reference ONLY.{face_ref_extra} The output must show THIS person's face — "
         "not the original sitter from the scene reference.\n"
         "\n"
         f"Replace the entire face in Image {scene_i} with the identity from Image {face_i}. "

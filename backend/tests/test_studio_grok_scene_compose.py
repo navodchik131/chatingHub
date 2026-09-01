@@ -597,7 +597,7 @@ def test_wan_face_swap_grok_main_prose_uses_identity_first_prefix() -> None:
         prompt_brief_mode="grok_main_prose",
         user_pose_reference_is_last=True,
     )
-    assert "[FACE_SWAP — WAN]" in out
+    assert "[FACE_SWAP — MULTI_REF]" in out
     assert "Image 1" in out and "MODEL face" in out
     assert "Image 3" in out and "SOURCE snapshot" in out
 
@@ -627,7 +627,7 @@ def test_wan_face_swap_rear_view_uses_body_prefix_not_face_gaze() -> None:
         prompt_brief_mode="grok_main_prose",
         visibility=vis,
     )
-    assert out.startswith("[BODY_IDENTITY_SWAP — WAN]")
+    assert out.startswith("[FACE_SWAP — MULTI_REF]")
     assert "Do NOT" in out and "invent eyes" in out.lower()
     assert "gaze vs lens" not in out.lower()
 

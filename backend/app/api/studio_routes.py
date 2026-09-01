@@ -5573,11 +5573,7 @@ async def _studio_job_execute_refine_prompt(
                 wavespeed_api_key=ws_key,
                 wave_profile=wave_profile_n,
                 wan_edit_tier=wan_tier_n,
-                wave_model_id=(
-                    workflow_wave_model
-                    if workflow_source and workflow_wave_model
-                    else ("wan-2.7" if wave_profile_n == "nsfw" else "nano-banana-pro")
-                ),
+                wave_model_id=billing_wave_model,
                 aspect_ratio=aspect_key,
                 force_redress=False,
                 lock_hairstyle_style=effective_lock_hairstyle,
@@ -6958,7 +6954,7 @@ async def _studio_job_execute_motion_first_frame(
                 wavespeed_api_key=ws_key,
                 wave_profile=wave_profile_n,
                 wan_edit_tier=wan_tier_n,
-                wave_model_id=(
+                wave_model_id=billing_wave_model or (
                     workflow_wave_model
                     or ("wan-2.7" if wave_profile_n == "nsfw" else "nano-banana-pro")
                 ),

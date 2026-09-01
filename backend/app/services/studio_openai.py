@@ -90,14 +90,54 @@ def _wavespeed_pose_ref_prefix_no_face(*, lock_model_hairstyle: bool) -> str:
     )
 
 
-def _wavespeed_face_swap_prefix_face_hidden(*, lock_model_hairstyle: bool) -> str:
+_FACE_SWAP_TAG = "[FACE_SWAP — MULTI_REF]"
+
+
+def _wavespeed_face_swap_prefix_scene_first(*, lock_model_hairstyle: bool) -> str:
+    """Seedream edit: Image1=scene canvas, Image2=face, Image3=body."""
+    hair_clause = (
+        "**Hairstyle** (cut/color/texture) from Image 2 MODEL face / JSON brief — not the scene sitter on Image 1. "
+        if lock_model_hairstyle
+        else "Hairstyle may follow Image 1 scene layout when explicitly needed; color from Image 2. "
+    )
+    return (
+        f"{_FACE_SWAP_TAG} **Image 1** = **SOURCE snapshot** (scene canvas — preserve pose, camera, framing, "
+        "lighting, outfit coverage). **Edit Image 1 in place** — replace the performer with MODEL identity. "
+        "**Image 2** = **MODEL face** (identity WHO — never keep the scene sitter's face). "
+        "**Image 3** = **MODEL body** proportions reference only (build, silhouette, limb proportions — **not** pose, **not** outfit). "
+        "**Clothing and accessories stay from Image 1.** "
+        "**Replace** every visible face and epidermis region in Image 1 with MODEL identity from Images 2–3 continuously — "
+        "same undertone and highlight texture **as one person** in **this** scene lighting. "
+        "**Harmonize** white balance so cheeks / shoulders / torso do not read as mismatched halves. "
+        "Preserve strictly from Image 1: camera geometry, limb articulation, garment seams, shadows on fabric — "
+        "**not** micro-skin pigmentation from the incidental sitter. "
+        f"{hair_clause}"
+        "**No** residual stranger facial microtexture; Image 2 wins for likeness; Image 1 defines room + illumination topology.\n\n"
+    )
+
+
+def _wavespeed_face_swap_prefix_face_hidden(*, lock_model_hairstyle: bool, scene_first: bool = False) -> str:
+    if scene_first:
+        hair_clause = (
+            "**Visible hair mass** follows Image 1 pose crop; color/texture from Image 2 MODEL only. "
+            if lock_model_hairstyle
+            else "Hair visible in Image 1 may keep that layout; color from Image 2 when applicable. "
+        )
+        return (
+            f"{_FACE_SWAP_TAG} **Image 1** = **SOURCE snapshot** (pose/framing canvas). "
+            "**Image 2** = **MODEL face** (partial identity anchor). "
+            "**Image 3** = **MODEL body** proportions reference. "
+            "**Replace** visible epidermis in Image 1 with MODEL identity — not the incidental sitter. "
+            f"{hair_clause}"
+            "Image 1 defines pose + illumination; Images 2–3 supply who.\n\n"
+        )
     hair_clause = (
         "**Visible hair mass** (back/side) follows Image 3 pose crop; color/texture from Image 1 MODEL only. "
         if lock_model_hairstyle
         else "Hair visible in Image 3 may keep that layout; color from Image 1 when applicable. "
     )
     return (
-        "[BODY_IDENTITY_SWAP — WAN] **Image 1** = **MODEL face** (identity anchor when partially visible). "
+        f"{_FACE_SWAP_TAG} **Image 1** = **MODEL face** (identity anchor when partially visible). "
         "**Image 2** = **MODEL body** proportions reference. "
         "**Image 3** = **SOURCE snapshot** (scene + pose framing — replace sitter epidermis only). "
         "**Replace** every visible epidermis region of the Image 3 performer with MODEL identity continuously — "
@@ -117,11 +157,22 @@ def wavespeed_prompt_with_face_swap_first(
     *,
     lock_model_hairstyle: bool = True,
     pose_prefix_kind: str | None = None,
+    scene_first: bool = False,
 ) -> str:
-    """Face swap WAN/Seedream: Image1=face, Image2=body, Image3=scene reference."""
+    """Face swap multi-ref edit: identity-first (WAN) or scene-first (Seedream)."""
     kind = (pose_prefix_kind or "face_visible").strip().lower()
     if kind in ("face_hidden", "headless"):
-        prefix = _wavespeed_face_swap_prefix_face_hidden(lock_model_hairstyle=lock_model_hairstyle)
+        prefix = _wavespeed_face_swap_prefix_face_hidden(
+            lock_model_hairstyle=lock_model_hairstyle,
+            scene_first=scene_first,
+        )
+        p = (refined_prompt or "").strip()
+        if not p:
+            return prefix.strip()
+        return prefix + p
+
+    if scene_first:
+        prefix = _wavespeed_face_swap_prefix_scene_first(lock_model_hairstyle=lock_model_hairstyle)
         p = (refined_prompt or "").strip()
         if not p:
             return prefix.strip()
@@ -133,7 +184,7 @@ def wavespeed_prompt_with_face_swap_first(
         else "Причёска может оставаться ближе к Image 3, если это явно нужно пользователю; "
     )
     prefix = (
-        "[FACE_SWAP — WAN] **Image 1** = **MODEL face** (identity WHO). "
+        f"{_FACE_SWAP_TAG} **Image 1** = **MODEL face** (identity WHO). "
         "**Image 2** = **MODEL body** proportions reference only (build, silhouette, limb proportions — **not** outfit). "
         "**Clothing and accessories come from Image 3** scene. "
         "**Image 3** = **SOURCE snapshot** (scene + incidental sitter framing — pose/camera/light only). "
@@ -184,6 +235,7 @@ def finalize_anchor_mode_a_wavespeed_prompt(
     out = wavespeed_prompt_with_face_swap_first(
         p,
         lock_model_hairstyle=lock_model_hairstyle,
+        scene_first=scene_first,
     )
     if bust_portrait:
         out += bust_suffix_identity_first

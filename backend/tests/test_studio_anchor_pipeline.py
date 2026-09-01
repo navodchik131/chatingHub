@@ -54,19 +54,19 @@ def test_mode_a_prompt_matches_html_contract():
 
 
 def test_mode_a_scene_first_reorders_prompt_indices():
-    """scene_first устарел — промпт всегда Image1=face, Image2=body, Image3=scene."""
+    """Seedream: Image1=scene, Image2=face, Image3=body."""
     vis = AnchorVisibility()
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
     prompt = build_mode_a_prompt(filtered_anchor=filtered, vis=vis, scene_first=True)
-    assert "Image 1 = facial identity reference only" in prompt
-    assert "body proportions reference only" in prompt
-    assert "Image 3 = target scene" in prompt
+    assert "Image 1 = target scene" in prompt
+    assert "Image 2 = facial identity reference only" in prompt
+    assert "Image 3 = body proportions reference only" in prompt
 
 
 def test_order_mode_a_image_urls():
     assert order_mode_a_image_urls(
         face_url="f", dressed_url="d", scene_url="s", scene_first=True
-    ) == ["f", "d", "s"]
+    ) == ["s", "f", "d"]
     assert order_mode_a_image_urls(
         face_url="f", dressed_url="d", scene_url="s", scene_first=False
     ) == ["f", "d", "s"]
@@ -75,6 +75,21 @@ def test_order_mode_a_image_urls():
 def test_anchor_mode_a_scene_first_profile():
     assert anchor_mode_a_scene_first(wave_profile="nsfw") is False
     assert anchor_mode_a_scene_first(wave_profile="regular") is False
+    assert anchor_mode_a_scene_first(wave_profile="nsfw", wave_model_id="seedream-v5.0-pro") is True
+    assert anchor_mode_a_scene_first(wave_profile="nsfw", wave_model_id="wan-2.7") is False
+
+
+def test_order_mode_a_image_urls_seedream_scene_first():
+    assert order_mode_a_image_urls(
+        face_url="f", dressed_url="b", scene_url="s", scene_first=True
+    ) == ["s", "f", "b"]
+    assert order_mode_a_image_urls(
+        face_url="f",
+        dressed_url="b",
+        scene_url="s",
+        scene_first=True,
+        extra_face_copies=2,
+    ) == ["s", "f", "f", "f", "b"]
 
 
 def test_detect_face_closeup_scene():
@@ -103,7 +118,7 @@ def test_identity_marks_block_upper_body():
 def test_order_mode_a_face_closeup_urls():
     assert order_mode_a_face_closeup_urls(
         face_url="f", scene_url="s", scene_first=True, duplicate_face=True
-    ) == ["f", "f", "s"]
+    ) == ["s", "f", "f"]
     assert order_mode_a_face_closeup_urls(
         face_url="f", scene_url="s", scene_first=False
     ) == ["f", "s"]
@@ -116,7 +131,7 @@ def test_order_mode_a_image_urls_extra_face():
         scene_url="s",
         scene_first=True,
         extra_face_copies=2,
-    ) == ["f", "f", "f", "d", "s"]
+    ) == ["s", "f", "f", "f", "d"]
     assert order_mode_a_image_urls(
         face_url="f",
         dressed_url="d",
@@ -290,8 +305,22 @@ def test_dressed_body_cache_key_stable():
     assert a != c
 
 
+def test_finalize_seedream_scene_first_prefix():
+    out = finalize_anchor_mode_a_wavespeed_prompt(
+        "Replace face in scene.",
+        wave_profile="nsfw",
+        lock_model_hairstyle=True,
+        scene_first=True,
+    )
+    assert "[FACE_SWAP — MULTI_REF]" in out
+    assert "Image 1" in out and "SOURCE snapshot" in out
+    assert "Image 2" in out and "MODEL face" in out
+    assert "Image 3" in out and "MODEL body" in out
+    assert "[FACE_SWAP — WAN]" not in out
+
+
 def test_finalize_bust_portrait_nsfw_uses_identity_first_prefix():
-    """Seedream (nsfw) на бюсте — identity-first префикс."""
+    """WAN бюст — identity-first префикс (scene_first=False)."""
     out = finalize_anchor_mode_a_wavespeed_prompt(
         "Replace face in scene.",
         wave_profile="nsfw",
@@ -299,7 +328,7 @@ def test_finalize_bust_portrait_nsfw_uses_identity_first_prefix():
         scene_first=False,
         bust_portrait=True,
     )
-    assert "[FACE_SWAP — WAN]" in out
+    assert "[FACE_SWAP — MULTI_REF]" in out
     assert "Image 1" in out and "MODEL face" in out
     assert "Image 2" in out and "proportions reference only" in out
     assert "Image 3" in out and "SOURCE snapshot" in out
