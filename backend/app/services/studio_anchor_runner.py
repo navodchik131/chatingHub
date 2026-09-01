@@ -159,7 +159,7 @@ async def run_anchor_pipeline(
 ) -> AnchorPipelineResult | None:
     """
     Returns None if mode shouldn't use anchor pipeline.
-    Mode A (face_swap): final URLs = face, dressed, scene; prompt Mode A.
+    Mode A (face_swap): final URLs = face, raw body, scene; prompt Mode A.
     Mode B (model_scene): final URLs = face, dressed; prompt Mode B with scene text.
     """
     mode_n = (studio_mode or "").strip().lower()
@@ -245,7 +245,9 @@ async def run_anchor_pipeline(
     scene_url = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
 
     dressed_url = ""
-    if not face_closeup:
+    # face_swap: Image 2 = сырое тело модели; одежда только из сцены (Image 3). Wardrobe-prep — только model_scene.
+    skip_wardrobe = mode_n == "face_swap"
+    if not face_closeup and not skip_wardrobe:
         if dressed_bytes is None:
             log.info(
                 "anchor wardrobe prep model=%s key=%s…",
@@ -274,10 +276,18 @@ async def run_anchor_pipeline(
         )
         dressed_tok = create_pose_reference_access_token(user_id=owner_id, file_id=dressed_fid)
         dressed_url = f"{pub}/api/studio/public-pose-reference?t={quote(dressed_tok, safe='')}"
-    else:
+    elif face_closeup:
         log.info("anchor face close-up: skip wardrobe prep model=%s", model_id)
         dressed_bytes = None
         from_cache = False
+    else:
+        log.info(
+            "anchor face_swap: Image 2 = raw model body (outfit from scene Image 3) model=%s",
+            model_id,
+        )
+        dressed_bytes = None
+        from_cache = False
+        dressed_url = body_url
 
     scene_first = False
     if mode_n == "face_swap":
@@ -302,6 +312,7 @@ async def run_anchor_pipeline(
                 lock_hairstyle_style=lock_hairstyle_style,
                 bust_portrait=bust_portrait,
                 extra_face_copies=extra_faces,
+                raw_body_ref=True,
             )
             urls = order_mode_a_image_urls(
                 face_url=face_url,

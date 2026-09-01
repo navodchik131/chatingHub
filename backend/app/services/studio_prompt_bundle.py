@@ -796,6 +796,10 @@ def extract_creative_notes_from_workflow_description(raw: str | None) -> str:
     text = (raw or "").strip()
     if not text:
         return ""
+    # REFERENCE_CONTEXT нумерует workflow-refs (часто «Reference 1 = scene») — ломает face swap Image1/2/3.
+    text = strip_workflow_reference_context(text)
+    if not text:
+        return ""
     # Только блок SCENE_DIRECTION, если есть.
     m = re.search(
         r"SCENE_DIRECTION:\s*(.*?)(?=\n\nREFERENCE_CONTEXT\b|\Z)",
@@ -805,11 +809,23 @@ def extract_creative_notes_from_workflow_description(raw: str | None) -> str:
     if m:
         text = m.group(1).strip()
     else:
-        # Убрать REFERENCE_CONTEXT целиком, если пришло без заголовка SCENE_DIRECTION.
-        text = re.split(r"\n\nREFERENCE_CONTEXT\b", text, maxsplit=1, flags=re.I)[0].strip()
         text = re.sub(r"^SCENE_DIRECTION:\s*", "", text, flags=re.I).strip()
     text = _PO_REFU_BOILERPLATE_RE.sub("", text).strip()
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
+
+
+def strip_workflow_reference_context(raw: str | None) -> str:
+    """Убрать REFERENCE_CONTEXT — в WaveSpeed порядок Image1/2/3 задаёт anchor, не workflow ref #."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    text = re.sub(
+        r"(?:^|\n\n)\s*REFERENCE_CONTEXT\b.*",
+        "",
+        text,
+        flags=re.I | re.S,
+    ).strip()
     return text
 
 

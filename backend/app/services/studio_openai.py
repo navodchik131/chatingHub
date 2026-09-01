@@ -134,7 +134,8 @@ def wavespeed_prompt_with_face_swap_first(
     )
     prefix = (
         "[FACE_SWAP — WAN] **Image 1** = **MODEL face** (identity WHO). "
-        "**Image 2** = **MODEL body** proportions and outfit reference. "
+        "**Image 2** = **MODEL body** proportions reference only (build, silhouette, limb proportions — **not** outfit). "
+        "**Clothing and accessories come from Image 3** scene. "
         "**Image 3** = **SOURCE snapshot** (scene + incidental sitter framing — pose/camera/light only). "
         "**Replace** recognizable face and every visible epidermis region of the Image 3 performer with MODEL identity continuously — "
         "same underlying undertone and highlight texture **as one person** chin→neck→upper chest/decollete→arms/legs in **this** lighting. "
@@ -159,7 +160,9 @@ def finalize_anchor_mode_a_wavespeed_prompt(
     bust_portrait: bool = False,
 ) -> str:
     """Префикс/суффикс как у обычного face_swap — anchor раньше их не получал."""
-    p = (prompt or "").strip()
+    from app.services.studio_prompt_bundle import strip_workflow_meta_from_wavespeed_prose
+
+    p = strip_workflow_meta_from_wavespeed_prose((prompt or "").strip())
     wp = (wave_profile or "").strip().lower()
     bust_suffix_nano = (
         "\n\n[BUST PORTRAIT] Multiple early identity images are the SAME model face — "

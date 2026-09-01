@@ -1453,6 +1453,11 @@ def resolve_workflow_generation_plan(
         prompt_text=prompt_text,
         references=list(sorted_refs),
     )
+    # Face swap с моделью из кабинета: Image1/2/3 задаёт anchor — workflow REFERENCE_CONTEXT только путает WAN.
+    if scenario_type == "scenarioFaceSwap" and model_id is not None:
+        from app.services.studio_prompt_bundle import strip_workflow_reference_context
+
+        description = strip_workflow_reference_context(description)
 
     realism_enabled = True
     realism_nodes = _sources_for_plan_target(target_id, HANDLE["gen_realism_in"], edges, node_map)

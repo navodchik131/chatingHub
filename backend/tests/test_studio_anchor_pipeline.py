@@ -43,7 +43,8 @@ def test_mode_a_prompt_matches_html_contract():
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
     prompt = build_mode_a_prompt(filtered_anchor=filtered, vis=vis, notes="extra note")
     assert "Image 1 = facial identity reference only" in prompt
-    assert "Image 2 = body proportions and outfit reference" in prompt
+    assert "body proportions reference only" in prompt
+    assert "Do NOT copy outfit from this image" in prompt
     assert "Image 3 = target scene" in prompt
     assert "CRITICAL FACE REPLACEMENT" in prompt
     assert "FACE:" in prompt
@@ -58,7 +59,7 @@ def test_mode_a_scene_first_reorders_prompt_indices():
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
     prompt = build_mode_a_prompt(filtered_anchor=filtered, vis=vis, scene_first=True)
     assert "Image 1 = facial identity reference only" in prompt
-    assert "Image 2 = body proportions and outfit reference" in prompt
+    assert "body proportions reference only" in prompt
     assert "Image 3 = target scene" in prompt
 
 
@@ -173,7 +174,7 @@ def test_mode_a_bust_portrait_prompt():
     assert "BUST PORTRAIT FACE SWAP" in prompt
     assert "hand, finger, hair" in prompt
     assert "Images 1–3" in prompt
-    assert "Image 4 = body proportions" in prompt
+    assert "Image 4 = body proportions reference only" in prompt
     assert "Image 5 = target scene" in prompt
 
 
@@ -234,6 +235,34 @@ def test_extract_creative_notes_strips_reference_context():
     assert "Do not copy tattoos from ref" not in notes
 
 
+def test_extract_creative_notes_strips_reference_context_only_block():
+    """Workflow face swap с моделью из кабинета — desc часто только REFERENCE_CONTEXT без SCENE_DIRECTION."""
+    raw = (
+        "REFERENCE_CONTEXT (each attached workflow image is labeled to match its Role):\n"
+        "Reference 1:\n  Role: scene / pose / camera\n"
+        "  Notes: Исходная сцена — identity из identity ref."
+    )
+    notes = extract_creative_notes_from_workflow_description(raw)
+    assert notes == ""
+
+
+def test_finalize_strips_reference_context_from_prompt():
+    raw = (
+        "Image 3 = target scene.\n\n"
+        "REFERENCE_CONTEXT (each attached workflow image is labeled to match its Role):\n"
+        "Reference 1:\n  Role: scene / pose / camera"
+    )
+    out = finalize_anchor_mode_a_wavespeed_prompt(
+        raw,
+        wave_profile="nsfw",
+        lock_model_hairstyle=True,
+        scene_first=False,
+    )
+    assert "REFERENCE_CONTEXT" not in out
+    assert "Reference 1:" not in out
+    assert "target scene" in out
+
+
 def test_dressed_body_cache_key_stable():
     vis = AnchorVisibility()
     a = dressed_body_cache_key(
@@ -272,6 +301,7 @@ def test_finalize_bust_portrait_nsfw_uses_identity_first_prefix():
     )
     assert "[FACE_SWAP — WAN]" in out
     assert "Image 1" in out and "MODEL face" in out
+    assert "Image 2" in out and "proportions reference only" in out
     assert "Image 3" in out and "SOURCE snapshot" in out
     assert "[MULTI_IMAGE_EDIT — intentional FACE SWAP]" not in out
     assert "[BUST PORTRAIT]" in out

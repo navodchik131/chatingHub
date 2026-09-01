@@ -1229,7 +1229,9 @@ def test_scenario_face_swap_enriches_and_requires_model():
     )
     assert plan.scenario_type == "scenarioFaceSwap"
     assert plan.model_id == 3
-    assert "model swap" in plan.description.lower()
+    assert "swap model" in plan.description.lower()
+    # С моделью из кабинета REFERENCE_CONTEXT не попадает в desc — Image1/2/3 задаёт anchor.
+    assert "REFERENCE_CONTEXT" not in plan.description
 
 
 def test_scenario_face_swap_dual_ref_without_model():

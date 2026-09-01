@@ -2,7 +2,8 @@
 
 Used for Face Swap (Mode A: with scene photo) and From-reference (Mode B: scene as text).
 Image contract (единый порядок для всех профилей WaveSpeed):
-  Mode A: Image1=face, Image2=body+outfit (dressed), Image3=scene photo
+  Mode A face_swap: Image1=face, Image2=body (raw model), Image3=scene photo
+  Mode A model_scene: Image1=face, Image2=body+outfit (dressed), Image3=scene photo
   Mode B: Image1=face, Image2=body+outfit (dressed); scene described in text only
 """
 
@@ -404,8 +405,9 @@ def build_mode_a_prompt(
     scene_first: bool = False,
     bust_portrait: bool = False,
     extra_face_copies: int = 0,
+    raw_body_ref: bool = True,
 ) -> str:
-    """Face-swap WITH scene photo — Mode A: Image1=face, Image2=body/outfit, Image3=scene."""
+    """Face-swap WITH scene photo — Mode A: Image1=face, Image2=body, Image3=scene."""
     _ = scene_first
     exclusions = exclusion_notes(vis)
     face_count = 1 + max(0, min(int(extra_face_copies), 3))
@@ -418,6 +420,17 @@ def build_mode_a_prompt(
         if bust_portrait and extra_face_copies > 0
         else f"Image {face_i} = facial identity reference only. "
     )
+
+    if raw_body_ref:
+        body_line = (
+            f"Image {body_i} = body proportions reference only (build, silhouette, limb proportions, skin tone family). "
+            f"Do NOT copy outfit from this image — dress the model in the clothing visible in Image {scene_i}."
+        )
+    else:
+        body_line = (
+            f"Image {body_i} = body proportions and outfit reference. The person's body shape and the clothing "
+            "shown here should be transferred exactly as-is."
+        )
 
     if bust_portrait:
         expr_rule = (
@@ -439,11 +452,10 @@ def build_mode_a_prompt(
         f"The scene reference donates geometry, light, and wardrobe coverage only — never the sitter's "
         "tattoos, moles, scars, birthmarks, face, or body identity.\n"
         f"{face_ref_label}Use this face, and only this face.\n"
-        f"Image {body_i} = body proportions and outfit reference. The person's body shape and the clothing "
-        "shown here should be transferred exactly as-is.\n"
+        f"{body_line}\n"
         "\n"
-        f"Replace the person in Image {scene_i} entirely with the identity from the face reference image(s) "
-        f"and Image {body_i}.\n"
+        f"Replace the person in Image {scene_i} entirely with the identity from Image {face_i} "
+        f"and the body proportions from Image {body_i}.\n"
         "\n"
         f"{filtered_anchor}\n"
         "\n"
