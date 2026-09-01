@@ -7898,7 +7898,12 @@ async def api_studio_motion_render_video(
     if not (prompt or "").strip() and not (auto_mp and mv_id_early):
         mc_wizard = _truthy_wavespeed_flag(motion_control_wizard)
         turn_raw = (turnaround_generation_id or "").strip()
-        if not (mc_wizard and mv_id_early and turn_raw):
+        # Wizard без промпта: развёртка ИЛИ (силуэт + первый кадр) — как в evolink/wavespeed worker.
+        use_outline_wizard = mc_wizard and _truthy_wavespeed_flag(use_motion_outline)
+        wizard_ready = mc_wizard and mv_id_early and (
+            bool(turn_raw) or (use_outline_wizard and ff_gid_early is not None)
+        )
+        if not wizard_ready:
             raise HTTPException(status_code=400, detail="Опишите сцену, движение и при необходимости одежду.")
     if prompt_only and not mv_id_early:
         if not ff_gid_early and not still_bytes:
