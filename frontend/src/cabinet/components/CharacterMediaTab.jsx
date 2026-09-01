@@ -87,6 +87,9 @@ export default function TabMedia() {
     maxSend: ru ? 'Лимит на диалог' : 'Per-dialog cap',
   }), [ru]);
 
+  const setErrorRef = useRef(cabinet.setError);
+  setErrorRef.current = cabinet.setError;
+
   const reload = useCallback(async () => {
     if (!charId) return;
     setLoading(true);
@@ -98,34 +101,38 @@ export default function TabMedia() {
       setAssets(Array.isArray(a) ? a : []);
       setPacks(Array.isArray(p) ? p : []);
     } catch (e) {
-      cabinet.setError(e?.message || String(e));
+      setErrorRef.current(e?.message || String(e));
     } finally {
       setLoading(false);
     }
-  }, [charId, cabinet]);
+  }, [charId]);
 
+  // Перезагрузка только при смене персонажа — не сбрасываем форму на каждый refresh контекста.
   useEffect(() => {
-    void reload();
     setSelId(null);
     setDraft(null);
+    void reload();
   }, [charId, reload]);
 
   const selected = assets.find((a) => Number(a.id) === Number(selId)) || null;
 
+  // Черновик только при выборе другого файла, не при фоновом reload списка.
   useEffect(() => {
-    if (!selected) {
+    if (!selId) {
       setDraft(null);
       return;
     }
+    const row = assets.find((a) => Number(a.id) === Number(selId));
+    if (!row) return;
     setDraft({
-      title: selected.title || '',
-      description: selected.description || '',
-      tags: (selected.tags || []).join(', '),
-      tier: selected.tier || 'teaser',
-      priceUsd: selected.price_usd_cents ? (selected.price_usd_cents / 100).toFixed(selected.price_usd_cents % 100 ? 2 : 0) : '0',
-      pack_id: selected.pack_id || '',
+      title: row.title || '',
+      description: row.description || '',
+      tags: (row.tags || []).join(', '),
+      tier: row.tier || 'teaser',
+      priceUsd: row.price_usd_cents ? (row.price_usd_cents / 100).toFixed(row.price_usd_cents % 100 ? 2 : 0) : '0',
+      pack_id: row.pack_id || '',
     });
-  }, [selected]);
+  }, [selId]);
 
   const filtered = assets.filter((a) => {
     if (typeFilter !== 'all' && a.media_type !== typeFilter) return false;
