@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Hoverable from './Hoverable';
 import { IcoFilm, IcoPlay, IcoUpload } from './Icons';
-import { Eyebrow, Chip, SelectPill } from './ui';
+import { Eyebrow, Chip, LimeButton, SelectPill } from './ui';
 import MotionTrimTimeline from './MotionTrimTimeline';
 import { color, line, font } from '../styles/tokens';
 import { refUploadStyle, cardPickStyle } from '../styles/mixins';
@@ -94,6 +94,7 @@ export default function MotionControlWizard({
   const [trimOut, setTrimOut] = useState(5);
   /** Конвертация реф-видео в силуэт (edge-outline) перед отправкой в Seedance. */
   const [useMotionOutline, setUseMotionOutline] = useState(true);
+  const [ffState, setFfState] = useState('idle');
   const motionVideoPreviewUrl = cabinet.uploadPreviewUrls?.['motion-video'] || '';
 
   const durationSec = cabinet.motionVideoDurationSec || 5;
@@ -194,7 +195,9 @@ export default function MotionControlWizard({
     setTurnaroundGenId(null);
     setTurnaroundPreviewUrl('');
     setTurnState('idle');
-  }, [cabinet.motionVideoFileId]);
+    cabinet.clearFirstFrameArchivePick?.();
+    setFfState('idle');
+  }, [cabinet.motionVideoFileId, cabinet.clearFirstFrameArchivePick]);
 
   useEffect(() => {
     if (skipPersistRef.current) return;
@@ -279,6 +282,21 @@ export default function MotionControlWizard({
   const clipDuration = trimMode === 'part'
     ? Math.max(0.5, trimOut - trimIn)
     : durationSec;
+
+  const firstFramePreviewUrl = cabinet.firstFrameUrl
+    || genArchivePreviewUrl(cabinet.firstFrameGenId, cabinet.archiveImages);
+
+  const genFirstFrameFromVideo = async () => {
+    if (!cabinet.motionVideoFileId || ffState === 'loading') return;
+    setFfState('loading');
+    cabinet.setError(null);
+    try {
+      await cabinet.generateFirstFrame(s, '');
+      setFfState('done');
+    } catch {
+      setFfState('idle');
+    }
+  };
 
   const videoCredits = useMemo(() => {
     const variant = s.vidSeedanceVariant || 'standard';
@@ -461,7 +479,12 @@ export default function MotionControlWizard({
       cabinet.setError(lang === 'ru' ? 'Загрузите референс-видео' : 'Upload reference video');
       return;
     }
-    if (!turnaroundGenId) {
+    if (useMotionOutline) {
+      if (!cabinet.firstFrameGenId) {
+        cabinet.setError(lang === 'ru' ? 'Сгенерируйте первый кадр из видео' : 'Generate the first frame from video');
+        return;
+      }
+    } else if (!turnaroundGenId) {
       cabinet.setError(lang === 'ru' ? 'Подготовьте развёртку перед видео' : 'Prepare turnaround before video');
       return;
     }
@@ -469,7 +492,9 @@ export default function MotionControlWizard({
     try {
       await onGenerate({
         motionControlWizard: true,
-        turnaroundGenerationId: turnaroundGenId,
+        turnaroundGenerationId: useMotionOutline ? null : turnaroundGenId,
+        firstFrameGenerationId: useMotionOutline ? cabinet.firstFrameGenId : null,
+        outfitGenerationId: outfitGenId,
         trimMode,
         trimStartSec: trimMode === 'part' ? trimIn : null,
         trimEndSec: trimMode === 'part' ? trimOut : null,
@@ -627,6 +652,44 @@ export default function MotionControlWizard({
                     : 'Convert reference to motion silhouettes (edge outline) for better model swap. Unchecked sends the original color clip.'}
                 </span>
               </label>
+              {useMotionOutline && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line.hair}` }}>
+                  <div style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: 1.1, color: color.textGhost, marginBottom: 8 }}>
+                    {lang === 'ru' ? 'ПЕРВЫЙ КАДР' : 'FIRST FRAME'}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.45, marginBottom: 10 }}>
+                    {lang === 'ru'
+                      ? 'Grok подставит лицо модели в позу с первого кадра видео — нужно для swap по силуэту.'
+                      : 'Grok composes your model into the video opening pose — required for silhouette motion swap.'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    {firstFramePreviewUrl && (
+                      <img
+                        src={firstFramePreviewUrl}
+                        alt=""
+                        style={{ width: 70, aspectRatio: '9/16', borderRadius: 10, objectFit: 'cover', border: `1px solid ${line.soft}` }}
+                      />
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <LimeButton
+                        disabled={ffState === 'loading' || !cabinet.motionVideoFileId}
+                        onClick={() => { void genFirstFrameFromVideo(); }}
+                      >
+                        {ffState === 'loading'
+                          ? (lang === 'ru' ? 'Генерация…' : 'Generating…')
+                          : (cabinet.firstFrameGenId
+                            ? (lang === 'ru' ? 'Перегенерировать' : 'Regenerate')
+                            : (lang === 'ru' ? 'Сгенерировать из видео' : 'Generate from video'))}
+                      </LimeButton>
+                      {cabinet.firstFrameGenId && ffState === 'done' && (
+                        <span style={{ fontSize: 11, color: color.lime }}>
+                          {lang === 'ru' ? 'Первый кадр готов' : 'First frame ready'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -843,9 +906,14 @@ export default function MotionControlWizard({
         </div>
 
         {/* 4 · Развёртка */}
-        <div style={stepBlock}>
+        <div style={{ ...stepBlock, opacity: useMotionOutline ? 0.55 : 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Eyebrow>{lang === 'ru' ? '4 · РАЗВЁРТКА' : '4 · TURNAROUND'}</Eyebrow>
+            {useMotionOutline && (
+              <span style={{ fontSize: 10, color: color.textGhost }}>
+                {lang === 'ru' ? 'не нужна при силуэте' : 'not needed with silhouette'}
+              </span>
+            )}
             <div style={{ flex: 1 }} />
             <div style={{ display: 'flex', gap: 5 }}>
               <Chip on={turnSource === 'generate'} onClick={() => setTurnSource('generate')}>
@@ -1092,9 +1160,13 @@ export default function MotionControlWizard({
           </div>
         )}
         <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 8, lineHeight: 1.45 }}>
-          {lang === 'ru'
-            ? 'Video-edit: развёртка + отрезок реф-видео. Промпт character-only replacement.'
-            : 'Video-edit with turnaround + trimmed reference clip.'}
+          {useMotionOutline
+            ? (lang === 'ru'
+              ? 'Силуэт + первый кадр: motion swap по контуру. Развёртка не используется.'
+              : 'Silhouette + first frame: motion swap via edge outline. Turnaround skipped.')
+            : (lang === 'ru'
+              ? 'Video-edit: развёртка + цветной фрагмент реф-видео.'
+              : 'Video-edit: turnaround + color reference clip.')}
         </div>
       </div>
     </div>

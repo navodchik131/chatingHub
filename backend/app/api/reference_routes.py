@@ -14,15 +14,14 @@ from app.schemas import CreatorReferenceLikeOut, CreatorReferenceOut, CreatorRef
 from app.services.creator_references.library import (
     create_creator_reference,
     delete_creator_reference,
-    list_creator_references,
+    list_approved_references,
+    list_my_references,
+    resolve_reference_file_for_token,
     toggle_creator_reference_like,
     update_creator_reference_tags,
 )
-from app.services.creator_references.storage import (
-    decode_creator_reference_access_token,
-    resolve_creator_reference_file,
-)
-from app.services.workspace import is_workspace_owner, workspace_owner_id
+from app.services.creator_references.storage import decode_creator_reference_access_token
+from app.services.workspace import is_workspace_owner
 
 router = APIRouter(prefix="/references", tags=["references"])
 
@@ -35,11 +34,28 @@ def _assert_owner(user: User) -> None:
 @router.get("", response_model=list[CreatorReferenceOut])
 async def references_list(
     media_type: str | None = Query(default=None),
+    tag: str | None = Query(default=None),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[CreatorReferenceOut]:
     _assert_owner(user)
-    rows = await list_creator_references(session, viewer=user, media_type=media_type)
+    rows = await list_approved_references(
+        session,
+        viewer=user,
+        media_type=media_type,
+        tag=tag,
+    )
+    return [CreatorReferenceOut.model_validate(r) for r in rows]
+
+
+@router.get("/mine", response_model=list[CreatorReferenceOut])
+async def references_mine(
+    media_type: str | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[CreatorReferenceOut]:
+    _assert_owner(user)
+    rows = await list_my_references(session, viewer=user, media_type=media_type)
     return [CreatorReferenceOut.model_validate(r) for r in rows]
 
 
@@ -111,21 +127,18 @@ async def references_file(
     session: AsyncSession = Depends(get_session),
 ) -> FileResponse:
     try:
-        owner_id, rid = decode_creator_reference_access_token(t)
+        token_owner_id, rid = decode_creator_reference_access_token(t)
     except ValueError:
         raise HTTPException(status_code=401, detail="invalid token") from None
     if rid != reference_id:
         raise HTTPException(status_code=404, detail="not found")
 
     row = await session.scalar(
-        select(CreatorReference).where(
-            CreatorReference.id == reference_id,
-            CreatorReference.user_id == owner_id,
-        )
+        select(CreatorReference).where(CreatorReference.id == reference_id)
     )
     if not row:
         raise HTTPException(status_code=404, detail="reference not found")
-    path = resolve_creator_reference_file(owner_id, row.relative_path)
+    path = resolve_reference_file_for_token(row=row, token_owner_id=token_owner_id)
     if not path:
         raise HTTPException(status_code=404, detail="file not found")
     return FileResponse(path, media_type=row.content_type)

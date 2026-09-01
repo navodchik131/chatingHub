@@ -1290,6 +1290,15 @@ class CreatorReference(Base):
     media_type: Mapped[str] = mapped_column(String(16), default="photo", server_default="photo")
     relative_path: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(64), default="image/jpeg", server_default="image/jpeg")
+    """pending — на модерации; approved — в общей библиотеке; rejected — отклонено."""
+    moderation_status: Mapped[str] = mapped_column(
+        String(16), default="pending", server_default="pending", index=True
+    )
+    moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    moderated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

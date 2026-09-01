@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { resolveWorkspaceUrl, WORKSPACE_URL } from '../marketing/workspaceEntry'
 import { apiFetch, getToken, setToken } from '../api'
 import { AdminCreatorDonationsTab } from './AdminCreatorDonationsTab'
+import { AdminReferencesTab } from './AdminReferencesTab'
 import { AdminTicketsTab } from './AdminTicketsTab'
 import { AdminEmailTab } from './AdminEmailTab'
 import { AdminExifBotTab } from './AdminExifBotTab'
@@ -36,6 +37,7 @@ const TAB_TITLES: Record<AdminTabId, string> = {
   exif_bot: 'exifBotTitle',
   ig_bot: 'igBotTitle',
   creator_donations: 'creatorDonationsTitle',
+  references: 'referencesTitle',
   partners: 'partnersTitle',
   tickets: 'ticketsTitle',
 }
@@ -416,6 +418,7 @@ export function AdminPage() {
         {tab === 'exif_bot' ? <AdminExifBotTab onError={setError} /> : null}
         {tab === 'ig_bot' ? <AdminIgBotTab onError={setError} /> : null}
         {tab === 'creator_donations' ? <AdminCreatorDonationsTab /> : null}
+        {tab === 'references' ? <AdminReferencesTab /> : null}
         {tab === 'partners' ? <AdminPartnerPayoutsTab /> : null}
         {tab === 'tickets' ? (
           <AdminTicketsTab

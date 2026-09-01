@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.analytics_routes import router as analytics_router
 from app.api.admin_creator_donation_routes import router as admin_creator_donation_router
+from app.api.admin_reference_routes import router as admin_reference_router
 from app.api.admin_support_routes import router as admin_support_router
 from app.api.admin_routes import router as admin_router
 from app.api.admin_email_routes import router as admin_email_router
@@ -58,6 +59,7 @@ router.include_router(analytics_router)
 router.include_router(admin_router)
 router.include_router(admin_support_router)
 router.include_router(admin_creator_donation_router)
+router.include_router(admin_reference_router)
 router.include_router(admin_email_router)
 router.include_router(admin_exif_bot_router)
 router.include_router(admin_ig_bot_router)

@@ -1569,3 +1569,111 @@
   background: #d7f452;
   color: #171a05;
 }
+
+.admin-btn--ghost:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.admin-btn--danger {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #f87171;
+}
+
+.admin-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-ref {
+  padding: 18px 22px 28px;
+}
+
+.admin-ref__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.admin-ref__title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.admin-ref__hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-ref__empty {
+  padding: 24px 0;
+  font-size: 13px;
+}
+
+.admin-ref__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.admin-ref-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #101114;
+}
+
+.admin-ref-card__media {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: #0a0b0d;
+}
+
+.admin-ref-card__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: #0a0b0d;
+}
+
+.admin-ref-card__body {
+  padding: 12px;
+}
+
+.admin-ref-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  color: #8b9099;
+  margin-bottom: 8px;
+}
+
+.admin-ref-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.admin-ref-card__tag {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(215, 244, 82, 0.08);
+  color: #d7f452;
+}
+
+.admin-ref-card__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

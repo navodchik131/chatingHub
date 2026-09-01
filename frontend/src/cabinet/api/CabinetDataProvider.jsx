@@ -1215,6 +1215,7 @@ export function CabinetDataProvider({ children }) {
           waveModelId: wave.waveModelId,
           wanTier: wave.wanTier,
           videoFile: uploadFiles['motion-video'],
+          motionVideoFileId: uploadFiles['motion-video'] ? null : motionVideoFileId,
           frameFile,
           existingGenerationId: archiveId,
           description,
@@ -1238,7 +1239,7 @@ export function CabinetDataProvider({ children }) {
         throw e
       }
     },
-    [selectedModelId, selectedAspect, uploadFiles, firstFrameGenId, archiveImages, refreshArchiveFull, me],
+    [selectedModelId, selectedAspect, uploadFiles, firstFrameGenId, motionVideoFileId, archiveImages, refreshArchiveFull, me],
   )
 
   const generateVideo = useCallback(
@@ -1269,8 +1270,8 @@ export function CabinetDataProvider({ children }) {
         setError('Загрузите референс-видео')
         return
       }
-      if (mcWizard && !wizard?.turnaroundGenerationId) {
-        setError('Подготовьте развёртку (сгенерируйте или загрузите фото)')
+      if (mcWizard && !wizard?.turnaroundGenerationId && !(wizard?.useMotionOutline && (wizard?.firstFrameGenerationId || firstFrameGenId))) {
+        setError('Подготовьте развёртку или сгенерируйте первый кадр (режим силуэта)')
         return
       }
       const prompt = (appState.motionPrompt || appState.studioPrompt || '').trim()
@@ -1330,7 +1331,9 @@ export function CabinetDataProvider({ children }) {
           resolution: appState.vidQuality || '1080',
           durationSeconds: (wizard?.durationSeconds ?? Number(appState.vidTime)) || 5,
           motionVideoFileId: motionControl ? motionVideoFileId : null,
-          firstFrameGenerationId: mcWizard ? null : ffGenId,
+          firstFrameGenerationId: mcWizard && wizard?.useMotionOutline
+            ? (wizard?.firstFrameGenerationId || firstFrameGenId)
+            : (mcWizard ? null : ffGenId),
           frameFile: mcWizard ? null : (!ffGenId && frameFile ? frameFile : null),
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId) && !mcWizard,
           promptOnlyMode: promptMode,
@@ -1338,11 +1341,12 @@ export function CabinetDataProvider({ children }) {
           seedanceVariant: appState.vidSeedanceVariant || 'standard',
           videoBackend: isEvolink ? 'evolink' : 'wavespeed',
           motionControlWizard: mcWizard,
-          turnaroundGenerationId: wizard?.turnaroundGenerationId,
+          turnaroundGenerationId: wizard?.useMotionOutline ? null : wizard?.turnaroundGenerationId,
+          outfitGenerationId: wizard?.outfitGenerationId || null,
           trimMode: wizard?.trimMode || 'full',
           trimStartSec: wizard?.trimStartSec,
           trimEndSec: wizard?.trimEndSec,
-          useMotionOutline: wizard?.useMotionOutline !== false,
+          useMotionOutline: Boolean(mcWizard && wizard?.useMotionOutline),
         })
         setArchive((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
       } catch (e) {

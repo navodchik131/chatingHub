@@ -5,6 +5,7 @@ import { Chip, Fade, LimeButton, PageTitle, Panel } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import {
   deleteReference,
+  fetchMyReferences,
   fetchReferences,
   toggleReferenceLike,
   updateReferenceTags,
@@ -27,6 +28,12 @@ const TAG_PRESETS = [
   { key: 'gym', ru: 'зал', en: 'gym' },
   { key: 'lingerie', ru: 'бельё', en: 'lingerie' },
 ];
+
+const STATUS_LABELS = {
+  pending: { ru: 'На модерации', en: 'Pending review', color: '#f5a623' },
+  approved: { ru: 'Одобрено', en: 'Approved', color: color.lime },
+  rejected: { ru: 'Отклонено', en: 'Rejected', color: color.red },
+};
 
 function fmtDate(iso, lang) {
   try {
@@ -71,12 +78,15 @@ function totalLikes(items) {
   return items.reduce((sum, item) => sum + (item.likes_count || 0), 0);
 }
 
-function TagChip({ tag, on, onClick, ru }) {
+function tagLabel(tag, ru) {
   const preset = TAG_PRESETS.find((p) => p.key === tag);
-  const label = preset ? (ru ? preset.ru : preset.en) : tag;
+  return preset ? (ru ? preset.ru : preset.en) : tag;
+}
+
+function TagChip({ tag, on, onClick, ru }) {
   return (
     <Chip on={on} onClick={onClick} style={{ fontSize: 10.5, padding: '4px 10px' }}>
-      {label}
+      {tagLabel(tag, ru)}
     </Chip>
   );
 }
@@ -104,6 +114,24 @@ function MediaThumb({ item, style }) {
   );
 }
 
+function StatusBadge({ status, ru }) {
+  const meta = STATUS_LABELS[status] || STATUS_LABELS.pending;
+  return (
+    <span style={{
+      fontSize: 9.5,
+      fontWeight: 700,
+      padding: '3px 8px',
+      borderRadius: 20,
+      background: `${meta.color}18`,
+      color: meta.color,
+      border: `1px solid ${meta.color}44`,
+    }}
+    >
+      {ru ? meta.ru : meta.en}
+    </span>
+  );
+}
+
 export default function ReferenceLibrary() {
   const { lang, cabinet } = useApp();
   const ru = lang === 'ru';
@@ -111,12 +139,15 @@ export default function ReferenceLibrary() {
   const setErrorRef = useRef(cabinet.setError);
   setErrorRef.current = cabinet.setError;
 
+  const [section, setSection] = useState('library');
   const [filter, setFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState(null);
   const [rows, setRows] = useState([]);
   const [uploadTags, setUploadTags] = useState([]);
   const [customTag, setCustomTag] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState('');
   const [detail, setDetail] = useState(null);
   const [detailIdx, setDetailIdx] = useState(0);
   const [editTags, setEditTags] = useState([]);
@@ -126,16 +157,34 @@ export default function ReferenceLibrary() {
   const reload = useCallback(async () => {
     try {
       const mediaType = filter === 'all' ? null : filter;
-      const data = await fetchReferences(mediaType);
+      const data = section === 'mine'
+        ? await fetchMyReferences(mediaType)
+        : await fetchReferences(mediaType, tagFilter);
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       setErrorRef.current(e?.message || String(e));
     }
-  }, [filter]);
+  }, [filter, section, tagFilter]);
 
   useEffect(() => { void reload(); }, [reload]);
 
   const groups = useMemo(() => groupReferences(rows), [rows]);
+
+  /** Все теги из текущей ленты — для фильтра в общей библиотеке. */
+  const availableTags = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const row of rows) {
+      for (const tag of row.tags || []) {
+        const t = String(tag).trim().toLowerCase();
+        if (t && !seen.has(t)) {
+          seen.add(t);
+          out.push(t);
+        }
+      }
+    }
+    return out.sort((a, b) => tagLabel(a, ru).localeCompare(tagLabel(b, ru)));
+  }, [rows, ru]);
 
   const toggleUploadTag = (key) => {
     setUploadTags((prev) => (prev.includes(key) ? prev.filter((t) => t !== key) : [...prev, key]));
@@ -155,8 +204,15 @@ export default function ReferenceLibrary() {
     const files = [...(fileList || [])].filter(Boolean);
     if (!files.length || uploading) return;
     setUploading(true);
+    setUploadNotice('');
     try {
       await uploadReferenceBatch({ files, tags: uploadTags });
+      setUploadNotice(
+        ru
+          ? 'Файлы отправлены на модерацию. После одобрения они появятся в общей библиотеке.'
+          : 'Files submitted for review. They will appear in the shared library once approved.',
+      );
+      setSection('mine');
       await reload();
     } catch (e) {
       setErrorRef.current(e?.message || String(e));
@@ -179,6 +235,7 @@ export default function ReferenceLibrary() {
 
   const onLike = async (id, e) => {
     e?.stopPropagation?.();
+    if (section !== 'library') return;
     try {
       await toggleReferenceLike(id);
       await reload();
@@ -201,8 +258,11 @@ export default function ReferenceLibrary() {
     setEditCustom('');
   };
 
+  const canEditDetail = detail?.length
+    && detail.every((item) => item.is_mine && item.moderation_status !== 'approved');
+
   const saveTags = async () => {
-    if (!detail?.length || savingTags) return;
+    if (!canEditDetail || savingTags) return;
     setSavingTags(true);
     try {
       await updateReferenceTags(detail[0].id, editTags);
@@ -216,7 +276,7 @@ export default function ReferenceLibrary() {
   };
 
   const deleteGroup = async () => {
-    if (!detail?.length) return;
+    if (!detail?.length || !canEditDetail) return;
     const msg = detail.length > 1
       ? (ru ? `Удалить все ${detail.length} файлов?` : `Delete all ${detail.length} files?`)
       : (ru ? 'Удалить референс?' : 'Delete reference?');
@@ -239,10 +299,19 @@ export default function ReferenceLibrary() {
       <PageTitle style={{ marginBottom: 8 }}>
         {ru ? 'Библиотека референсов' : 'Reference library'}
       </PageTitle>
-      <div style={{ fontSize: 12.5, color: color.textDim, maxWidth: 640, lineHeight: 1.55, marginBottom: 16 }}>
+      <div style={{ fontSize: 12.5, color: color.textDim, maxWidth: 720, lineHeight: 1.55, marginBottom: 16 }}>
         {ru
-          ? 'Загрузите фото или видео — одним файлом или паком. Отметьте теги или добавьте свои.'
-          : 'Upload photos or videos — single file or batch. Pick tags or add your own.'}
+          ? 'Общая библиотека референсов для всех пользователей. Загрузки проходят модерацию перед публикацией.'
+          : 'Shared reference library for all users. Uploads are reviewed before publication.'}
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        <Chip on={section === 'library'} onClick={() => { setSection('library'); setTagFilter(null); }}>
+          {ru ? 'Библиотека' : 'Library'}
+        </Chip>
+        <Chip on={section === 'mine'} onClick={() => setSection('mine')}>
+          {ru ? 'Мои загрузки' : 'My uploads'}
+        </Chip>
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -251,12 +320,31 @@ export default function ReferenceLibrary() {
         <Chip on={filter === 'video'} onClick={() => setFilter('video')}>{ru ? 'Видео' : 'Videos'}</Chip>
       </div>
 
+      {section === 'library' && !!availableTags.length && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontFamily: font.mono, letterSpacing: 1.1, color: color.textGhost, marginBottom: 8 }}>
+            {ru ? 'ФИЛЬТР ПО ТЕГАМ' : 'FILTER BY TAG'}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <Chip on={!tagFilter} onClick={() => setTagFilter(null)}>{ru ? 'Все теги' : 'All tags'}</Chip>
+            {availableTags.map((tag) => (
+              <TagChip
+                key={tag}
+                tag={tag}
+                ru={ru}
+                on={tagFilter === tag}
+                onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Зона загрузки */}
       <Panel
         style={{
           padding: 18,
           marginBottom: 18,
-          maxWidth: 720,
           borderStyle: dragOver ? 'solid' : 'dashed',
           borderColor: dragOver ? 'rgba(215,244,82,.55)' : line.hair,
           background: dragOver ? 'rgba(215,244,82,.04)' : color.bgPanel,
@@ -310,10 +398,7 @@ export default function ReferenceLibrary() {
         {!!uploadTags.length && (
           <div style={{ fontSize: 11, color: color.textDim, marginBottom: 12 }}>
             {ru ? 'К загрузке:' : 'For upload:'}{' '}
-            {uploadTags.map((t) => {
-              const p = TAG_PRESETS.find((x) => x.key === t);
-              return p ? (ru ? p.ru : p.en) : t;
-            }).join(', ')}
+            {uploadTags.map((t) => tagLabel(t, ru)).join(', ')}
           </div>
         )}
         <LimeButton disabled={uploading} onClick={() => uploadRef.current?.click()}>
@@ -323,8 +408,15 @@ export default function ReferenceLibrary() {
             : (ru ? 'Выбрать файлы' : 'Choose files')}
         </LimeButton>
         <div style={{ fontSize: 11, color: color.textGhost, marginTop: 10 }}>
-          {ru ? 'Можно перетащить сюда несколько файлов' : 'Drag and drop multiple files here'}
+          {ru
+            ? 'Можно перетащить сюда несколько файлов. Материал уходит на модерацию.'
+            : 'Drag and drop multiple files here. Uploads go to moderation.'}
         </div>
+        {!!uploadNotice && (
+          <div style={{ fontSize: 11.5, color: color.lime, marginTop: 10, lineHeight: 1.5 }}>
+            {uploadNotice}
+          </div>
+        )}
         <input
           ref={uploadRef}
           type="file"
@@ -335,24 +427,25 @@ export default function ReferenceLibrary() {
         />
       </Panel>
 
-      {/* Вертикальная лента карточек */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 720 }}>
+      {/* Сетка карточек — компактнее, как в архиве */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 10 }}>
         {groups.map((items) => {
           const tags = mergedTags(items);
           const primary = items[items.length - 1];
           const isBatch = items.length > 1;
+          const status = primary.moderation_status;
           return (
             <Panel
               key={items.map((i) => i.id).join('-')}
               style={{ padding: 0, overflow: 'hidden', cursor: 'pointer' }}
               onClick={() => openDetail(items)}
             >
-              <div style={{ display: 'flex', gap: 0, minHeight: isBatch ? 140 : 200 }}>
+              <div style={{ position: 'relative', aspectRatio: '3/4', background: G[primary.id % G.length] }}>
                 {isBatch ? (
-                  <div style={{ display: 'flex', flex: 1, gap: 2, background: color.bgDeep }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', width: '100%', height: '100%', gap: 1 }}>
                     {items.slice(0, 4).map((item, idx) => (
-                      <div key={item.id} style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                        <MediaThumb item={item} style={{ display: 'block', height: 140 }} />
+                      <div key={item.id} style={{ position: 'relative', minWidth: 0, minHeight: 0 }}>
+                        <MediaThumb item={item} style={{ display: 'block', width: '100%', height: '100%' }} />
                         {idx === 3 && items.length > 4 && (
                           <div style={{
                             position: 'absolute',
@@ -362,7 +455,7 @@ export default function ReferenceLibrary() {
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 800,
-                            fontSize: 18,
+                            fontSize: 14,
                           }}
                           >
                             +{items.length - 4}
@@ -372,72 +465,97 @@ export default function ReferenceLibrary() {
                     ))}
                   </div>
                 ) : (
-                  <div style={{ width: '100%', maxHeight: 320, background: G[primary.id % G.length] }}>
-                    <MediaThumb item={primary} style={{ display: 'block', width: '100%', maxHeight: 320 }} />
+                  <MediaThumb item={primary} style={{ display: 'block', width: '100%', height: '100%' }} />
+                )}
+                {primary.media_type === 'video' && (
+                  <span style={{
+                    position: 'absolute',
+                    top: 8,
+                    left: 8,
+                    fontSize: 9,
+                    fontWeight: 800,
+                    padding: '2px 6px',
+                    borderRadius: 6,
+                    background: 'rgba(6,7,9,.72)',
+                    color: color.lime,
+                  }}
+                  >
+                    VIDEO
+                  </span>
+                )}
+                {section === 'mine' && (
+                  <div style={{ position: 'absolute', top: 8, right: 8 }}>
+                    <StatusBadge status={status} ru={ru} />
                   </div>
                 )}
               </div>
-              <div style={{ padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: tags.length ? 8 : 0 }}>
-                  <span style={{ fontFamily: font.mono, fontSize: 9.5, color: color.textGhost }}>
+              <div style={{ padding: '8px 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: tags.length ? 6 : 0 }}>
+                  <span style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost }}>
                     {fmtDate(primary.created_at, lang)}
                   </span>
                   {isBatch && (
-                    <span style={{ fontSize: 10.5, color: color.textDim }}>
-                      {items.length} {ru ? 'файлов' : 'files'}
+                    <span style={{ fontSize: 9.5, color: color.textDim }}>
+                      {items.length} {ru ? 'ф.' : 'files'}
                     </span>
-                  )}
-                  {!isBatch && primary.media_type === 'video' && (
-                    <span style={{ fontSize: 10, color: color.lime, fontWeight: 700 }}>VIDEO</span>
                   )}
                 </div>
                 {!!tags.length && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {tags.slice(0, 8).map((tag) => (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {tags.slice(0, 3).map((tag) => (
                       <span
                         key={tag}
                         style={{
-                          fontSize: 10,
-                          padding: '3px 8px',
+                          fontSize: 9,
+                          padding: '2px 6px',
                           borderRadius: 20,
                           background: 'rgba(215,244,82,.08)',
                           color: color.lime,
                           border: `1px solid rgba(215,244,82,.2)`,
                         }}
                       >
-                        {TAG_PRESETS.find((p) => p.key === tag)?.[ru ? 'ru' : 'en'] || tag}
+                        {tagLabel(tag, ru)}
                       </span>
                     ))}
-                    {tags.length > 8 && (
-                      <span style={{ fontSize: 10, color: color.textGhost }}>+{tags.length - 8}</span>
+                    {tags.length > 3 && (
+                      <span style={{ fontSize: 9, color: color.textGhost }}>+{tags.length - 3}</span>
                     )}
                   </div>
                 )}
-                <Hoverable
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    marginTop: 10,
-                    fontSize: 11,
-                    color: items.some((i) => i.liked_by_me) ? color.lime : color.textGhost,
-                    cursor: 'pointer',
-                  }}
-                  onClick={(e) => void onLike(primary.id, e)}
-                >
-                  <span style={{ display: 'flex', width: 14, height: 14 }}><IcoHeart /></span>
-                  {totalLikes(items)}
-                </Hoverable>
+                {section === 'library' && (
+                  <Hoverable
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 6,
+                      fontSize: 10,
+                      color: items.some((i) => i.liked_by_me) ? color.lime : color.textGhost,
+                      cursor: 'pointer',
+                    }}
+                    onClick={(e) => void onLike(primary.id, e)}
+                  >
+                    <span style={{ display: 'flex', width: 12, height: 12 }}><IcoHeart /></span>
+                    {totalLikes(items)}
+                  </Hoverable>
+                )}
+                {status === 'rejected' && primary.admin_notes && section === 'mine' && (
+                  <div style={{ fontSize: 9.5, color: color.red, marginTop: 6, lineHeight: 1.4 }}>
+                    {primary.admin_notes}
+                  </div>
+                )}
               </div>
             </Panel>
           );
         })}
-        {!groups.length && (
-          <div style={{ fontSize: 12, color: color.textDim, padding: '8px 0' }}>
-            {ru ? 'Пока нет референсов — загрузите первый файл' : 'No references yet — upload your first file'}
-          </div>
-        )}
       </div>
+      {!groups.length && (
+        <div style={{ fontSize: 12, color: color.textDim, padding: '12px 0' }}>
+          {section === 'mine'
+            ? (ru ? 'У вас пока нет загрузок' : 'You have no uploads yet')
+            : (ru ? 'В библиотеке пока нет одобренных референсов' : 'No approved references in the library yet')}
+        </div>
+      )}
 
       {/* Просмотр и редактирование тегов */}
       {detail?.length > 0 && activeItem && (
@@ -458,6 +576,16 @@ export default function ReferenceLibrary() {
             style={{ width: 'min(92vw,560px)', padding: 18, maxHeight: '92vh', overflow: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           >
+            {section === 'mine' && (
+              <div style={{ marginBottom: 10 }}>
+                <StatusBadge status={activeItem.moderation_status} ru={ru} />
+                {activeItem.moderation_status === 'rejected' && activeItem.admin_notes && (
+                  <div style={{ fontSize: 12, color: color.red, marginTop: 8, lineHeight: 1.5 }}>
+                    {activeItem.admin_notes}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ position: 'relative', marginBottom: 14, borderRadius: 12, overflow: 'hidden', background: color.bgDeep }}>
               {activeItem.media_type === 'video' ? (
                 <video
@@ -533,62 +661,92 @@ export default function ReferenceLibrary() {
               )}
             </div>
 
-            <div style={{ fontSize: 11, fontFamily: font.mono, letterSpacing: 1.1, color: color.textGhost, marginBottom: 8 }}>
-              {ru ? 'ТЕГИ' : 'TAGS'}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-              {TAG_PRESETS.map((p) => (
-                <TagChip
-                  key={p.key}
-                  tag={p.key}
-                  ru={ru}
-                  on={editTags.includes(p.key)}
-                  onClick={() => toggleEditTag(p.key)}
-                />
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-              <input
-                value={editCustom}
-                onChange={(e) => setEditCustom(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') addCustomEditTag(); }}
-                placeholder={ru ? 'Свой тег…' : 'Custom tag…'}
-                style={{
-                  flex: '1 1 160px',
-                  minWidth: 140,
-                  background: color.bgDeep,
-                  border: `1px solid ${line.hair}`,
-                  borderRadius: 10,
-                  padding: '8px 12px',
-                  color: color.text,
-                  fontSize: 12.5,
-                }}
-              />
-              <Hoverable
-                style={{ fontSize: 12, color: color.lime, fontWeight: 700, cursor: 'pointer', alignSelf: 'center' }}
-                onClick={addCustomEditTag}
-              >
-                {ru ? '+ тег' : '+ tag'}
-              </Hoverable>
-            </div>
+            {canEditDetail ? (
+              <>
+                <div style={{ fontSize: 11, fontFamily: font.mono, letterSpacing: 1.1, color: color.textGhost, marginBottom: 8 }}>
+                  {ru ? 'ТЕГИ' : 'TAGS'}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {TAG_PRESETS.map((p) => (
+                    <TagChip
+                      key={p.key}
+                      tag={p.key}
+                      ru={ru}
+                      on={editTags.includes(p.key)}
+                      onClick={() => toggleEditTag(p.key)}
+                    />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                  <input
+                    value={editCustom}
+                    onChange={(e) => setEditCustom(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') addCustomEditTag(); }}
+                    placeholder={ru ? 'Свой тег…' : 'Custom tag…'}
+                    style={{
+                      flex: '1 1 160px',
+                      minWidth: 140,
+                      background: color.bgDeep,
+                      border: `1px solid ${line.hair}`,
+                      borderRadius: 10,
+                      padding: '8px 12px',
+                      color: color.text,
+                      fontSize: 12.5,
+                    }}
+                  />
+                  <Hoverable
+                    style={{ fontSize: 12, color: color.lime, fontWeight: 700, cursor: 'pointer', alignSelf: 'center' }}
+                    onClick={addCustomEditTag}
+                  >
+                    {ru ? '+ тег' : '+ tag'}
+                  </Hoverable>
+                </div>
+              </>
+            ) : (
+              !!mergedTags(detail).length && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {mergedTags(detail).map((tag) => (
+                    <span
+                      key={tag}
+                      style={{
+                        fontSize: 10.5,
+                        padding: '4px 10px',
+                        borderRadius: 20,
+                        background: 'rgba(215,244,82,.08)',
+                        color: color.lime,
+                        border: `1px solid rgba(215,244,82,.2)`,
+                      }}
+                    >
+                      {tagLabel(tag, ru)}
+                    </span>
+                  ))}
+                </div>
+              )
+            )}
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <LimeButton disabled={savingTags} onClick={() => void saveTags()}>
-                {savingTags ? (ru ? 'Сохранение…' : 'Saving…') : (ru ? 'Сохранить теги' : 'Save tags')}
-              </LimeButton>
-              <Hoverable
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: activeItem.liked_by_me ? color.lime : color.textDim }}
-                onClick={() => void onLike(activeItem.id)}
-              >
-                <span style={{ display: 'flex', width: 14, height: 14, flexShrink: 0 }}><IcoHeart /></span>
-                {activeItem.likes_count || 0}
-              </Hoverable>
-              <Hoverable
-                style={{ marginLeft: 'auto', color: color.red, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-                onClick={() => void deleteGroup()}
-              >
-                {detail.length > 1 ? (ru ? 'Удалить пак' : 'Delete pack') : (ru ? 'Удалить' : 'Delete')}
-              </Hoverable>
+              {canEditDetail && (
+                <LimeButton disabled={savingTags} onClick={() => void saveTags()}>
+                  {savingTags ? (ru ? 'Сохранение…' : 'Saving…') : (ru ? 'Сохранить теги' : 'Save tags')}
+                </LimeButton>
+              )}
+              {section === 'library' && (
+                <Hoverable
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: activeItem.liked_by_me ? color.lime : color.textDim }}
+                  onClick={() => void onLike(activeItem.id)}
+                >
+                  <span style={{ display: 'flex', width: 14, height: 14, flexShrink: 0 }}><IcoHeart /></span>
+                  {activeItem.likes_count || 0}
+                </Hoverable>
+              )}
+              {canEditDetail && (
+                <Hoverable
+                  style={{ marginLeft: 'auto', color: color.red, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                  onClick={() => void deleteGroup()}
+                >
+                  {detail.length > 1 ? (ru ? 'Удалить пак' : 'Delete pack') : (ru ? 'Удалить' : 'Delete')}
+                </Hoverable>
+              )}
             </div>
           </Panel>
         </div>

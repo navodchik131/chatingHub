@@ -6670,6 +6670,7 @@ async def api_studio_motion_first_frame(
     lock_model_hairstyle: str = Form("1"),
     use_still_as_final: str = Form("0"),
     exif_camera: str = Form("main"),
+    motion_video_file_id: str = Form(""),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionFirstFrameOut | JSONResponse:
@@ -6716,7 +6717,9 @@ async def api_studio_motion_first_frame(
                 mimetypes.guess_type(first_frame_image.filename or "")[0] or "image/jpeg"
             )
 
-    if not (existing_generation_id or "").strip() and not video_bytes and not still_bytes:
+    if not (existing_generation_id or "").strip() and not video_bytes and not still_bytes and not str(
+        motion_video_file_id or ""
+    ).strip():
         raise HTTPException(
             status_code=400,
             detail="Загрузите референс-видео, файл первого кадра или выберите снимок из архива.",
@@ -6734,6 +6737,7 @@ async def api_studio_motion_first_frame(
         "lock_model_hairstyle": lock_model_hairstyle,
         "use_still_as_final": use_still_as_final,
         "exif_camera": normalize_exif_camera(exif_camera),
+        "motion_video_file_id": str(motion_video_file_id or "").strip(),
     }
     job = await studio_jobs.create_studio_job(
         session,
@@ -8389,9 +8393,14 @@ async def _studio_job_execute_motion_render_video(
 
     motion_control_wizard = _truthy_wavespeed_flag(str(params.get("motion_control_wizard") or ""))
     turnaround_gid_raw = str(params.get("turnaround_generation_id") or "").strip()
+    use_outline_wizard = motion_control_wizard and motion_outline_requested(params)
+    ff_gid_raw = str(params.get("first_frame_generation_id") or "").strip()
     if not prompt.strip() and not workflow_source:
         if not (_truthy_wavespeed_flag(auto_motion_prompt) and mv_id):
-            if not (motion_control_wizard and mv_id and turnaround_gid_raw):
+            wizard_ready = motion_control_wizard and mv_id and (
+                turnaround_gid_raw or (use_outline_wizard and ff_gid_raw)
+            )
+            if not wizard_ready:
                 raise RuntimeError("Опишите сцену и движение для видео.")
 
     sub_b, llm_row, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
@@ -8422,7 +8431,11 @@ async def _studio_job_execute_motion_render_video(
     skip_model_ref_check = (
         video_provider == "seedance_i2v"
         or prompt_only_mode
-        or (motion_control_wizard and bool(turnaround_gid_raw))
+        or (
+            motion_control_wizard
+            and bool(turnaround_gid_raw)
+            and not (use_outline_wizard and ff_gid_raw)
+        )
     )
     if video_provider != "grok_imagine_i2v" and not skip_model_ref_check:
         if mv_id and send_video_reference:
@@ -8742,7 +8755,12 @@ async def _studio_job_execute_motion_render_video(
         # Swap по референс-видео: Seedance T2V + reference_videos (standard → fast API, mini → mini T2V)
         use_boardstory_video_edit = False
 
-        if motion_control_wizard and turnaround_gid_raw and motion_vid_url:
+        if (
+            motion_control_wizard
+            and turnaround_gid_raw
+            and motion_vid_url
+            and not (use_outline_wizard and ff_url)
+        ):
             from app.services.studio_motion_control import MOTION_CONTROL_VIDEO_EDIT_PROMPT
 
             try:

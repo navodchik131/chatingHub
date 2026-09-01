@@ -94,9 +94,16 @@ async def execute_evolink_motion_render_video(
     prompt_only_mode = _truthy_flag(str(params.get("prompt_only_mode") or ""))
     motion_control_wizard = _truthy_flag(str(params.get("motion_control_wizard") or ""))
     turnaround_gid_raw = str(params.get("turnaround_generation_id") or "").strip()
+    from app.services.studio_motion_video import motion_outline_requested
+
+    use_outline_wizard = motion_control_wizard and motion_outline_requested(params)
+    ff_gid_raw = str(params.get("first_frame_generation_id") or "").strip()
 
     if not prompt.strip() and not (_truthy_flag(auto_motion_prompt) and mv_id):
-        if not (motion_control_wizard and mv_id and turnaround_gid_raw):
+        wizard_ready = motion_control_wizard and mv_id and (
+            turnaround_gid_raw or (use_outline_wizard and ff_gid_raw)
+        )
+        if not wizard_ready:
             raise RuntimeError("Опишите сцену и движение для видео.")
 
     sub_b, _llm, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
@@ -284,7 +291,12 @@ async def execute_evolink_motion_render_video(
     prompt_source = "template"
     ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
 
-    if motion_control_wizard and turnaround_gid_raw and motion_vid_url:
+    if (
+        motion_control_wizard
+        and turnaround_gid_raw
+        and motion_vid_url
+        and not (use_outline_wizard and ff_url)
+    ):
         from app.services.studio_motion_control import MOTION_CONTROL_VIDEO_EDIT_PROMPT
 
         try:

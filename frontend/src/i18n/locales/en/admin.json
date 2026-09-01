@@ -24,6 +24,7 @@
     "exifBotTitle": "EXIF bot",
     "igBotTitle": "IG bot",
     "creatorDonationsTitle": "Creator donations",
+    "referencesTitle": "References",
     "partnersTitle": "Partners · payouts",
     "ticketsTitle": "Support tickets"
   },
@@ -35,6 +36,7 @@
     "exifBot": "EXIF bot",
     "igBot": "IG bot",
     "creatorDonations": "Creator donations",
+    "references": "References",
     "partners": "Partners",
     "tickets": "Support"
   },
@@ -506,6 +508,18 @@
       "markPaid": "Mark paid",
       "reject": "Reject",
       "rejectNotes": "Rejection reason (optional):"
+    }
+  },
+  "references": {
+    "title": "Reference moderation",
+    "hint": "Approved items appear in the shared library for all users.",
+    "empty": "No items pending review.",
+    "user": "User",
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectNotesPrompt": "Rejection reason (optional):",
+    "errors": {
+      "actionFailed": "Action failed."
     }
   }
 }

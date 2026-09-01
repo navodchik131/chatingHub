@@ -1131,6 +1131,33 @@ def _migrate_creator_references(sync_conn) -> None:
                     "ON creator_references(upload_batch_id)"
                 )
             )
+        if "moderation_status" not in cols:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE creator_references ADD COLUMN moderation_status VARCHAR(16) "
+                    "NOT NULL DEFAULT 'pending'"
+                )
+            )
+            sync_conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_creator_references_moderation_status "
+                    "ON creator_references(moderation_status)"
+                )
+            )
+            # Старые записи сразу в общей библиотеке — иначе пропадут из UI.
+            sync_conn.execute(
+                text("UPDATE creator_references SET moderation_status = 'approved'")
+            )
+        if "moderated_at" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE creator_references ADD COLUMN moderated_at DATETIME")
+            )
+        if "moderated_by_id" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE creator_references ADD COLUMN moderated_by_id INTEGER")
+            )
+        if "admin_notes" not in cols:
+            sync_conn.execute(text("ALTER TABLE creator_references ADD COLUMN admin_notes TEXT"))
 
 
 def _migrate_platform_news(sync_conn) -> None:

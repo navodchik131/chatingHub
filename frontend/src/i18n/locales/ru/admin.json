@@ -24,6 +24,7 @@
     "exifBotTitle": "EXIF-бот",
     "igBotTitle": "IG-бот",
     "creatorDonationsTitle": "Донаты креаторов",
+    "referencesTitle": "Референсы",
     "partnersTitle": "Партнёры · выплаты",
     "ticketsTitle": "Обращения в поддержку"
   },
@@ -35,6 +36,7 @@
     "exifBot": "EXIF-бот",
     "igBot": "IG-бот",
     "creatorDonations": "Донаты креаторов",
+    "references": "Референсы",
     "partners": "Партнёры",
     "tickets": "Поддержка"
   },
@@ -506,6 +508,18 @@
       "markPaid": "Выплачено",
       "reject": "Отклонить",
       "rejectNotes": "Причина отклонения (необязательно):"
+    }
+  },
+  "references": {
+    "title": "Модерация референсов",
+    "hint": "Одобренные материалы попадают в общую библиотеку для всех пользователей.",
+    "empty": "Нет материалов на модерации.",
+    "user": "Пользователь",
+    "approve": "Одобрить",
+    "reject": "Отклонить",
+    "rejectNotesPrompt": "Причина отклонения (необязательно):",
+    "errors": {
+      "actionFailed": "Не удалось выполнить действие."
     }
   }
 }

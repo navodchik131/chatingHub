@@ -529,6 +529,7 @@ export async function runMotionFirstFrame(params) {
   if (params.waveModelId) fd.append('workflow_wave_model', params.waveModelId)
   if (params.wanTier) fd.append('wan_edit_tier', params.wanTier)
   if (params.videoFile) fd.append('video', params.videoFile)
+  if (params.motionVideoFileId) fd.append('motion_video_file_id', String(params.motionVideoFileId))
   if (params.frameFile) fd.append('first_frame_image', params.frameFile)
   if (params.existingGenerationId) fd.append('existing_generation_id', String(params.existingGenerationId))
   if (params.description) fd.append('description', params.description)
@@ -571,6 +572,9 @@ export async function runMotionVideo(params) {
   if (params.useMotionOutline) fd.append('use_motion_outline', '1')
   if (params.turnaroundGenerationId) {
     fd.append('turnaround_generation_id', String(params.turnaroundGenerationId))
+  }
+  if (params.outfitGenerationId) {
+    fd.append('outfit_generation_id', String(params.outfitGenerationId))
   }
   if (params.trimMode) fd.append('trim_mode', String(params.trimMode))
   if (params.trimStartSec != null) fd.append('trim_start_sec', String(params.trimStartSec))
@@ -1213,9 +1217,17 @@ export async function searchCompanionMedia(body) {
 }
 
 /** ── Библиотека референсов ── */
-export async function fetchReferences(mediaType = null) {
-  const qs = mediaType ? `?media_type=${mediaType}` : ''
+export async function fetchReferences(mediaType = null, tag = null) {
+  const params = new URLSearchParams()
+  if (mediaType) params.set('media_type', mediaType)
+  if (tag) params.set('tag', tag)
+  const qs = params.toString() ? `?${params.toString()}` : ''
   return apiJson(`/api/references${qs}`)
+}
+
+export async function fetchMyReferences(mediaType = null) {
+  const qs = mediaType ? `?media_type=${mediaType}` : ''
+  return apiJson(`/api/references/mine${qs}`)
 }
 
 export async function uploadReference({ file, tags, uploadBatchId }) {

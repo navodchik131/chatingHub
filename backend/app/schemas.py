@@ -2010,6 +2010,10 @@ class CreatorReferenceOut(BaseModel):
     likes_count: int = 0
     liked_by_me: bool = False
     preview_url: str
+    moderation_status: str = "pending"
+    is_mine: bool = False
+    user_id: int
+    admin_notes: str | None = None
     created_at: datetime
 
 
@@ -2020,6 +2024,23 @@ class CreatorReferencePatchIn(BaseModel):
 class CreatorReferenceLikeOut(BaseModel):
     liked: bool
     likes_count: int
+
+
+class AdminCreatorReferenceOut(BaseModel):
+    id: int
+    user_id: int
+    title: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    upload_batch_id: str | None = None
+    media_type: str
+    moderation_status: str
+    admin_notes: str | None = None
+    preview_url: str
+    created_at: datetime
+
+
+class AdminCreatorReferenceRejectIn(BaseModel):
+    admin_notes: str | None = None
 
 
 class PlatformNewsOut(BaseModel):
