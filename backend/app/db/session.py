@@ -1111,6 +1111,9 @@ def _migrate_creator_references(sync_conn) -> None:
 
     from app.db.models import CreatorReference, CreatorReferenceLike
 
+    dialect = sync_conn.dialect.name
+    moderated_at_type = "DATETIME" if dialect == "sqlite" else "TIMESTAMPTZ"
+
     insp = inspect(sync_conn)
     if not insp.has_table("creator_references"):
         CreatorReference.__table__.create(sync_conn, checkfirst=True)
@@ -1150,7 +1153,9 @@ def _migrate_creator_references(sync_conn) -> None:
             )
         if "moderated_at" not in cols:
             sync_conn.execute(
-                text("ALTER TABLE creator_references ADD COLUMN moderated_at DATETIME")
+                text(
+                    f"ALTER TABLE creator_references ADD COLUMN moderated_at {moderated_at_type}"
+                )
             )
         if "moderated_by_id" not in cols:
             sync_conn.execute(
