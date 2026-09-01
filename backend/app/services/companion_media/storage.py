@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import shutil
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.config import BACKEND_DIR
+from jose import JWTError, jwt
+
+from app.config import BACKEND_DIR, settings
 
 MEDIA_ROOT = (BACKEND_DIR / "data" / "companion_media").resolve()
 _STORAGE_PREFIX = "data/companion_media/"
@@ -125,3 +128,35 @@ def delete_companion_media_file(storage_path: str | None) -> None:
     path = (BACKEND_DIR / rel).resolve()
     if path.is_file() and str(path).startswith(str(MEDIA_ROOT)):
         path.unlink(missing_ok=True)
+
+
+def create_companion_media_access_token(
+    *, user_id: int, asset_id: int, days: int = 30
+) -> str:
+    """JWT для <img src> без Bearer — как у studio/chat media."""
+    expire = datetime.now(timezone.utc) + timedelta(days=days)
+    payload = {
+        "typ": "companion_media",
+        "uid": user_id,
+        "aid": asset_id,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_companion_media_access_token(token: str) -> tuple[int, int]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "companion_media":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    aid = data.get("aid")
+    if uid is None or aid is None:
+        raise ValueError("missing claims")
+    return int(uid), int(aid)

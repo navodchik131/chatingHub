@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.db.models import User
+from app.db.models import CompanionMediaAsset, User
 from app.db.session import get_session
 from app.schemas import (
     CompanionMediaAssetFromGenerationIn,
@@ -33,8 +34,11 @@ from app.services.companion_media.library import (
     update_media_pack,
 )
 from app.services.companion_media.search import pick_companion_media
-from app.services.companion_media.storage import resolve_companion_media_file
-from app.services.workspace import is_workspace_owner
+from app.services.companion_media.storage import (
+    decode_companion_media_access_token,
+    resolve_companion_media_file,
+)
+from app.services.workspace import is_workspace_owner, workspace_owner_id
 
 router = APIRouter(prefix="/companion-media", tags=["companion-media"])
 
@@ -63,6 +67,7 @@ async def companion_media_packs_create(
 ) -> CompanionMediaPackOut:
     _assert_owner(user)
     row = await create_media_pack(session, viewer=user, data=body.model_dump())
+    await session.commit()
     return CompanionMediaPackOut.model_validate(row)
 
 
@@ -80,6 +85,7 @@ async def companion_media_packs_patch(
         pack_id=pack_id,
         data=body.model_dump(exclude_unset=True),
     )
+    await session.commit()
     return CompanionMediaPackOut.model_validate(row)
 
 
@@ -91,6 +97,7 @@ async def companion_media_packs_delete(
 ) -> None:
     _assert_owner(user)
     await delete_media_pack(session, viewer=user, pack_id=pack_id)
+    await session.commit()
 
 
 @router.get("/assets", response_model=list[CompanionMediaAssetOut])
@@ -146,6 +153,7 @@ async def companion_media_assets_upload(
             "sort_order": sort_order,
         },
     )
+    await session.commit()
     return CompanionMediaAssetOut.model_validate(row)
 
 
@@ -163,6 +171,7 @@ async def companion_media_assets_from_generation(
         studio_generation_id=body.studio_generation_id,
         data=body.model_dump(exclude={"studio_model_id", "studio_generation_id"}),
     )
+    await session.commit()
     return CompanionMediaAssetOut.model_validate(row)
 
 
@@ -180,6 +189,7 @@ async def companion_media_assets_patch(
         asset_id=asset_id,
         data=body.model_dump(exclude_unset=True),
     )
+    await session.commit()
     return CompanionMediaAssetOut.model_validate(row)
 
 
@@ -191,18 +201,31 @@ async def companion_media_assets_delete(
 ) -> None:
     _assert_owner(user)
     await delete_media_asset(session, viewer=user, asset_id=asset_id)
+    await session.commit()
 
 
 @router.get("/assets/{asset_id}/file")
 async def companion_media_asset_file(
     asset_id: int,
-    user: User = Depends(get_current_user),
+    t: str = Query(..., min_length=10),
     session: AsyncSession = Depends(get_session),
 ) -> FileResponse:
-    _assert_owner(user)
-    from app.services.companion_media.library import get_media_asset_owned
+    """Публичная раздача по JWT-токену (для <img src> без Bearer)."""
+    try:
+        owner_id, aid = decode_companion_media_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="invalid token") from None
+    if aid != asset_id:
+        raise HTTPException(status_code=404, detail="not found")
 
-    row = await get_media_asset_owned(session, viewer=user, asset_id=asset_id)
+    row = await session.scalar(
+        select(CompanionMediaAsset).where(
+            CompanionMediaAsset.id == asset_id,
+            CompanionMediaAsset.user_id == owner_id,
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
     path = resolve_companion_media_file(owner_id, row.relative_path)
     if not path:
         raise HTTPException(status_code=404, detail="file not found")
@@ -219,6 +242,7 @@ async def companion_media_reindex(
     stats = await reindex_media_embeddings(
         session, viewer=user, studio_model_id=studio_model_id
     )
+    await session.commit()
     return CompanionMediaReindexOut.model_validate(stats)
 
 

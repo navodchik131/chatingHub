@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from app.config import BACKEND_DIR
+from jose import JWTError, jwt
+
+from app.config import BACKEND_DIR, settings
 from app.services.companion_media.storage import (
     _IMAGE_EXT,
     _MAX_BYTES,
@@ -71,3 +74,34 @@ def delete_creator_reference_file(storage_path: str | None) -> None:
     path = (BACKEND_DIR / rel).resolve()
     if path.is_file() and str(path).startswith(str(REF_ROOT)):
         path.unlink(missing_ok=True)
+
+
+def create_creator_reference_access_token(
+    *, user_id: int, reference_id: int, days: int = 30
+) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=days)
+    payload = {
+        "typ": "creator_reference",
+        "uid": user_id,
+        "rid": reference_id,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_creator_reference_access_token(token: str) -> tuple[int, int]:
+    try:
+        data = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+    except JWTError as e:
+        raise ValueError("invalid token") from e
+    if data.get("typ") != "creator_reference":
+        raise ValueError("wrong token type")
+    uid = data.get("uid")
+    rid = data.get("rid")
+    if uid is None or rid is None:
+        raise ValueError("missing claims")
+    return int(uid), int(rid)

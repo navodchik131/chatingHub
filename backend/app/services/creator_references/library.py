@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import CreatorReference, CreatorReferenceLike, User
 from app.services.creator_references.storage import (
+    create_creator_reference_access_token,
     delete_creator_reference_file,
     resolve_creator_reference_file,
     save_creator_reference_file,
@@ -17,7 +18,11 @@ from app.services.creator_references.storage import (
 from app.services.workspace import workspace_owner_id
 
 
-def reference_to_dict(row: CreatorReference, *, likes: int = 0, liked: bool = False) -> dict[str, Any]:
+def reference_to_dict(row: CreatorReference, *, likes: int = 0, liked: bool = False, owner_id: int | None = None) -> dict[str, Any]:
+    preview_url = f"/api/references/{row.id}/file"
+    if owner_id is not None:
+        tok = create_creator_reference_access_token(user_id=owner_id, reference_id=row.id)
+        preview_url = f"{preview_url}?t={tok}"
     return {
         "id": row.id,
         "title": row.title,
@@ -26,7 +31,7 @@ def reference_to_dict(row: CreatorReference, *, likes: int = 0, liked: bool = Fa
         "content_type": row.content_type,
         "likes_count": likes,
         "liked_by_me": liked,
-        "preview_url": f"/api/references/{row.id}/file",
+        "preview_url": preview_url,
         "created_at": row.created_at,
     }
 
@@ -70,7 +75,7 @@ async def list_creator_references(
     likes = await _like_counts(session, ids)
     liked = await _liked_ids(session, viewer.id, ids)
     return [
-        reference_to_dict(r, likes=likes.get(r.id, 0), liked=r.id in liked)
+        reference_to_dict(r, likes=likes.get(r.id, 0), liked=r.id in liked, owner_id=owner_id)
         for r in rows
     ]
 
@@ -102,7 +107,7 @@ async def create_creator_reference(
     )
     session.add(row)
     await session.flush()
-    return reference_to_dict(row, likes=0, liked=False)
+    return reference_to_dict(row, likes=0, liked=False, owner_id=owner_id)
 
 
 async def delete_creator_reference(

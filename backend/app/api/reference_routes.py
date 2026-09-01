@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
-from app.db.models import User
+from app.db.models import CreatorReference, User
 from app.db.session import get_session
 from app.schemas import CreatorReferenceLikeOut, CreatorReferenceOut
 from app.services.creator_references.library import (
@@ -16,7 +17,10 @@ from app.services.creator_references.library import (
     list_creator_references,
     toggle_creator_reference_like,
 )
-from app.services.creator_references.storage import resolve_creator_reference_file
+from app.services.creator_references.storage import (
+    decode_creator_reference_access_token,
+    resolve_creator_reference_file,
+)
 from app.services.workspace import is_workspace_owner, workspace_owner_id
 
 router = APIRouter(prefix="/references", tags=["references"])
@@ -57,6 +61,7 @@ async def references_create(
         title=title,
         description=description,
     )
+    await session.commit()
     return CreatorReferenceOut.model_validate(row)
 
 
@@ -68,20 +73,22 @@ async def references_delete(
 ) -> None:
     _assert_owner(user)
     await delete_creator_reference(session, viewer=user, reference_id=reference_id)
+    await session.commit()
 
 
 @router.get("/{reference_id}/file")
 async def references_file(
     reference_id: int,
-    user: User = Depends(get_current_user),
+    t: str = Query(..., min_length=10),
     session: AsyncSession = Depends(get_session),
 ) -> FileResponse:
-    _assert_owner(user)
-    from sqlalchemy import select
+    try:
+        owner_id, rid = decode_creator_reference_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="invalid token") from None
+    if rid != reference_id:
+        raise HTTPException(status_code=404, detail="not found")
 
-    from app.db.models import CreatorReference
-
-    owner_id = workspace_owner_id(user)
     row = await session.scalar(
         select(CreatorReference).where(
             CreatorReference.id == reference_id,
@@ -106,4 +113,5 @@ async def references_like(
     result = await toggle_creator_reference_like(
         session, viewer=user, reference_id=reference_id
     )
+    await session.commit()
     return CreatorReferenceLikeOut.model_validate(result)

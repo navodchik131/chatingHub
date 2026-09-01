@@ -176,7 +176,7 @@ async def pick_companion_media(
     out = []
     for a in result_assets:
         pack_name = pack_names.get(a.pack_id) if a.pack_id else None
-        row = asset_to_dict(a, pack_name=pack_name)
+        row = asset_to_dict(a, pack_name=pack_name, owner_id=owner_id)
         row["match_score"] = round(score, 4) if a.id == matched.id else None
         out.append(row)
 

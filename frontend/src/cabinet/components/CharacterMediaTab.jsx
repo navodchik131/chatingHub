@@ -66,6 +66,7 @@ export default function TabMedia() {
   const [searchOut, setSearchOut] = useState(null);
   const [packName, setPackName] = useState('');
   const [importGenId, setImportGenId] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const ml = useMemo(() => ({
     title: ru ? 'Медиатека персонажа' : 'Character media library',
@@ -142,7 +143,8 @@ export default function TabMedia() {
   }), [assets, packs]);
 
   const onUpload = async (files) => {
-    if (!charId || !files?.length) return;
+    if (!charId || !files?.length || uploading) return;
+    setUploading(true);
     try {
       for (const file of files) {
         await uploadCompanionMediaAsset({ studioModelId: Number(charId), file });
@@ -150,6 +152,8 @@ export default function TabMedia() {
       await reload();
     } catch (e) {
       cabinet.setError(e?.message || String(e));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -252,9 +256,9 @@ export default function TabMedia() {
           >
             {ml.fromStudio}
           </Hoverable>
-          <LimeButton onClick={() => uploadRef.current?.click()}>
+          <LimeButton disabled={uploading} onClick={() => uploadRef.current?.click()}>
             <span style={{ display: 'flex', width: 15, height: 15 }}><IcoUpload /></span>
-            {ml.upload}
+            {uploading ? (ru ? 'Загрузка…' : 'Uploading…') : ml.upload}
           </LimeButton>
           <input ref={uploadRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={(e) => { void onUpload(e.target.files); e.target.value = ''; }} />
         </div>

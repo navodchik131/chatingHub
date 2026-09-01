@@ -46,4 +46,5 @@ async def news_like(
     session: AsyncSession = Depends(get_session),
 ) -> PlatformNewsLikeOut:
     result = await toggle_platform_news_like(session, viewer=user, news_id=news_id)
+    await session.commit()
     return PlatformNewsLikeOut.model_validate(result)

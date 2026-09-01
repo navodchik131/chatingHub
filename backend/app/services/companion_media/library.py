@@ -23,6 +23,7 @@ from app.db.models import (
 from app.services.companion_bot.style_embeddings import embed_texts
 from app.services.companion_media.storage import (
     copy_studio_file_to_companion_media,
+    create_companion_media_access_token,
     delete_companion_media_file,
     save_companion_media_file,
 )
@@ -163,7 +164,12 @@ def asset_to_dict(
     pack_name: str | None = None,
     sent_count: int = 0,
     fan_count: int = 0,
+    owner_id: int | None = None,
 ) -> dict[str, Any]:
+    preview_url = f"/api/companion-media/assets/{row.id}/file"
+    if owner_id is not None:
+        tok = create_companion_media_access_token(user_id=owner_id, asset_id=row.id)
+        preview_url = f"{preview_url}?t={tok}"
     return {
         "id": row.id,
         "studio_model_id": row.studio_model_id,
@@ -183,7 +189,7 @@ def asset_to_dict(
         "status": row.status,
         "sent_count": sent_count,
         "fan_count": fan_count,
-        "preview_url": f"/api/companion-media/assets/{row.id}/file",
+        "preview_url": preview_url,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -385,6 +391,7 @@ async def list_media_assets(
             pack_name=pack_names.get(r.pack_id) if r.pack_id else None,
             sent_count=stats.get(r.id, {}).get("sent_count", 0),
             fan_count=stats.get(r.id, {}).get("fan_count", 0),
+            owner_id=owner_id,
         )
         for r in rows
     ]
@@ -568,6 +575,7 @@ async def _create_asset_row(
         pack_name=pack_name,
         sent_count=st.get("sent_count", 0),
         fan_count=st.get("fan_count", 0),
+        owner_id=owner_id,
     )
 
 
@@ -639,6 +647,7 @@ async def update_media_asset(
         pack_name=pack_name,
         sent_count=st.get("sent_count", 0),
         fan_count=st.get("fan_count", 0),
+        owner_id=owner_id,
     )
 
 

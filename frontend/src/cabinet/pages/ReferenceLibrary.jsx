@@ -15,6 +15,7 @@ export default function ReferenceLibrary() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [detail, setDetail] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -28,7 +29,8 @@ export default function ReferenceLibrary() {
   useEffect(() => { void reload(); }, [reload]);
 
   const onUpload = async (file) => {
-    if (!file) return;
+    if (!file || uploading) return;
+    setUploading(true);
     try {
       await uploadReference({ file, title, description });
       setTitle('');
@@ -36,6 +38,8 @@ export default function ReferenceLibrary() {
       await reload();
     } catch (e) {
       cabinet.setError(e?.message || String(e));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -67,9 +71,9 @@ export default function ReferenceLibrary() {
       <Panel style={{ padding: 16, marginBottom: 16, display: 'grid', gap: 10, maxWidth: 520 }}>
         <Field label={ru ? 'НАЗВАНИЕ' : 'TITLE'} value={title} onChange={(e) => setTitle(e.target.value)} />
         <Field label={ru ? 'ОПИСАНИЕ' : 'DESCRIPTION'} value={description} onChange={(e) => setDescription(e.target.value)} area />
-        <LimeButton onClick={() => uploadRef.current?.click()}>
+        <LimeButton disabled={uploading} onClick={() => uploadRef.current?.click()}>
           <span style={{ display: 'flex', width: 15, height: 15 }}><IcoUpload /></span>
-          {ru ? 'Прикрепить файл' : 'Attach file'}
+          {uploading ? (ru ? 'Загрузка…' : 'Uploading…') : (ru ? 'Прикрепить файл' : 'Attach file')}
         </LimeButton>
         <input ref={uploadRef} type="file" accept={tab === 'video' ? 'video/*' : 'image/*'} style={{ display: 'none' }} onChange={(e) => { void onUpload(e.target.files?.[0]); e.target.value = ''; }} />
       </Panel>
@@ -115,8 +119,9 @@ export default function ReferenceLibrary() {
                 : <img src={detail.preview_url} alt="" style={{ width: '100%', borderRadius: 12, maxHeight: 360, objectFit: 'contain' }} />
             )}
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <Hoverable style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: detail.liked_by_me ? color.lime : color.textDim }} onClick={() => void onLike(detail.id)}>
-                <IcoHeart /> {detail.likes_count || 0}
+              <Hoverable style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: detail.liked_by_me ? color.lime : color.textDim }} onClick={() => void onLike(detail.id)}>
+                <span style={{ display: 'flex', width: 14, height: 14, flexShrink: 0 }}><IcoHeart /></span>
+                {detail.likes_count || 0}
               </Hoverable>
               <Hoverable
                 style={{ marginLeft: 'auto', color: color.red, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}

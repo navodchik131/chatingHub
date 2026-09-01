@@ -91,7 +91,8 @@ export default function News() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, color: open.liked_by_me ? color.lime : color.textDim, cursor: 'pointer' }}
               onClick={(e) => void onLike(open.id, e)}
             >
-              <IcoHeart /> {open.likes_count || 0}
+              <span style={{ display: 'flex', width: 14, height: 14, flexShrink: 0 }}><IcoHeart /></span>
+              {open.likes_count || 0}
             </Hoverable>
           </Panel>
         </div>
