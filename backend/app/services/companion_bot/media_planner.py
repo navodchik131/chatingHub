@@ -467,6 +467,11 @@ async def plan_companion_media(
     Решает, отправлять ли медиа в этом ходе, и подбирает ассеты из медиатеки.
     Результат кладётся в state_snapshot и подсказку для LLM.
     """
+    # Снимок полей conv до pick/embed — после HTTP ORM нельзя трогать без refresh.
+    conversation_id = conv.id
+    conv_platform = conv.platform
+    resolved_manual_category = (manual_category or conv.manual_category or "").strip() or None
+
     signals = analyze_thread_signals(messages)
     fan_text = last_fan_message_text(messages)
     if trigger_message and trigger_message.direction == MessageDirection.inbound:
@@ -477,21 +482,21 @@ async def plan_companion_media(
     fan_asked = detect_fan_media_request(fan_text)
     explicit_ask = detect_explicit_request(fan_text)
 
-    recent_sends = await _count_recent_media_sends(session, conversation_id=conv.id)
-    outbound_gap = await _outbound_since_last_media(session, conversation_id=conv.id)
+    recent_sends = await _count_recent_media_sends(session, conversation_id=conversation_id)
+    outbound_gap = await _outbound_since_last_media(session, conversation_id=conversation_id)
     tier_avail = await _tier_availability(
         session,
         owner_id=owner_id,
         studio_model_id=studio_model_id,
-        conversation_id=conv.id,
+        conversation_id=conversation_id,
     )
     donation_link = await _get_active_donation_link(
         session,
         owner_id=owner_id,
         studio_model_id=studio_model_id,
-        platform=conv.platform,
+        platform=conv_platform,
     )
-    donation_url = _donation_url_for_platform(donation_link, conv.platform)
+    donation_url = _donation_url_for_platform(donation_link, conv_platform)
     recent_donation = await _recent_donation_usd_cents(
         session,
         owner_id=owner_id,
@@ -517,11 +522,11 @@ async def plan_companion_media(
                 owner_id=owner_id,
                 studio_model_id=studio_model_id,
                 query=search_query,
-                conversation_id=conv.id,
+                conversation_id=conversation_id,
                 expand_pack=True,
             )
         except Exception as e:
-            log.warning("companion media pick failed conv=%s: %s", conv.id, e)
+            log.warning("companion media pick failed conv=%s: %s", conversation_id, e)
             pick_result = {"assets": [], "reason": "pick_error"}
 
     assets = list(pick_result.get("assets") or [])
@@ -535,7 +540,7 @@ async def plan_companion_media(
         relationship_score=relationship_score,
         signals=signals,
         followup=followup,
-        manual_category=manual_category or conv.manual_category,
+        manual_category=resolved_manual_category,
         recent_media_sends_24h=recent_sends,
         outbound_since_last_media=outbound_gap,
         has_free=tier_avail["free"],
@@ -573,7 +578,7 @@ async def plan_companion_media(
                     owner_id=owner_id,
                     studio_model_id=studio_model_id,
                     query=search_query,
-                    conversation_id=conv.id,
+                    conversation_id=conversation_id,
                     expand_pack=True,
                     tier=tier_filter,
                 )
@@ -585,13 +590,13 @@ async def plan_companion_media(
                     owner_id=owner_id,
                     studio_model_id=studio_model_id,
                     query=tier_filter,
-                    conversation_id=conv.id,
+                    conversation_id=conversation_id,
                     expand_pack=True,
                     tier=tier_filter,
                 )
                 assets = list(pick_result.get("assets") or [])
         except Exception as e:
-            log.warning("companion media tier pick failed conv=%s: %s", conv.id, e)
+            log.warning("companion media tier pick failed conv=%s: %s", conversation_id, e)
             assets = []
 
         if assets:
@@ -612,7 +617,7 @@ async def plan_companion_media(
                 owner_id=owner_id,
                 studio_model_id=studio_model_id,
                 query=search_query or "exclusive paid",
-                conversation_id=conv.id,
+                conversation_id=conversation_id,
                 expand_pack=False,
                 tier="paid",
             )
@@ -620,7 +625,7 @@ async def plan_companion_media(
             if paid_assets:
                 assets = paid_assets
         except Exception as e:
-            log.warning("companion media paid pick failed conv=%s: %s", conv.id, e)
+            log.warning("companion media paid pick failed conv=%s: %s", conversation_id, e)
         if assets:
             plan.assets = assets[:1]
             plan.asset_ids = [int(assets[0]["id"])] if assets[0].get("id") else []

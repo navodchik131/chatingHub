@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Hoverable from './Hoverable';
 import { IcoFilm, IcoPlay, IcoUpload } from './Icons';
-import { Eyebrow, Chip, LimeButton, SelectPill } from './ui';
+import { Eyebrow, Chip, SelectPill } from './ui';
 import MotionTrimTimeline from './MotionTrimTimeline';
 import { color, line, font } from '../styles/tokens';
 import { refUploadStyle, cardPickStyle } from '../styles/mixins';
@@ -15,7 +15,7 @@ import {
   mergeEvolinkVideoPricing,
 } from '../../studioMotionPricing';
 import SeedanceSaleLabel from './SeedanceSaleLabel';
-import { archiveThumbUrl } from '../api/actions';
+import { archiveThumbUrl, runMotionFirstFrame } from '../api/actions';
 import { loadMcWizardState, mcWizardStorageKey, saveMcWizardState } from '../api/motionControlWizardStorage';
 
 function genArchivePreviewUrl(genId, archiveImages) {
@@ -94,7 +94,11 @@ export default function MotionControlWizard({
   const [trimOut, setTrimOut] = useState(5);
   /** Конвертация реф-видео в силуэт (edge-outline) перед отправкой в Seedance. */
   const [useMotionOutline, setUseMotionOutline] = useState(true);
+  /** idle → loading → preview (результат) → accepted (подтверждён для видео). */
   const [ffState, setFfState] = useState('idle');
+  const [ffModelId, setFfModelId] = useState(s.aiModel || 'nano-banana-pro');
+  const [ffPendingGenId, setFfPendingGenId] = useState(null);
+  const [ffPreviewUrl, setFfPreviewUrl] = useState('');
   const motionVideoPreviewUrl = cabinet.uploadPreviewUrls?.['motion-video'] || '';
 
   const durationSec = cabinet.motionVideoDurationSec || 5;
@@ -133,6 +137,12 @@ export default function MotionControlWizard({
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
       if (typeof saved.useMotionOutline === 'boolean') setUseMotionOutline(saved.useMotionOutline);
+      if (saved.ffModelId) setFfModelId(saved.ffModelId);
+      if (saved.ffPendingGenId != null) setFfPendingGenId(Number(saved.ffPendingGenId));
+      setFfPreviewUrl(saved.ffPreviewUrl || '');
+      if (saved.ffState === 'accepted' || saved.ffState === 'preview') {
+        setFfState(saved.ffState);
+      }
       if (saved.motionVideoFileId) {
         cabinet.restoreMotionVideoSession?.(saved.motionVideoFileId, saved.motionVideoDurationSec);
       }
@@ -154,6 +164,20 @@ export default function MotionControlWizard({
       if (url) setTurnaroundPreviewUrl(url);
     }
   }, [wizardStorageKey, cabinet.archiveImages, outfitPreviewUrl, turnaroundPreviewUrl]);
+
+  /** Превью первого кадра из архива после подгрузки списка генераций. */
+  useEffect(() => {
+    const saved = loadMcWizardState(wizardStorageKey);
+    if (!saved) return;
+    if (!ffPreviewUrl && saved.ffPendingGenId != null) {
+      const url = genArchivePreviewUrl(saved.ffPendingGenId, cabinet.archiveImages);
+      if (url) setFfPreviewUrl(url);
+    }
+    if (saved.ffState === 'accepted' && saved.ffPendingGenId != null && !cabinet.firstFrameGenId) {
+      const hit = cabinet.archiveImages?.find((x) => Number(x.id) === Number(saved.ffPendingGenId));
+      if (hit) cabinet.pickFirstFrameFromArchive?.(hit);
+    }
+  }, [wizardStorageKey, cabinet.archiveImages, ffPreviewUrl, cabinet.firstFrameGenId, cabinet.pickFirstFrameFromArchive]);
 
   useEffect(() => {
     if (skipPersistRef.current) return;
@@ -196,6 +220,8 @@ export default function MotionControlWizard({
     setTurnaroundPreviewUrl('');
     setTurnState('idle');
     cabinet.clearFirstFrameArchivePick?.();
+    setFfPendingGenId(null);
+    setFfPreviewUrl('');
     setFfState('idle');
   }, [cabinet.motionVideoFileId, cabinet.clearFirstFrameArchivePick]);
 
@@ -220,6 +246,10 @@ export default function MotionControlWizard({
       trimIn,
       trimOut,
       useMotionOutline,
+      ffModelId,
+      ffPendingGenId,
+      ffPreviewUrl,
+      ffState,
       motionVideoFileId: cabinet.motionVideoFileId,
       motionVideoDurationSec: cabinet.motionVideoDurationSec,
     });
@@ -245,6 +275,10 @@ export default function MotionControlWizard({
     trimIn,
     trimOut,
     useMotionOutline,
+    ffModelId,
+    ffPendingGenId,
+    ffPreviewUrl,
+    ffState,
   ]);
 
   const dressWaveProfile = s.contentMode === 'sfw' ? 'regular' : 'nsfw';
@@ -278,25 +312,73 @@ export default function MotionControlWizard({
     }, imagePricing),
     [turnWave, dressWaveProfile, imagePricing],
   );
+  const ffWave = useMemo(
+    () => normalizeWaveModel(ffModelId, s.contentMode === 'nsfw'),
+    [ffModelId, s.contentMode],
+  );
+  const ffCredits = useMemo(
+    () => quoteStudioImageCredits({
+      waveModelId: ffWave.apiId,
+      waveProfile: dressWaveProfile,
+      wanEditTier: ffWave.tier,
+      grokPipeline: 'none',
+      studioMode: 'photo_edit',
+      workflow: false,
+    }, imagePricing),
+    [ffWave, dressWaveProfile, imagePricing],
+  );
 
   const clipDuration = trimMode === 'part'
     ? Math.max(0.5, trimOut - trimIn)
     : durationSec;
 
-  const firstFramePreviewUrl = cabinet.firstFrameUrl
-    || genArchivePreviewUrl(cabinet.firstFrameGenId, cabinet.archiveImages);
+  const firstFrameDisplayUrl = ffPreviewUrl
+    || cabinet.firstFrameUrl
+    || genArchivePreviewUrl(ffPendingGenId ?? cabinet.firstFrameGenId, cabinet.archiveImages);
 
-  const genFirstFrameFromVideo = async () => {
+  const runFirstFrame = useCallback(async () => {
     if (!cabinet.motionVideoFileId || ffState === 'loading') return;
+    if (!cabinet.selectedModelId) {
+      cabinet.setError(lang === 'ru' ? 'Выберите персонажа' : 'Pick a character');
+      return;
+    }
     setFfState('loading');
     cabinet.setError(null);
+    cabinet.clearFirstFrameArchivePick?.();
     try {
-      await cabinet.generateFirstFrame(s, '');
-      setFfState('done');
-    } catch {
-      setFfState('idle');
+      const { result } = await runMotionFirstFrame({
+        modelId: cabinet.selectedModelId,
+        aspect: s.vidFormat || '9:16',
+        nsfw: s.contentMode === 'nsfw',
+        waveModelId: ffWave.apiId,
+        wanTier: ffWave.tier,
+        motionVideoFileId: cabinet.motionVideoFileId,
+        description: '',
+      });
+      const gid = result?.generation_id;
+      const url = (result?.generated_image_url || result?.image_url || '').trim();
+      setFfPendingGenId(gid ?? null);
+      setFfPreviewUrl(url || genArchivePreviewUrl(gid, cabinet.archiveImages));
+      setFfState('preview');
+      await cabinet.refreshArchiveFull();
+      await cabinet.refreshMe();
+    } catch (e) {
+      setFfState(cabinet.firstFrameGenId ? 'accepted' : 'idle');
+      cabinet.setError(e?.message || String(e));
     }
-  };
+  }, [cabinet, ffState, ffWave, s.vidFormat, s.contentMode, lang]);
+
+  const acceptFirstFrame = useCallback(() => {
+    if (!ffPendingGenId) return;
+    const hit = cabinet.archiveImages?.find((x) => Number(x.id) === Number(ffPendingGenId));
+    if (hit) {
+      cabinet.pickFirstFrameFromArchive?.(hit);
+    } else {
+      cabinet.pickFirstFrameFromArchive?.({ id: ffPendingGenId });
+      if (ffPreviewUrl) cabinet.setFirstFrameUrl?.(ffPreviewUrl);
+    }
+    setFfState('accepted');
+  }, [cabinet, ffPendingGenId, ffPreviewUrl]);
 
   const videoCredits = useMemo(() => {
     const variant = s.vidSeedanceVariant || 'standard';
@@ -328,10 +410,13 @@ export default function MotionControlWizard({
     if (!dressModels.some((m) => m.id === dressModelId) && dressModels[0]?.id) {
       setDressModelId(dressModels[0].id);
     }
+    if (!dressModels.some((m) => m.id === ffModelId) && dressModels[0]?.id) {
+      setFfModelId(dressModels[0].id);
+    }
     if (!turnModels.some((m) => m.id === turnModelId) && turnModels[0]?.id) {
       setTurnModelId(turnModels[0].id);
     }
-  }, [dressModels, turnModels, dressModelId, turnModelId]);
+  }, [dressModels, turnModels, dressModelId, ffModelId, turnModelId]);
 
   const onDrivingVideoPicked = (file) => {
     void cabinet.uploadDrivingVideo(file);
@@ -480,8 +565,12 @@ export default function MotionControlWizard({
       return;
     }
     if (useMotionOutline) {
-      if (!cabinet.firstFrameGenId) {
-        cabinet.setError(lang === 'ru' ? 'Сгенерируйте первый кадр из видео' : 'Generate the first frame from video');
+      if (!cabinet.firstFrameGenId || ffState !== 'accepted') {
+        cabinet.setError(
+          lang === 'ru'
+            ? 'Сгенерируйте первый кадр и нажмите «Использовать»'
+            : 'Generate the first frame and click “Use this one”',
+        );
         return;
       }
     } else if (!turnaroundGenId) {
@@ -662,32 +751,111 @@ export default function MotionControlWizard({
                       ? 'Grok подставит лицо модели в позу с первого кадра видео — нужно для swap по силуэту.'
                       : 'Grok composes your model into the video opening pose — required for silhouette motion swap.'}
                   </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                    {firstFramePreviewUrl && (
-                      <img
-                        src={firstFramePreviewUrl}
-                        alt=""
-                        style={{ width: 70, aspectRatio: '9/16', borderRadius: 10, objectFit: 'cover', border: `1px solid ${line.soft}` }}
-                      />
-                    )}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <LimeButton
-                        disabled={ffState === 'loading' || !cabinet.motionVideoFileId}
-                        onClick={() => { void genFirstFrameFromVideo(); }}
+
+                  {!simplifiedUi && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
+                        {lang === 'ru' ? 'МОДЕЛЬ ФОТО' : 'IMAGE MODEL'}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {dressModels.map((m) => {
+                          const on = ffModelId === m.id;
+                          const st = cardPickStyle(on);
+                          return (
+                            <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setFfModelId(m.id)}>
+                              <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
+                            </Hoverable>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {(ffState === 'idle' || ffState === 'loading') && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <Hoverable
+                        style={{
+                          background: color.lime,
+                          color: color.limeInk,
+                          fontWeight: 800,
+                          fontSize: 13,
+                          borderRadius: 11,
+                          padding: '10px 16px',
+                          cursor: ffState === 'loading' || !cabinet.motionVideoFileId ? 'wait' : 'pointer',
+                          opacity: ffState === 'loading' || !cabinet.motionVideoFileId ? 0.7 : 1,
+                        }}
+                        hover={{ filter: 'brightness(1.05)' }}
+                        onClick={() => { if (ffState !== 'loading') void runFirstFrame(); }}
                       >
                         {ffState === 'loading'
                           ? (lang === 'ru' ? 'Генерация…' : 'Generating…')
-                          : (cabinet.firstFrameGenId
-                            ? (lang === 'ru' ? 'Перегенерировать' : 'Regenerate')
-                            : (lang === 'ru' ? 'Сгенерировать из видео' : 'Generate from video'))}
-                      </LimeButton>
-                      {cabinet.firstFrameGenId && ffState === 'done' && (
-                        <span style={{ fontSize: 11, color: color.lime }}>
-                          {lang === 'ru' ? 'Первый кадр готов' : 'First frame ready'}
-                        </span>
-                      )}
+                          : (lang === 'ru' ? 'Сгенерировать первый кадр' : 'Generate first frame')}
+                      </Hoverable>
+                      <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textDim }}>
+                        −{formatImageCostBadge(ffCredits, lang)}
+                      </span>
                     </div>
-                  </div>
+                  )}
+
+                  {ffState === 'loading' && (
+                    <div style={{ marginTop: 10, fontSize: 11, color: '#38BDF8' }}>
+                      {lang === 'ru' ? 'Собираем первый кадр…' : 'Building first frame…'}
+                    </div>
+                  )}
+
+                  {(ffState === 'preview' || ffState === 'accepted') && firstFrameDisplayUrl && (
+                    <div style={{ marginTop: 4 }}>
+                      <img
+                        src={firstFrameDisplayUrl}
+                        alt=""
+                        style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}`, marginBottom: 10, display: 'block' }}
+                      />
+                      {ffState === 'accepted' && (
+                        <div style={{ fontSize: 11, color: color.lime, marginBottom: 10 }}>
+                          ✓ {lang === 'ru' ? 'Используется для видео' : 'Used for video'}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, maxWidth: 320 }}>
+                        <Hoverable
+                          style={{
+                            flex: 1,
+                            textAlign: 'center',
+                            border: `1px solid ${line.mid}`,
+                            borderRadius: 9,
+                            padding: 10,
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                            color: color.textDim,
+                            cursor: ffState === 'loading' ? 'wait' : 'pointer',
+                          }}
+                          hover={{ borderColor: line.strong }}
+                          onClick={() => { if (ffState !== 'loading') void runFirstFrame(); }}
+                        >
+                          ↻ {t.regen}
+                        </Hoverable>
+                        {ffState === 'preview' && (
+                          <Hoverable
+                            style={{
+                              flex: 1,
+                              textAlign: 'center',
+                              background: 'rgba(215,244,82,.12)',
+                              border: '1px solid rgba(215,244,82,.35)',
+                              borderRadius: 9,
+                              padding: 10,
+                              fontSize: 12.5,
+                              fontWeight: 800,
+                              color: color.lime,
+                              cursor: 'pointer',
+                            }}
+                            hover={{ background: 'rgba(215,244,82,.2)' }}
+                            onClick={acceptFirstFrame}
+                          >
+                            ✓ {t.useThis}
+                          </Hoverable>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>

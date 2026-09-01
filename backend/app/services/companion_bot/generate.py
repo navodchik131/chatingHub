@@ -199,6 +199,12 @@ async def generate_companion_reply(
         fan_image_description=fan_image_description,
         manual_category=conv.manual_category,
     )
+    # pick_companion_media может вызывать embeddings API — refresh перед сборкой user prompt.
+    await _refresh_companion_orm_rows(
+        session, conv=conv, model_row=model_row, state=state
+    )
+    if trigger_message is not None:
+        await session.refresh(trigger_message, attribute_names=["attachments"])
 
     model = companion_chat_model()
     recent = recent_outbound_texts(messages, limit=4)
@@ -227,6 +233,10 @@ async def generate_companion_reply(
             temperature=0.72 if attempt == 0 else 0.85,
             credentials=cred,
             timeout_seconds=90.0,
+        )
+        # LLM-вызов отпускает greenlet — refresh перед чтением ORM в retry/snapshot.
+        await _refresh_companion_orm_rows(
+            session, conv=conv, model_row=model_row, state=state
         )
         reply = (raw or "").strip()
         if not reply:

@@ -123,12 +123,17 @@ async def pick_companion_media(
             q_vec = []
 
         if q_vec:
+            # embed_texts — внешний HTTP; без refresh доступ к полям ORM падает greenlet_spawn.
+            for asset in with_emb:
+                await session.refresh(asset)
             ranked = rank_assets_by_embedding(query_vec=q_vec, candidates=with_emb, limit=1)
             if ranked:
                 matched, score = ranked[0]
 
     # Fallback без embedding: простой match по title/description/tags
     if matched is None:
+        for asset in candidates:
+            await session.refresh(asset)
         low = q.lower()
         for asset in candidates:
             blob = " ".join(
