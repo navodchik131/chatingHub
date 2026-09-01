@@ -8070,21 +8070,30 @@ async def api_studio_motion_render_video(
             )
 
     turn_raw = (turnaround_generation_id or "").strip()
+    use_outline_wizard = mc_wizard and _truthy_wavespeed_flag(use_motion_outline)
     if mc_wizard:
-        if not turn_raw:
+        if use_outline_wizard:
+            # Режим силуэта: identity из первого кадра, развёртка не используется.
+            if ff_gid is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Сгенерируйте первый кадр и подтвердите «Использовать» (режим силуэта).",
+                )
+        elif not turn_raw:
             raise HTTPException(status_code=400, detail="Подготовьте развёртку перед генерацией видео.")
-        try:
-            turn_gid = int(turn_raw)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Некорректный turnaround_generation_id") from None
-        ta_row = await session.get(StudioGeneration, turn_gid)
-        if not ta_row or ta_row.user_id != oid:
-            raise HTTPException(status_code=404, detail="Развёртка не найдена. Загрузите или сгенерируйте заново.")
-        if not generation_has_archive_file(ta_row):
-            raise HTTPException(
-                status_code=400,
-                detail="Файл развёртки ещё не сохранён. Подождите или загрузите фото ещё раз.",
-            )
+        else:
+            try:
+                turn_gid = int(turn_raw)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Некорректный turnaround_generation_id") from None
+            ta_row = await session.get(StudioGeneration, turn_gid)
+            if not ta_row or ta_row.user_id != oid:
+                raise HTTPException(status_code=404, detail="Развёртка не найдена. Загрузите или сгенерируйте заново.")
+            if not generation_has_archive_file(ta_row):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Файл развёртки ещё не сохранён. Подождите или загрузите фото ещё раз.",
+                )
 
     timeline_raw = (motion_timeline or "").strip()
     if len(timeline_raw) > 50000:
