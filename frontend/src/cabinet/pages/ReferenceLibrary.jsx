@@ -132,10 +132,63 @@ function StatusBadge({ status, ru }) {
   );
 }
 
+/** Локальный превью файла до отправки на модерацию. */
+function PendingFileThumb({ item, onRemove, ru }) {
+  return (
+    <div style={{
+      position: 'relative',
+      aspectRatio: '1',
+      borderRadius: 8,
+      overflow: 'hidden',
+      background: color.bgDeep,
+      border: `1px solid ${line.hair}`,
+    }}
+    >
+      {item.isVideo ? (
+        <video
+          src={item.previewUrl}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          muted
+          playsInline
+        />
+      ) : (
+        <img
+          src={item.previewUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      )}
+      <Hoverable
+        title={ru ? 'Убрать' : 'Remove'}
+        style={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          background: 'rgba(6,7,9,.78)',
+          color: color.text,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 14,
+          lineHeight: 1,
+          cursor: 'pointer',
+        }}
+        onClick={onRemove}
+      >
+        ×
+      </Hoverable>
+    </div>
+  );
+}
+
 export default function ReferenceLibrary() {
   const { lang, cabinet } = useApp();
   const ru = lang === 'ru';
   const uploadRef = useRef(null);
+  const pendingFilesRef = useRef([]);
   const setErrorRef = useRef(cabinet.setError);
   setErrorRef.current = cabinet.setError;
 
@@ -145,6 +198,8 @@ export default function ReferenceLibrary() {
   const [rows, setRows] = useState([]);
   const [uploadTags, setUploadTags] = useState([]);
   const [customTag, setCustomTag] = useState('');
+  const [pendingFiles, setPendingFiles] = useState([]);
+  pendingFilesRef.current = pendingFiles;
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState('');
@@ -167,6 +222,13 @@ export default function ReferenceLibrary() {
   }, [filter, section, tagFilter]);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  // Освобождаем blob-URL только при уходе со страницы.
+  useEffect(() => () => {
+    pendingFilesRef.current.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+  }, []);
 
   const groups = useMemo(() => groupReferences(rows), [rows]);
 
@@ -200,13 +262,55 @@ export default function ReferenceLibrary() {
     setCustomTag('');
   };
 
-  const onUpload = async (fileList) => {
-    const files = [...(fileList || [])].filter(Boolean);
-    if (!files.length || uploading) return;
+  const revokePendingPreviews = (items) => {
+    items.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+  };
+
+  const clearPendingFiles = () => {
+    setPendingFiles((prev) => {
+      revokePendingPreviews(prev);
+      return [];
+    });
+  };
+
+  const stageFiles = (fileList) => {
+    const files = [...(fileList || [])].filter(
+      (file) => file && (file.type.startsWith('image/') || file.type.startsWith('video/')),
+    );
+    if (!files.length) return;
+    setUploadNotice('');
+    setPendingFiles((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        isVideo: file.type.startsWith('video/'),
+        name: file.name,
+      })),
+    ]);
+  };
+
+  const removePendingFile = (id) => {
+    setPendingFiles((prev) => {
+      const target = prev.find((item) => item.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((item) => item.id !== id);
+    });
+  };
+
+  const submitToModeration = async () => {
+    if (!pendingFiles.length || uploading) return;
     setUploading(true);
     setUploadNotice('');
     try {
-      await uploadReferenceBatch({ files, tags: uploadTags });
+      await uploadReferenceBatch({
+        files: pendingFiles.map((item) => item.file),
+        tags: uploadTags,
+      });
+      clearPendingFiles();
       setUploadNotice(
         ru
           ? 'Файлы отправлены на модерацию. После одобрения они появятся в общей библиотеке.'
@@ -354,11 +458,16 @@ export default function ReferenceLibrary() {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          void onUpload(e.dataTransfer.files);
+          stageFiles(e.dataTransfer.files);
         }}
       >
         <div style={{ fontSize: 11, fontFamily: font.mono, letterSpacing: 1.1, color: color.textGhost, marginBottom: 10 }}>
           {ru ? 'ЗАГРУЗКА' : 'UPLOAD'}
+        </div>
+        <div style={{ fontSize: 12, color: color.textDim, marginBottom: 12, lineHeight: 1.5 }}>
+          {ru
+            ? '1. Отметьте теги → 2. Выберите файлы → 3. Отправьте на модерацию.'
+            : '1. Pick tags → 2. Choose files → 3. Submit for review.'}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           {TAG_PRESETS.map((p) => (
@@ -397,20 +506,83 @@ export default function ReferenceLibrary() {
         </div>
         {!!uploadTags.length && (
           <div style={{ fontSize: 11, color: color.textDim, marginBottom: 12 }}>
-            {ru ? 'К загрузке:' : 'For upload:'}{' '}
+            {ru ? 'Теги:' : 'Tags:'}{' '}
             {uploadTags.map((t) => tagLabel(t, ru)).join(', ')}
           </div>
         )}
-        <LimeButton disabled={uploading} onClick={() => uploadRef.current?.click()}>
-          <span style={{ display: 'flex', width: 15, height: 15 }}><IcoUpload /></span>
-          {uploading
-            ? (ru ? 'Загрузка…' : 'Uploading…')
-            : (ru ? 'Выбрать файлы' : 'Choose files')}
-        </LimeButton>
+
+        {!!pendingFiles.length && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: color.textDim, marginBottom: 8 }}>
+              {ru
+                ? `Выбрано файлов: ${pendingFiles.length}. Можно добавить теги перед отправкой.`
+                : `${pendingFiles.length} file(s) selected. You can still adjust tags before submitting.`}
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill,minmax(72px,1fr))',
+              gap: 8,
+              maxWidth: 420,
+            }}
+            >
+              {pendingFiles.map((item) => (
+                <PendingFileThumb
+                  key={item.id}
+                  item={item}
+                  ru={ru}
+                  onRemove={() => removePendingFile(item.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Hoverable
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 16px',
+              borderRadius: 10,
+              border: `1px solid ${line.hair}`,
+              background: color.bgDeep,
+              color: color.text,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+            hover={{ borderColor: 'rgba(215,244,82,.35)', color: color.lime }}
+            onClick={() => uploadRef.current?.click()}
+          >
+            <span style={{ display: 'flex', width: 15, height: 15 }}><IcoUpload /></span>
+            {ru ? 'Выбрать файлы' : 'Choose files'}
+          </Hoverable>
+
+          {!!pendingFiles.length && (
+            <>
+              <LimeButton
+                style={{ display: 'inline-flex', width: 'auto', opacity: uploading ? 0.65 : 1 }}
+                onClick={() => { if (!uploading) void submitToModeration(); }}
+              >
+                {uploading
+                  ? (ru ? 'Отправка…' : 'Submitting…')
+                  : (ru ? 'Отправить на модерацию' : 'Submit for review')}
+              </LimeButton>
+              <Hoverable
+                style={{ fontSize: 12, color: color.textDim, fontWeight: 700, cursor: 'pointer' }}
+                onClick={clearPendingFiles}
+              >
+                {ru ? 'Очистить' : 'Clear'}
+              </Hoverable>
+            </>
+          )}
+        </div>
+
         <div style={{ fontSize: 11, color: color.textGhost, marginTop: 10 }}>
           {ru
-            ? 'Можно перетащить сюда несколько файлов. Материал уходит на модерацию.'
-            : 'Drag and drop multiple files here. Uploads go to moderation.'}
+            ? 'Можно перетащить файлы в эту область — они добавятся в очередь, но не отправятся сразу.'
+            : 'Drag files here to queue them — they will not upload until you submit.'}
         </div>
         {!!uploadNotice && (
           <div style={{ fontSize: 11.5, color: color.lime, marginTop: 10, lineHeight: 1.5 }}>
@@ -423,7 +595,7 @@ export default function ReferenceLibrary() {
           accept="image/*,video/*"
           multiple
           style={{ display: 'none' }}
-          onChange={(e) => { void onUpload(e.target.files); e.target.value = ''; }}
+          onChange={(e) => { stageFiles(e.target.files); e.target.value = ''; }}
         />
       </Panel>
 
