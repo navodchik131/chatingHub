@@ -1285,6 +1285,22 @@ export default function MotionControlWizard({
           </div>
         </div>
 
+        {/* generate_audio → API: звук из реф-видео в Seedance (CabinetDataProvider читает vidGenerateAudio). */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>{t.vidRefSound}</div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            <Chip on={s.vidGenerateAudio !== false} onClick={() => setS({ vidGenerateAudio: true })}>
+              {lang === 'ru' ? 'Со звуком' : 'With sound'}
+            </Chip>
+            <Chip on={s.vidGenerateAudio === false} onClick={() => setS({ vidGenerateAudio: false })}>
+              {lang === 'ru' ? 'Без звука' : 'Silent'}
+            </Chip>
+          </div>
+          <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6, lineHeight: 1.45 }}>
+            {t.vidRefSoundMusicHint}
+          </div>
+        </div>
+
         <div style={{ marginBottom: 14, fontSize: 11, color: color.textDim, lineHeight: 1.5 }}>
           <div>{lang === 'ru' ? 'Длина клипа' : 'Clip length'}: {clipDuration.toFixed(1)}s</div>
           <div>{lang === 'ru' ? 'Оценка за запуск' : 'Run estimate'}: ~{Math.round(totalCredits)} {t.cr}</div>
