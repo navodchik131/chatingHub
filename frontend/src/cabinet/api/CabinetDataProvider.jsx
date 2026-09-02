@@ -1448,6 +1448,11 @@ export function CabinetDataProvider({ children }) {
     [],
   )
 
+  const uploadMotionControlFirstFrame = useCallback(
+    (params) => actions.uploadMotionControlFirstFrame(params),
+    [],
+  )
+
   const refreshMe = useCallback(async () => {
     setMe(await apiJson('/api/auth/me'))
   }, [])
@@ -1919,6 +1924,7 @@ export function CabinetDataProvider({ children }) {
       runMotionControlTurnaround,
       uploadMotionControlOutfit,
       uploadMotionControlTurnaround,
+      uploadMotionControlFirstFrame,
       restoreMotionVideoSession,
       refreshMe,
       createCharacter,
@@ -2046,6 +2052,7 @@ export function CabinetDataProvider({ children }) {
       runMotionControlTurnaround,
       uploadMotionControlOutfit,
       uploadMotionControlTurnaround,
+      uploadMotionControlFirstFrame,
       restoreMotionVideoSession,
       refreshMe,
       createCharacter,

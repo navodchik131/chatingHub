@@ -248,6 +248,40 @@ async def api_motion_control_upload_turnaround(
     )
 
 
+@router.post("/studio/motion-control/upload-first-frame", response_model=StudioModelBootstrapOut)
+async def api_motion_control_upload_first_frame(
+    model_id: str = Form(...),
+    output_aspect: str = Form("9:16"),
+    first_frame_image: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> StudioModelBootstrapOut:
+    """Загрузить готовый первый кадр вместо AI-генерации (режим силуэта)."""
+    assert_permission(user, PERM_STUDIO_GENERATE)
+    oid = workspace_owner_id(user)
+    mid = _parse_int(model_id, field="model_id")
+    if mid is None:
+        raise HTTPException(status_code=400, detail="Укажите model_id")
+    sm = await session.get(UserStudioModel, mid)
+    if not sm or sm.user_id != oid:
+        raise HTTPException(status_code=404, detail="Модель не найдена")
+    raw, mime = await _read_upload_image(first_frame_image, field_label="фото первого кадра")
+    result = await _persist_motion_control_upload(
+        session,
+        owner_id=oid,
+        model_id=mid,
+        raw=raw,
+        content_type=mime,
+        output_aspect=output_aspect,
+        prompt_excerpt="Motion Control · первый кадр (upload)",
+    )
+    return StudioModelBootstrapOut(
+        refined_prompt=result["refined_prompt"],
+        generated_image_url=result.get("generated_image_url"),
+        generation_id=result.get("generation_id"),
+    )
+
+
 @router.post(
     "/studio/motion-control/dress-outfit",
     response_model=StudioModelBootstrapOut,

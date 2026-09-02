@@ -653,6 +653,18 @@ export async function uploadMotionControlTurnaround(params) {
   return data
 }
 
+/** Готовый первый кадр в архив без Grok/кредитов (Motion Control wizard, силуэт). */
+export async function uploadMotionControlFirstFrame(params) {
+  const fd = new FormData()
+  fd.append('model_id', String(params.modelId))
+  if (params.outputAspect) fd.append('output_aspect', params.outputAspect)
+  fd.append('first_frame_image', params.file, params.file.name || 'first-frame.jpg')
+  const res = await apiFetch('/api/studio/motion-control/upload-first-frame', { method: 'POST', body: fd, timeoutMs: 120_000 })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.detail || 'Не удалось загрузить первый кадр')
+  return data
+}
+
 export async function runMotionControlDress(params) {
   const fd = new FormData()
   fd.append('model_id', String(params.modelId))

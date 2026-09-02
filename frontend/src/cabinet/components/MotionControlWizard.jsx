@@ -63,6 +63,7 @@ export default function MotionControlWizard({
   const clothingRef = useRef(null);
   const outfitUploadRef = useRef(null);
   const turnaroundUploadRef = useRef(null);
+  const ffUploadRef = useRef(null);
   const skipPersistRef = useRef(false);
   const wizardBackend = isEvolink ? 'evolink' : 'wavespeed';
   const wizardStorageKey = mcWizardStorageKey(wizardBackend, cabinet.selectedModelId);
@@ -96,6 +97,7 @@ export default function MotionControlWizard({
   const [useMotionOutline, setUseMotionOutline] = useState(true);
   /** idle → loading → preview (результат) → accepted (подтверждён для видео). */
   const [ffState, setFfState] = useState('idle');
+  const [ffSource, setFfSource] = useState('generate');
   const [ffModelId, setFfModelId] = useState(s.aiModel || 'nano-banana-pro');
   const [ffPendingGenId, setFfPendingGenId] = useState(null);
   const [ffPreviewUrl, setFfPreviewUrl] = useState('');
@@ -138,6 +140,7 @@ export default function MotionControlWizard({
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
       if (typeof saved.useMotionOutline === 'boolean') setUseMotionOutline(saved.useMotionOutline);
       if (saved.ffModelId) setFfModelId(saved.ffModelId);
+      if (saved.ffSource === 'upload' || saved.ffSource === 'generate') setFfSource(saved.ffSource);
       if (saved.ffPendingGenId != null) setFfPendingGenId(Number(saved.ffPendingGenId));
       setFfPreviewUrl(saved.ffPreviewUrl || '');
       if (saved.ffState === 'accepted' || saved.ffState === 'preview') {
@@ -205,6 +208,15 @@ export default function MotionControlWizard({
     cabinet.setUploadFile('mc-turnaround-upload', null);
   }, [turnSource, cabinet.setUploadFile]);
 
+  useEffect(() => {
+    if (skipPersistRef.current) return;
+    setFfPendingGenId(null);
+    setFfPreviewUrl('');
+    setFfState('idle');
+    cabinet.clearFirstFrameArchivePick?.();
+    cabinet.setUploadFile('mc-first-frame-upload', null);
+  }, [ffSource, cabinet.clearFirstFrameArchivePick, cabinet.setUploadFile]);
+
   const prevMotionVideoIdRef = useRef(cabinet.motionVideoFileId);
   useEffect(() => {
     if (skipPersistRef.current) {
@@ -223,7 +235,8 @@ export default function MotionControlWizard({
     setFfPendingGenId(null);
     setFfPreviewUrl('');
     setFfState('idle');
-  }, [cabinet.motionVideoFileId, cabinet.clearFirstFrameArchivePick]);
+    cabinet.setUploadFile('mc-first-frame-upload', null);
+  }, [cabinet.motionVideoFileId, cabinet.clearFirstFrameArchivePick, cabinet.setUploadFile]);
 
   useEffect(() => {
     if (skipPersistRef.current) return;
@@ -247,6 +260,7 @@ export default function MotionControlWizard({
       trimOut,
       useMotionOutline,
       ffModelId,
+      ffSource,
       ffPendingGenId,
       ffPreviewUrl,
       ffState,
@@ -276,6 +290,7 @@ export default function MotionControlWizard({
     trimOut,
     useMotionOutline,
     ffModelId,
+    ffSource,
     ffPendingGenId,
     ffPreviewUrl,
     ffState,
@@ -379,6 +394,52 @@ export default function MotionControlWizard({
     }
     setFfState('accepted');
   }, [cabinet, ffPendingGenId, ffPreviewUrl]);
+
+  const resetFirstFrameDraft = useCallback(() => {
+    cabinet.clearFirstFrameArchivePick?.();
+    setFfPendingGenId(null);
+    setFfPreviewUrl('');
+    setFfState('idle');
+    cabinet.setUploadFile('mc-first-frame-upload', null);
+  }, [cabinet]);
+
+  const uploadFirstFrame = useCallback(async () => {
+    if (ffState === 'loading') return;
+    if (!cabinet.selectedModelId) {
+      cabinet.setError(lang === 'ru' ? 'Выберите персонажа' : 'Pick a character');
+      return;
+    }
+    const file = cabinet.uploadFiles['mc-first-frame-upload'];
+    if (!file) {
+      cabinet.setError(lang === 'ru' ? 'Загрузите фото первого кадра' : 'Upload first frame photo');
+      return;
+    }
+    setFfState('loading');
+    cabinet.setError(null);
+    cabinet.clearFirstFrameArchivePick?.();
+    try {
+      const result = await cabinet.uploadMotionControlFirstFrame({
+        modelId: cabinet.selectedModelId,
+        file,
+        outputAspect: s.vidFormat || '9:16',
+      });
+      const gid = result?.generation_id ?? null;
+      const url = (result?.generated_image_url || '').trim();
+      setFfPendingGenId(gid);
+      setFfPreviewUrl(url || genArchivePreviewUrl(gid, cabinet.archiveImages));
+      if (gid) {
+        cabinet.pickFirstFrameFromArchive?.({ id: gid, generated_image_url: url });
+      } else if (url) {
+        cabinet.setFirstFrameUrl?.(url);
+      }
+      setFfState('accepted');
+      cabinet.setUploadFile('mc-first-frame-upload', null);
+      await cabinet.refreshArchiveFull();
+    } catch (e) {
+      setFfState('idle');
+      cabinet.setError(e?.message || String(e));
+    }
+  }, [cabinet, ffState, s.vidFormat, lang]);
 
   const videoCredits = useMemo(() => {
     const variant = s.vidSeedanceVariant || 'standard';
@@ -752,6 +813,17 @@ export default function MotionControlWizard({
                       : 'Grok composes your model into the video opening pose — required for silhouette motion swap.'}
                   </div>
 
+                  <div style={{ display: 'flex', gap: 5, marginBottom: 12, justifyContent: 'flex-end' }}>
+                    <Chip on={ffSource === 'generate'} onClick={() => setFfSource('generate')}>
+                      {lang === 'ru' ? 'Сгенерировать' : 'Generate'}
+                    </Chip>
+                    <Chip on={ffSource === 'upload'} onClick={() => setFfSource('upload')}>
+                      {lang === 'ru' ? 'Своё фото' : 'Own photo'}
+                    </Chip>
+                  </div>
+
+                  {ffSource === 'generate' ? (
+                    <>
                   {!simplifiedUi && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
@@ -797,10 +869,79 @@ export default function MotionControlWizard({
                     </div>
                   )}
 
-                  {ffState === 'loading' && (
+                  {ffState === 'loading' && ffSource === 'generate' && (
                     <div style={{ marginTop: 10, fontSize: 11, color: '#38BDF8' }}>
                       {lang === 'ru' ? 'Собираем первый кадр…' : 'Building first frame…'}
                     </div>
+                  )}
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.5 }}>
+                        {lang === 'ru'
+                          ? 'Загрузите готовый первый кадр — генерация не нужна, кредиты не списываются.'
+                          : 'Upload a ready first frame — no generation, no credits charged.'}
+                      </div>
+                      <input
+                        ref={ffUploadRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) cabinet.setUploadFile('mc-first-frame-upload', file);
+                          e.target.value = '';
+                        }}
+                      />
+                      <Hoverable
+                        style={{
+                          marginTop: 12,
+                          borderRadius: 12,
+                          padding: 16,
+                          cursor: 'pointer',
+                          ...refUploadStyle(Boolean(cabinet.uploadFiles['mc-first-frame-upload'])).base,
+                        }}
+                        hover={refUploadStyle(Boolean(cabinet.uploadFiles['mc-first-frame-upload'])).hover}
+                        onClick={() => ffUploadRef.current?.click()}
+                      >
+                        <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: color.textDim }}>
+                          {cabinet.uploadFiles['mc-first-frame-upload']?.name || (lang === 'ru' ? 'Выбрать файл' : 'Choose file')}
+                        </span>
+                      </Hoverable>
+                      {cabinet.uploadPreviewUrls?.['mc-first-frame-upload'] && ffState !== 'accepted' && (
+                        <div style={{ marginTop: 12 }}>
+                          <img
+                            src={cabinet.uploadPreviewUrls['mc-first-frame-upload']}
+                            alt=""
+                            style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}` }}
+                          />
+                        </div>
+                      )}
+                      {(ffState === 'idle' || ffState === 'loading') && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                          <Hoverable
+                            style={{
+                              background: 'rgba(56,189,248,.15)',
+                              border: '1px solid rgba(56,189,248,.35)',
+                              color: '#7DD3FC',
+                              fontWeight: 800,
+                              fontSize: 13,
+                              borderRadius: 11,
+                              padding: '10px 16px',
+                              cursor: ffState === 'loading' ? 'wait' : 'pointer',
+                              opacity: ffState === 'loading' ? 0.7 : 1,
+                            }}
+                            hover={{ background: 'rgba(56,189,248,.22)' }}
+                            onClick={() => { if (ffState !== 'loading') void uploadFirstFrame(); }}
+                          >
+                            {ffState === 'loading'
+                              ? (lang === 'ru' ? 'Загружаем…' : 'Uploading…')
+                              : (lang === 'ru' ? 'Использовать это фото' : 'Use this photo')}
+                          </Hoverable>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {(ffState === 'preview' || ffState === 'accepted') && firstFrameDisplayUrl && (
@@ -829,7 +970,11 @@ export default function MotionControlWizard({
                             cursor: ffState === 'loading' ? 'wait' : 'pointer',
                           }}
                           hover={{ borderColor: line.strong }}
-                          onClick={() => { if (ffState !== 'loading') void runFirstFrame(); }}
+                          onClick={() => {
+                            if (ffState === 'loading') return;
+                            if (ffSource === 'upload') resetFirstFrameDraft();
+                            else void runFirstFrame();
+                          }}
                         >
                           ↻ {t.regen}
                         </Hoverable>
