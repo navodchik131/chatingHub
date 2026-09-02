@@ -15,8 +15,22 @@ log = logging.getLogger(__name__)
 # Video-edit: character-only swap (turnaround @Image1 + trimmed @Video1).
 MOTION_CONTROL_VIDEO_EDIT_PROMPT = (
     "Character-only replacement. Use the reference image @image1 as the sole source of "
-    "information: face, hair, body, and clothing. Completely discard the original woman's "
+    "information: face identity from the left face close-up panel, plus hair, body, and clothing "
+    "from the full turnaround sheet. Completely discard the original woman's "
     "appearance. Keep all movements, poses, camera trajectory, and timing from the video intact."
+)
+
+# На body-панелях развёртки лицо не показываем — identity только в левом close-up (как в workflow sheet).
+_MOTION_CONTROL_BODY_NO_FACE_INSTRUCTION = (
+    "Face visibility rule (critical): The left face close-up is the ONLY panel where eyes, nose, "
+    "mouth, and facial identity must be clearly visible and must exactly match the attached face "
+    "reference photo. "
+    "In ALL four full-body panels on the right: do NOT show a readable face — no visible eyes, "
+    "nose, or mouth. Hide the face using whichever fits each angle best: crop the frame at upper "
+    "chest/shoulders so the head is outside the panel; turn the head away so only back of head, "
+    "hair, or an featureless profile silhouette shows; or tilt the head so facial features are "
+    "not visible. Full-body back view: back of head/hair only, no face. "
+    "Keep body proportions, outfit, hairstyle silhouette, and skin tone consistent across panels."
 )
 
 # Turnaround sheet для Motion Control (16:9, face + outfit из шага «Образ»).
@@ -34,11 +48,11 @@ MOTION_CONTROL_TURNAROUND_PROMPT = (
     "All four body views shown at the same scale/zoom, standing neutrally "
     "(relaxed A-pose, arms slightly away from body)\n"
     "Identical clothing, hairstyle and body proportions across all four body views\n\n"
+    f"{_MOTION_CONTROL_BODY_NO_FACE_INSTRUCTION}\n\n"
     "General requirements:\n"
     "Flat, even studio lighting — no dramatic shadows — consistent across the whole sheet\n"
     "Plain neutral background (light grey or white)\n"
     "Photorealistic style, consistent skin tone and texture throughout\n"
-    "Face identity, hairstyle and features must exactly match the attached reference photo\n"
     "No text, no watermarks, no borders/dividers between sections\n"
     "Layout should fit naturally into a 16:9 canvas: face close-up occupies the left third, "
     "the four full-body views share the right two-thirds evenly, arranged so each view is "
