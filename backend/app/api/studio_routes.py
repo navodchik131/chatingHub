@@ -155,6 +155,7 @@ from app.services.studio_generation_storage import (
     try_recover_studio_generation_from_wavespeed,
     resolve_wavespeed_image_job_after_error,
     studio_finish_video_generation,
+    studio_finish_video_generation_with_reference_audio,
     user_message_when_archive_download_failed,
 )
 from app.services.studio_image_token import (
@@ -8352,6 +8353,7 @@ async def _studio_job_execute_motion_render_video(
     motion_timeline = str(params.get("motion_timeline") or "").strip()
     negative_prompt = str(params.get("negative_prompt") or "")
     generate_audio = str(params.get("generate_audio") or "1")
+    wants_reference_audio = _truthy_wavespeed_flag(generate_audio)
     duration_seconds = str(params.get("duration_seconds") or "")
     seedance_variant = str(params.get("seedance_variant") or "standard")
     video_resolution = str(params.get("video_resolution") or "")
@@ -8376,6 +8378,8 @@ async def _studio_job_execute_motion_render_video(
         "false",
         "no",
     )
+    # «Без звука» — часто ограничение API; звук референса приклеиваем локально после генерации.
+    post_mux_reference_audio = bool(mv_id and send_video_reference and not wants_reference_audio)
 
     clothing_ref = None
     environment_ref = None
@@ -8630,7 +8634,7 @@ async def _studio_job_execute_motion_render_video(
                 f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
             )
             if (
-                _truthy_wavespeed_flag(generate_audio)
+                wants_reference_audio
                 and resolve_motion_audio_file(oid, mv_id_eff) is not None
             ):
                 motion_aud_url = (
@@ -9157,7 +9161,7 @@ async def _studio_job_execute_motion_render_video(
                         aspect_ratio=None if motion_control_wizard else ar_edit,
                         resolution=video_res_edit,
                         duration=None if motion_control_wizard else ds_effective,
-                        keep_original_sound=not _truthy_wavespeed_flag(generate_audio),
+                        keep_original_sound=not wants_reference_audio and not post_mux_reference_audio,
                         variant=seedance_v,
                         upload_video_bytes=wizard_video_bytes,
                     )
@@ -9172,7 +9176,7 @@ async def _studio_job_execute_motion_render_video(
                         aspect_ratio=ar_t2v,
                         resolution=video_res,
                         duration=ds_effective,
-                        generate_audio=_truthy_wavespeed_flag(generate_audio),
+                        generate_audio=wants_reference_audio,
                         variant=seedance_v,
                     )
                     motion_provider = "seedance_t2v"
@@ -9209,11 +9213,14 @@ async def _studio_job_execute_motion_render_video(
         vu = (video_url or "").strip()
         if vu:
             if gen_placeholder is not None:
-                await studio_finish_video_generation(
+                await studio_finish_video_generation_with_reference_audio(
                     session,
                     gen_placeholder,
                     video_url=vu,
                     prompt_excerpt=(seed_prompt or "")[:2000] or None,
+                    owner_id=oid,
+                    motion_video_file_id=mv_id or None,
+                    attach_reference_audio=post_mux_reference_audio,
                 )
             try:
                 session.add(

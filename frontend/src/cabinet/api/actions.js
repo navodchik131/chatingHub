@@ -1,7 +1,7 @@
 import { apiFetch } from '../../api'
 import { formatHttpApiError } from '../../apiErrors'
 import { mergeVideoArchiveWithMotionRenders } from '../../studioArchive'
-import { withVideoDownloadParam } from './archiveDownload'
+import { withVideoDownloadParam, downloadBlobAsFile } from './archiveDownload'
 import { postStudioJobAndWait, postStudioJobStart, waitForStudioJobResult } from '../../studioJobs'
 import MMOS_STUDIO_SCENARIOS from '../../studio/mmOsStudioScenarios.js'
 import {
@@ -356,17 +356,7 @@ export async function downloadVideoNote(renderId, filename = 'modelmate-video-no
     throw new Error(formatHttpApiError(res, data))
   }
   const blob = await res.blob()
-  const objectUrl = URL.createObjectURL(blob)
-  try {
-    const a = document.createElement('a')
-    a.href = objectUrl
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  } finally {
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  }
+  await downloadBlobAsFile(blob, filename)
 }
 
 export async function downloadVideoNoteByPath(apiPath, filename = 'modelmate-video-note.mp4') {
@@ -376,17 +366,7 @@ export async function downloadVideoNoteByPath(apiPath, filename = 'modelmate-vid
     throw new Error(formatHttpApiError(res, data))
   }
   const blob = await res.blob()
-  const objectUrl = URL.createObjectURL(blob)
-  try {
-    const a = document.createElement('a')
-    a.href = objectUrl
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  } finally {
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
-  }
+  await downloadBlobAsFile(blob, filename)
 }
 
 const ARCHIVE_PAGE_LIMIT = 40

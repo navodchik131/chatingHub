@@ -6,11 +6,46 @@ html, body {
   background: #0A0B0D;
   color: #F2F3F0;
   font-family: 'Manrope', system-ui, sans-serif;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 * { box-sizing: border-box; }
 
-#root { height: 100vh; }
+#root {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+/* Shell кабинета: фиксированная высота viewport на iOS PWA (без «уезжающего» nav). */
+.mm-app-shell {
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+/* Toast/banner над нижним меню на мобилках. */
+@media (max-width: 760px) {
+  .mm-fixed-toast {
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 8px) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    max-width: min(92vw, 360px) !important;
+  }
+}
+
+/* iOS Safari зумит input <16px — поднимаем на мобилках. */
+@media (max-width: 760px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
 
 a { color: #D7F452; text-decoration: none; }
 a:hover { color: #E8FA8A; }

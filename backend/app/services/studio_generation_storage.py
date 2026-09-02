@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import anyio
@@ -975,6 +978,97 @@ async def studio_finish_video_generation(
     session.add(gen_row)
     await session.flush()
     return gen_row
+
+
+async def studio_finish_video_generation_with_reference_audio(
+    session: AsyncSession,
+    gen_row: StudioGeneration | None,
+    *,
+    video_url: str | None,
+    prompt_excerpt: str | None = None,
+    owner_id: int,
+    motion_video_file_id: str | None,
+    attach_reference_audio: bool,
+) -> StudioGeneration | None:
+    """
+    Завершает видео-генерацию; при attach_reference_audio (режим «Без звука» + реф-видео)
+    накладывает звук референса через ffmpeg после провайдера.
+    """
+    row = await studio_finish_video_generation(
+        session,
+        gen_row,
+        video_url=video_url,
+        prompt_excerpt=prompt_excerpt,
+    )
+    if row is None or not attach_reference_audio:
+        return row
+
+    mv_id = str(motion_video_file_id or "").strip()
+    if not mv_id:
+        return row
+
+    from app.services.studio_motion_video import (
+        mux_original_audio_onto_video,
+        probe_video_has_audio,
+        resolve_motion_audio_file,
+        resolve_motion_video_source,
+    )
+
+    audio_src = resolve_motion_audio_file(owner_id, mv_id) or resolve_motion_video_source(
+        owner_id, mv_id
+    )
+    if audio_src is None or not probe_video_has_audio(audio_src):
+        return row
+
+    url = (video_url or "").strip()
+    if not url:
+        return row
+
+    data, ct = await _download_bytes_from_url(url)
+    if data is None or len(data) < 1024:
+        log.warning(
+            "motion post-mux: download failed gen=%s owner=%s mv=%s",
+            row.id,
+            owner_id,
+            mv_id,
+        )
+        return row
+
+    fd, tmp_path_str = tempfile.mkstemp(prefix="gen_mux_", suffix=".mp4")
+    os.close(fd)
+    tmp_path = Path(tmp_path_str)
+    try:
+        tmp_path.write_bytes(data)
+        muxed = await anyio.to_thread.run_sync(
+            lambda: mux_original_audio_onto_video(tmp_path, audio_src)
+        )
+        if not muxed:
+            log.warning(
+                "motion post-mux: ffmpeg mux failed gen=%s owner=%s mv=%s",
+                row.id,
+                owner_id,
+                mv_id,
+            )
+            return row
+        out_bytes = tmp_path.read_bytes()
+        archived = await archive_studio_generation_from_bytes(
+            session,
+            row,
+            out_bytes,
+            content_type=ct or "video/mp4",
+            studio_model_id=row.studio_model_id,
+        )
+        if archived:
+            log.info(
+                "motion post-mux ok gen=%s owner=%s mv=%s bytes=%s",
+                row.id,
+                owner_id,
+                mv_id,
+                len(out_bytes),
+            )
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    return row
 
 
 def safe_delete_generation_file(relative_path: str) -> None:

@@ -30,7 +30,7 @@ from app.services.studio_generation_placeholders import find_studio_generation_b
 from app.services.studio_generation_storage import (
     ensure_studio_generation_image_archived_for_external_fetch,
     mark_studio_generation_failed,
-    studio_finish_video_generation,
+    studio_finish_video_generation_with_reference_audio,
 )
 from app.services.studio_jobs import job_params
 from app.services.studio_keys import load_owner_studio_billing, studio_wavespeed_api_key
@@ -87,6 +87,9 @@ async def execute_evolink_motion_render_video(
     motion_timeline = str(params.get("motion_timeline") or "").strip()
     negative_prompt = str(params.get("negative_prompt") or "")
     generate_audio = str(params.get("generate_audio") or "1")
+    wants_reference_audio = _truthy_flag(generate_audio)
+    # «Без звука» у API — не значит «без звука» у пользователя; mux референса после генерации.
+    post_mux_reference_audio = bool(mv_id and not wants_reference_audio)
     duration_seconds = str(params.get("duration_seconds") or "")
     seedance_variant = str(params.get("seedance_variant") or "standard")
     video_resolution = str(params.get("video_resolution") or "")
@@ -281,7 +284,7 @@ async def execute_evolink_motion_render_video(
         )
         vid_tok = create_motion_video_access_token(user_id=oid, file_id=mv_id_eff)
         motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
-        if _truthy_flag(generate_audio) and resolve_motion_audio_file(oid, mv_id_eff) is not None:
+        if wants_reference_audio and resolve_motion_audio_file(oid, mv_id_eff) is not None:
             motion_aud_url = f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
 
     ref_images: list[str] = []
@@ -435,7 +438,7 @@ async def execute_evolink_motion_render_video(
             aspect_ratio=ar_t2v,
             resolution=video_res,
             duration=ds_effective,
-            generate_audio=_truthy_flag(generate_audio),
+            generate_audio=wants_reference_audio,
             session=session,
         )
         log.info(
@@ -465,11 +468,14 @@ async def execute_evolink_motion_render_video(
     if video_url:
         vu = video_url.strip()
         if gen_placeholder is not None:
-            await studio_finish_video_generation(
+            await studio_finish_video_generation_with_reference_audio(
                 session,
                 gen_placeholder,
                 video_url=vu,
                 prompt_excerpt=(seed_prompt or "")[:2000] or None,
+                owner_id=oid,
+                motion_video_file_id=mv_id or None,
+                attach_reference_audio=post_mux_reference_audio,
             )
         try:
             session.add(

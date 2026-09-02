@@ -28,8 +28,10 @@ export function MobileTopBar() {
   return (
     <div
       style={{
-        flex: 'none', display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 14px', borderBottom: `1px solid ${line.hair}`, background: color.bgPanel,
+        flex: 'none', display: 'flex', alignItems: 'center', gap: 8,
+        padding: 'calc(8px + env(safe-area-inset-top, 0px)) 12px 8px',
+        borderBottom: `1px solid ${line.hair}`, background: color.bgPanel,
+        minWidth: 0,
       }}
     >
       <div
@@ -40,7 +42,11 @@ export function MobileTopBar() {
       >
         <img src={assetUrl('assets/logo-m.jpeg')} alt="ModelMate" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       </div>
-      <div style={{ fontWeight: 800, fontSize: 14, flex: 1 }}>
+      <div style={{
+        fontWeight: 800, fontSize: 14, flex: 1, minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}
+      >
         {page === 'seedance-sale' ? <SeedanceSaleLabel active /> : pageTitles(t)[page]}
       </div>
       <Hoverable
@@ -48,6 +54,7 @@ export function MobileTopBar() {
         style={{
           fontFamily: font.mono, fontSize: 10, border: `1px solid ${line.strong}`,
           borderRadius: 7, padding: '3px 7px', color: color.textDim, cursor: 'pointer',
+          flex: 'none',
         }}
         hover={{ color: color.text }}
         onClick={() => setLang(lang === 'ru' ? 'en' : 'ru')}
@@ -56,9 +63,9 @@ export function MobileTopBar() {
       </Hoverable>
       <Hoverable
         style={{
-          display: 'flex', alignItems: 'center', gap: 5,
+          display: 'flex', alignItems: 'center', gap: 4,
           background: 'rgba(215,244,82,.1)', border: '1px solid rgba(215,244,82,.3)',
-          borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
+          borderRadius: 20, padding: '4px 8px', cursor: 'pointer', flex: 'none', minWidth: 0,
         }}
         hover={{ borderColor: 'rgba(215,244,82,.6)' }}
         onClick={go('billing')}
@@ -93,7 +100,8 @@ export function MobileNav() {
     <div
       style={{
         flex: 'none', display: 'flex', borderTop: '1px solid rgba(255,255,255,.08)',
-        background: color.bgPanel, padding: '6px 4px calc(6px + env(safe-area-inset-bottom))',
+        background: color.bgPanel, padding: '4px 2px calc(4px + env(safe-area-inset-bottom, 0px))',
+        minHeight: 0,
       }}
     >
       {navItems.map((mn) => {
@@ -104,15 +112,23 @@ export function MobileNav() {
             key={mn.label}
             style={{
               flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-              gap: 3, padding: '6px 2px', cursor: 'pointer', borderRadius: 10,
+              gap: 2, padding: '4px 1px', cursor: 'pointer', borderRadius: 10,
+              minWidth: 0, maxWidth: '20%',
             }}
             hover={{ background: 'rgba(255,255,255,.04)' }}
             onClick={mn.more ? () => setS({ moreOpen: true }) : go(mn.go)}
           >
-            <span style={{ display: 'flex', width: 19, height: 19, color: tint }}>
+            <span style={{ display: 'flex', width: 19, height: 19, color: tint, flex: 'none' }}>
               <mn.Icon />
             </span>
-            <span style={{ fontSize: 9, fontWeight: 700, color: tint }}>{mn.label}</span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, color: tint,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              maxWidth: '100%', lineHeight: 1.1, textAlign: 'center',
+            }}
+            >
+              {mn.label}
+            </span>
           </Hoverable>
         );
       })}

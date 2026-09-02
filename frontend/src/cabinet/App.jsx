@@ -72,6 +72,7 @@ function DonationAlertBanner() {
         background: color.raised, border: `1px solid ${line.mid}`, borderRadius: 14,
         padding: '14px 16px', boxShadow: '0 12px 40px rgba(0,0,0,.55)',
       }}
+      className="mm-fixed-toast"
     >
       <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>
         {lang === 'ru' ? 'Новый донат ModelMate' : 'New ModelMate donation'}
@@ -115,14 +116,14 @@ function Shell() {
     : { padding: '24px 28px 32px', height: '100%', boxSizing: 'border-box', maxWidth: 1280, margin: '0 auto' };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: color.bg }}>
+    <div className="mm-app-shell" style={{ display: 'flex', height: '100%', overflow: 'hidden', background: color.bg }}>
       {!isMobile && <Sidebar />}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {isMobile && <MobileTopBar />}
 
         {/* `key` remounts on page change so the fade animation replays */}
-        <main style={{ flex: 1, overflowY: 'auto' }} key={page}>
+        <main style={{ flex: 1, overflowY: 'auto', minWidth: 0, WebkitOverflowScrolling: 'touch' }} key={page}>
           <div style={contentPad}>
             <Page />
           </div>

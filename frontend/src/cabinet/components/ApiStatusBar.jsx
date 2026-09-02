@@ -5,6 +5,7 @@ export default function ApiStatusBar({ error, busy, onDismiss }) {
   if (!error && !busy) return null;
   return (
     <div
+      className="mm-fixed-toast"
       style={{
         position: 'fixed',
         bottom: 16,
