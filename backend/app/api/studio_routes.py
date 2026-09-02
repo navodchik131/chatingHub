@@ -9153,6 +9153,14 @@ async def _studio_job_execute_motion_render_video(
                     wizard_video_bytes: bytes | None = None
                     if motion_control_wizard and vpath is not None and vpath.is_file():
                         wizard_video_bytes = vpath.read_bytes()
+                        # Реф с аудио → video-edit с generate_audio=false всё равно сохранит дорожку;
+                        # для «Без звука»+post-mux отдаём провайдеру немой клип.
+                        if post_mux_reference_audio and wizard_video_bytes:
+                            from app.services.studio_motion_video import strip_video_audio_bytes
+
+                            wizard_video_bytes = await anyio.to_thread.run_sync(
+                                lambda b=wizard_video_bytes: strip_video_audio_bytes(b)
+                            )
                     video_url = await seedance_studio_video_edit_video_url(
                         api_key=ws_key,
                         video_url=motion_vid_url or "",
@@ -9161,7 +9169,8 @@ async def _studio_job_execute_motion_render_video(
                         aspect_ratio=None if motion_control_wizard else ar_edit,
                         resolution=video_res_edit,
                         duration=None if motion_control_wizard else ds_effective,
-                        keep_original_sound=not wants_reference_audio and not post_mux_reference_audio,
+                        # WaveSpeed video-edit: generate_audio = not keep_original_sound
+                        keep_original_sound=not wants_reference_audio,
                         variant=seedance_v,
                         upload_video_bytes=wizard_video_bytes,
                     )

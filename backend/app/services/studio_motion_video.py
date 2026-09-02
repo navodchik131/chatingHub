@@ -100,6 +100,53 @@ def probe_video_has_audio(video_path: Path) -> bool:
         return False
 
 
+def strip_video_audio_bytes(data: bytes) -> bytes:
+    """Убирает аудиодорожку из mp4 — для video-edit, когда звук приклеим после генерации."""
+    if not data or len(data) < 256:
+        return data
+    fd_in, in_path_str = tempfile.mkstemp(prefix="strip_in_", suffix=".mp4")
+    os.close(fd_in)
+    fd_out, out_path_str = tempfile.mkstemp(prefix="strip_out_", suffix=".mp4")
+    os.close(fd_out)
+    in_path = Path(in_path_str)
+    out_path = Path(out_path_str)
+    try:
+        in_path.write_bytes(data)
+        if not probe_video_has_audio(in_path):
+            return data
+        cmd = [
+            _ffmpeg_bin(),
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(in_path),
+            "-map",
+            "0:v:0",
+            "-c:v",
+            "copy",
+            "-an",
+            "-movflags",
+            "+faststart",
+            str(out_path),
+        ]
+        r = subprocess.run(cmd, check=False, timeout=300, capture_output=True)
+        if r.returncode != 0 or not out_path.is_file() or out_path.stat().st_size < 256:
+            log_motion.warning(
+                "strip video audio failed: %s",
+                (r.stderr or b"").decode("utf-8", errors="replace")[:400],
+            )
+            return data
+        return out_path.read_bytes()
+    except Exception:
+        log_motion.warning("strip video audio failed", exc_info=True)
+        return data
+    finally:
+        in_path.unlink(missing_ok=True)
+        out_path.unlink(missing_ok=True)
+
+
 def mux_original_audio_onto_video(video_path: Path, audio_source: Path) -> bool:
     """Накладывает аудио из исходника на уже готовый ролик (без перекодирования картинки)."""
     if not video_path.is_file() or not audio_source.is_file():
