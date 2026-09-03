@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 # На 2 GB VPS — один outline за раз (rembg + OpenCV).
 _OUTLINE_SUBPROCESS_LOCK = asyncio.Lock()
 
-_OOM_EXIT_CODES = frozenset({137, -9, 9, 247, -247})
+_OOM_EXIT_CODES = frozenset({137, -9, 9, 247, -247, -11, 11})
 
 
 def apply_subprocess_memory_limit_mb(limit_mb: int | None) -> None:
@@ -99,14 +99,24 @@ def _outline_subprocess_cmd(owner_id: int, file_id: str) -> list[str]:
 
 def _format_subprocess_failure(returncode: int, stderr: bytes) -> str:
     err_tail = (stderr or b"").decode("utf-8", errors="replace").strip()
-    if returncode in _OOM_EXIT_CODES:
-        return (
+    low = err_tail.lower()
+    if returncode in _OOM_EXIT_CODES or "bad_alloc" in low or "std::bad_alloc" in low:
+        hint = (
             "Нехватка памяти при обработке силуэта (rembg/OpenCV). "
-            "Укоротите референс-видео или добавьте swap на сервере."
-            + (f" ({err_tail[:200]})" if err_tail else "")
+            "Укоротите референс-видео или увеличьте MOTION_OUTLINE_SUBPROCESS_MEMORY_MB "
+            "(при 8 GB RAM — 4096–5120)."
         )
+        if "bad_alloc" in low:
+            return hint
+        return hint + (f" (код {returncode})" if returncode else "")
+    for line in reversed(err_tail.splitlines()):
+        line = line.strip()
+        if line and not line.startswith("File ") and "Traceback" not in line:
+            if len(line) <= 500:
+                return line
+            return line[:500]
     if err_tail:
-        return err_tail[:2000]
+        return err_tail[:500]
     return f"Outline subprocess завершился с кодом {returncode}"
 
 

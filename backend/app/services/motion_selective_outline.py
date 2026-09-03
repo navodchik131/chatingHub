@@ -122,7 +122,12 @@ def _get_rembg_session() -> Any:
         return _REMBG_SESSION
     from rembg import new_session
 
-    _REMBG_SESSION = new_session("u2net_human_seg")
+    try:
+        _REMBG_SESSION = new_session("u2net_human_seg")
+    except Exception as e:
+        # bad_alloc / OOM onnx — пусть сработает ffmpeg fallback в _render_outline.
+        log.warning("rembg session init failed: %s", e)
+        raise RuntimeError(f"rembg недоступен: {e}") from e
     return _REMBG_SESSION
 
 

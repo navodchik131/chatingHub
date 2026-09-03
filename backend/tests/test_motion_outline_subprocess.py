@@ -30,6 +30,11 @@ def test_format_subprocess_failure_stderr():
     assert "bad video" in msg
 
 
+def test_format_subprocess_failure_bad_alloc():
+    msg = _format_subprocess_failure(-11, b"std::bad_alloc in onnxruntime")
+    assert "памят" in msg.lower() or "MOTION_OUTLINE" in msg
+
+
 def test_run_motion_outline_in_subprocess_success():
     proc = MagicMock()
     proc.returncode = 0
