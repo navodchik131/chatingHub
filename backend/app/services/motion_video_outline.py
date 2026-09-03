@@ -30,9 +30,10 @@ log = logging.getLogger(__name__)
 OUTLINE_CACHE_ROOT = (BACKEND_DIR / "data" / "motion_outline_cache").resolve()
 
 MOTION_OUTLINE_VIDEO_PROMPT_TEMPLATE = (
-    "@Video1 is a blurred edge-outline motion reference. It carries camera "
-    "path, framing, timing, body movement and gesture only — it contains no "
-    "readable face, hair, skin or clothing detail by construction. "
+    "@Video1 is a motion reference where only the person is drawn as a white canvas with "
+    "black edge outlines; the background and environment stay as in the original clip. "
+    "It carries camera path, framing, timing, body movement and gesture only — no readable "
+    "face, hair, skin or clothing detail on the person by construction. "
     "All appearance comes from {appearance_refs}."
 )
 
@@ -275,9 +276,11 @@ def measure_gray_stats(path: Path) -> tuple[float, float]:
 
 
 def _cache_key(meta: MotionVideoInputMeta, params: EdgeOutlineParams) -> str:
+    from app.services.motion_selective_outline import selective_outline_cache_tag
+
     raw = (
         f"{meta.content_sha256}|{params.sigma}|{params.low}|{params.high}|"
-        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}|audio-v3"
+        f"{params.out_w}|{params.out_h}|{params.pre_scale_w}|{selective_outline_cache_tag()}|audio-v4"
     )
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -401,9 +404,24 @@ def _render_outline(source: Path, dest: Path, params: EdgeOutlineParams) -> None
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         dest.unlink()
+    timeout = max(30, int(settings.motion_outline_render_timeout_sec))
+    try:
+        from app.services.motion_selective_outline import render_person_selective_outline
+
+        render_person_selective_outline(source, dest, params, timeout=float(timeout))
+        if dest.is_file() and dest.stat().st_size >= 1024:
+            return
+    except Exception as e:
+        log.warning(
+            "motion selective person outline failed, fallback to ffmpeg full-frame: %s",
+            str(e)[:400],
+            exc_info=True,
+        )
+        if dest.exists():
+            dest.unlink()
+
     keep_audio = source_has_audio_stream(source)
     cmd = _outline_ffmpeg_cmd(source, dest, params, keep_audio=keep_audio)
-    timeout = max(30, int(settings.motion_outline_render_timeout_sec))
     r = _run_cmd(cmd, timeout=timeout)
     if r.returncode != 0:
         log.error("motion outline ffmpeg failed: %s", _stderr_text(r)[:2000])

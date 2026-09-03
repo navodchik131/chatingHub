@@ -1,45 +1,46 @@
-# Backend API + маркетинг-SPA (dist-site). Кабинет OS — отдельный сервис frontend.
-FROM node:22-alpine AS site-build
-WORKDIR /app/frontend
-
-ENV npm_config_fund=false \
-    npm_config_audit=false \
-    npm_config_update_notifier=false \
-    npm_config_fetch_retries=5 \
-    npm_config_fetch_retry_mintimeout=20000 \
-    npm_config_fetch_retry_maxtimeout=120000 \
-    npm_config_maxsockets=2
-
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-
-COPY frontend/ ./
-RUN npm run build:site
-
-FROM python:3.12-slim
-WORKDIR /app/backend
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV DEBIAN_FRONTEND=noninteractive
-ENV DEBCONF_NONINTERACTIVE_SEEN=true
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ffmpeg \
-    libimage-exiftool-perl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY backend/requirements.txt ./
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir --prefer-binary -r requirements.txt
-
-COPY backend/ ./
-COPY backend/data/prompts/ ./_bundled_prompts/
-COPY backend/data/workflow_templates/ ./_bundled_workflow_templates/
-COPY backend/data/studio_camera_presets.json ./_bundled_studio_camera_presets.json
-COPY --from=site-build /app/frontend/dist-site ../frontend/dist
-
-EXPOSE 8080
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Backend API + маркетинг-SPA (dist-site). Кабинет OS — отдельный сервис frontend.
+FROM node:22-alpine AS site-build
+WORKDIR /app/frontend
+
+ENV npm_config_fund=false \
+    npm_config_audit=false \
+    npm_config_update_notifier=false \
+    npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000 \
+    npm_config_maxsockets=2
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+COPY frontend/ ./
+RUN npm run build:site
+
+FROM python:3.12-slim
+WORKDIR /app/backend
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN=true
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ffmpeg \
+    libimage-exiftool-perl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt ./
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir --prefer-binary -r requirements.txt \
+    && python -c "from rembg import new_session; new_session('u2net_human_seg')"
+
+COPY backend/ ./
+COPY backend/data/prompts/ ./_bundled_prompts/
+COPY backend/data/workflow_templates/ ./_bundled_workflow_templates/
+COPY backend/data/studio_camera_presets.json ./_bundled_studio_camera_presets.json
+COPY --from=site-build /app/frontend/dist-site ../frontend/dist
+
+EXPOSE 8080
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

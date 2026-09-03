@@ -375,8 +375,8 @@ export default function MotionTrimTimeline({
       <div style={{ fontSize: 10.5, color: color.textDim, lineHeight: 1.45, marginTop: 8 }}>
         {useMotionOutline
           ? (lang === 'ru'
-            ? 'Потяните жёлтые ручки. В Seedance уйдёт контурное видео (силуэт движения) — внешность берётся из развёртки.'
-            : 'Drag the yellow handles. Seedance receives an edge-outline motion clip; appearance comes from the turnaround sheet.')
+            ? 'Потяните жёлтые ручки. В Seedance уйдёт силуэт человека на оригинальном фоне — внешность из первого кадра/развёртки.'
+            : 'Drag the yellow handles. Seedance receives a person-only outline on the original background; appearance from the first frame/turnaround.')
           : (lang === 'ru'
             ? 'Потяните жёлтые ручки. В Seedance уйдёт цветной фрагмент без силуэтной обработки.'
             : 'Drag the yellow handles. The color clip is sent to Seedance without silhouette processing.')}

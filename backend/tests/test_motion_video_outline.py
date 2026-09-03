@@ -25,7 +25,7 @@ def test_choose_edge_params_by_contrast():
 def test_motion_outline_prompt_block():
     text = motion_outline_video_prompt_block(appearance_refs="@Image1, @Image2 and @Image3")
     assert "@Video1" in text
-    assert "edge-outline" in text
+    assert "edge outline" in text.lower()
     assert "@Image1" in text
 
 

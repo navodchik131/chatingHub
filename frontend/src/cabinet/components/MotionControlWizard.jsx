@@ -798,8 +798,8 @@ export default function MotionControlWizard({
                 />
                 <span>
                   {lang === 'ru'
-                    ? 'Перевести референс в силуэты (контур движения) — лучше подменяет модель. Без галочки уйдёт оригинальное цветное видео.'
-                    : 'Convert reference to motion silhouettes (edge outline) for better model swap. Unchecked sends the original color clip.'}
+                    ? 'Перевести референс в силуэт человека (контур тела на фоне оригинала) — лучше подменяет модель. Без галочки уйдёт оригинальное цветное видео.'
+                    : 'Convert reference to a person-only silhouette (body outline on the original background). Unchecked sends the original color clip.'}
                 </span>
               </label>
               {useMotionOutline && (

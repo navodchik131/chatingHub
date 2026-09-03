@@ -466,7 +466,7 @@ class Settings(BaseSettings):
     studio_motion_max_upload_mb: int = Field(default=64, ge=1, le=200)
     motion_outline_enabled: bool = Field(default=True)
     motion_outline_max_duration_sec: int = Field(default=60, ge=1, le=120)
-    motion_outline_render_timeout_sec: int = Field(default=300, ge=30, le=900)
+    motion_outline_render_timeout_sec: int = Field(default=600, ge=30, le=900)
     motion_outline_max_parallel: int = Field(default=2, ge=1, le=8)
     # BoardStory: перед T2V генерировать opening still (модель в позе из @Video1) как @Image1
     studio_boardstory_auto_opening_frame: bool = Field(default=True)
