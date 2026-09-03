@@ -104,15 +104,20 @@ async def _studio_archive_retry_loop() -> None:
         await asyncio.sleep(interval)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_db()
+async def _deferred_recover_studio_jobs_on_startup() -> None:
+    """Recovery после yield: healthcheck/nginx успевают подняться до тяжёлых studio jobs."""
+    await asyncio.sleep(12)
     try:
         from app.services.studio_jobs import recover_studio_jobs_on_startup
 
         await recover_studio_jobs_on_startup()
     except Exception:
         log.exception("studio jobs startup recovery failed")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
     try:
         from app.services.motion_video_outline import assert_ffmpeg_tools_available
 
@@ -276,6 +281,7 @@ async def lifespan(app: FastAPI):
         await refresh_registered_telegram_webhooks()
     except Exception:
         log.exception("Telegram webhook refresh on startup failed")
+    asyncio.create_task(_deferred_recover_studio_jobs_on_startup())
     yield
     if polling_task:
         polling_task.cancel()

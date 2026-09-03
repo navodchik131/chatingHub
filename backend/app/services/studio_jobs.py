@@ -234,12 +234,18 @@ def schedule_studio_job(job_id: int) -> None:
     asyncio.create_task(_run_studio_job(job_id))
 
 
+STARTUP_INTERRUPTED_JOB_MESSAGE = (
+    "Задача прервана перезапуском сервера. Запустите генерацию заново."
+)
+
+
 async def recover_studio_jobs_on_startup() -> None:
-    """После рестарта API: только прерванные running и свежие pending (<30 мин)."""
+    """После рестарта API: свежие pending (<30 мин); running — failed (не OOM-loop)."""
     now = datetime.now(timezone.utc)
     pending_cutoff = now - timedelta(minutes=30)
     to_run: list[StudioJob] = []
     skipped_provider: list[StudioJob] = []
+    interrupted: list[StudioJob] = []
     async with SessionLocal() as session:
         stmt = select(StudioJob).where(
             StudioJob.status.in_(
@@ -268,31 +274,35 @@ async def recover_studio_jobs_on_startup() -> None:
                 skipped_provider.append(job)
                 continue
             if st == StudioJobStatus.running.value:
-                job.status = StudioJobStatus.pending.value
-                job.started_at = None
-                job.error_message = None
+                # Не перезапускаем прерванные задачи: outline/rembg при старте валит процесс → 502.
+                job.status = StudioJobStatus.failed.value
+                job.error_message = STARTUP_INTERRUPTED_JOB_MESSAGE[:4000]
+                job.completed_at = now
+                job.started_at = job.started_at
                 job.updated_at = now
                 session.add(job)
-                to_run.append(job)
+                interrupted.append(job)
+                continue
             elif st == StudioJobStatus.pending.value:
                 created = job.created_at
                 if created is not None and created.tzinfo is None:
                     created = created.replace(tzinfo=timezone.utc)
                 if created is not None and created >= pending_cutoff:
                     to_run.append(job)
-        if not to_run and not skipped_provider:
+        if not to_run and not skipped_provider and not interrupted:
             return
-        if skipped_provider:
+        terminal_jobs = skipped_provider + interrupted
+        if terminal_jobs:
             from app.services.studio_generation_placeholders import (
                 finalize_studio_generation_for_terminal_job,
             )
 
-            for job in skipped_provider:
+            for job in terminal_jobs:
                 try:
                     await finalize_studio_generation_for_terminal_job(session, job)
                 except Exception:
                     log.exception(
-                        "studio jobs: finalize after provider-skip job=%s",
+                        "studio jobs: finalize after startup terminal job=%s",
                         job.id,
                     )
         await session.commit()
@@ -300,6 +310,11 @@ async def recover_studio_jobs_on_startup() -> None:
         log.info(
             "studio jobs: skipped %s provider-submitted job(s) after startup",
             len(skipped_provider),
+        )
+    if interrupted:
+        log.info(
+            "studio jobs: marked %s interrupted running job(s) as failed after startup",
+            len(interrupted),
         )
     if not to_run:
         return
