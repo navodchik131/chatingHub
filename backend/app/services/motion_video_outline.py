@@ -742,6 +742,12 @@ async def ensure_motion_outline_ready(owner_id: int, file_id: str) -> None:
         log.info("motion outline: legacy raw clip file_id=%s (no .source)", fid)
         source = legacy
 
+    if settings.motion_outline_subprocess_enabled:
+        from app.services.motion_outline_subprocess import run_motion_outline_in_subprocess
+
+        await run_motion_outline_in_subprocess(owner_id, fid)
+        return
+
     result = await anyio.to_thread.run_sync(process_motion_video_outline, source)
     try:
         def _publish_and_audio() -> None:

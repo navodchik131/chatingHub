@@ -8300,11 +8300,18 @@ async def _studio_job_execute_motion_video_outline(
     if source is None or not source.is_file():
         raise RuntimeError("Исходное референс-видео не найдено. Загрузите файл снова.")
 
-    result = await anyio.to_thread.run_sync(process_motion_video_outline, source)
-    try:
-        publish_outline_for_owner(owner_id=oid, file_id=file_id, outline=result.outline_path)
-    finally:
-        result.outline_path.unlink(missing_ok=True)
+    from app.config import settings
+
+    if settings.motion_outline_subprocess_enabled:
+        from app.services.motion_outline_subprocess import run_motion_outline_in_subprocess
+
+        await run_motion_outline_in_subprocess(oid, file_id)
+    else:
+        result = await anyio.to_thread.run_sync(process_motion_video_outline, source)
+        try:
+            publish_outline_for_owner(owner_id=oid, file_id=file_id, outline=result.outline_path)
+        finally:
+            result.outline_path.unlink(missing_ok=True)
 
     outline_path = resolve_motion_video_file(oid, file_id)
     dur = probe_video_duration_seconds(outline_path) if outline_path else None

@@ -467,7 +467,10 @@ class Settings(BaseSettings):
     motion_outline_enabled: bool = Field(default=True)
     motion_outline_max_duration_sec: int = Field(default=60, ge=1, le=120)
     motion_outline_render_timeout_sec: int = Field(default=600, ge=30, le=900)
-    motion_outline_max_parallel: int = Field(default=2, ge=1, le=8)
+    # rembg/OpenCV в отдельном subprocess — OOM worker не валит uvicorn (важно на VPS 2 GB).
+    motion_outline_subprocess_enabled: bool = Field(default=True)
+    motion_outline_subprocess_memory_mb: int = Field(default=1400, ge=0, le=8192)
+    motion_outline_max_parallel: int = Field(default=1, ge=1, le=8)
     # BoardStory: перед T2V генерировать opening still (модель в позе из @Video1) как @Image1
     studio_boardstory_auto_opening_frame: bool = Field(default=True)
     # BoardStory + motion: Seedance Video-Edit Turbo (replace person in video)
