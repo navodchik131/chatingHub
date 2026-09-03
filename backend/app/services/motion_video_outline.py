@@ -37,6 +37,14 @@ MOTION_OUTLINE_VIDEO_PROMPT_TEMPLATE = (
     "All appearance comes from {appearance_refs}."
 )
 
+MOTION_BLUR_VIDEO_PROMPT_TEMPLATE = (
+    "@Video1 is a motion reference where the person is heavily privacy-blurred while the "
+    "background and environment stay sharp and unchanged. Body movement, gestures, timing "
+    "and facial motion (expressions, head turns, mouth movement) remain visible through the "
+    "blur — no readable identity, skin texture, hair or clothing detail on the person. "
+    "All appearance comes from {appearance_refs}."
+)
+
 MOTION_ORIGINAL_AUDIO_PROMPT = (
     "@Audio1 is the original soundtrack of the motion clip. "
     "Use @Audio1 as the output soundtrack — keep speech, music, timing and "
@@ -79,8 +87,12 @@ def assert_ffmpeg_tools_available() -> None:
 
 
 def motion_outline_video_prompt_block(*, appearance_refs: str) -> str:
+    from app.services.motion_selective_outline import person_render_style
+
     refs = (appearance_refs or "@Image1").strip()
-    return MOTION_OUTLINE_VIDEO_PROMPT_TEMPLATE.format(appearance_refs=refs)
+    if person_render_style() == "outline":
+        return MOTION_OUTLINE_VIDEO_PROMPT_TEMPLATE.format(appearance_refs=refs)
+    return MOTION_BLUR_VIDEO_PROMPT_TEMPLATE.format(appearance_refs=refs)
 
 
 def append_motion_original_audio_prompt(prompt: str) -> str:

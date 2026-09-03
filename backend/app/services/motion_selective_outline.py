@@ -1,4 +1,4 @@
-"""Силуэт только человека (rembg + контур внутри маски), фон — без изменений."""
+"""Motion-референс только по человеку: blur или контур (rembg-маска), фон — без изменений."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any, Iterator
 
 import numpy as np
 
-from app.config import BACKEND_DIR
+from app.config import BACKEND_DIR, settings
 from app.services.motion_video_outline import (
     EdgeOutlineParams,
     _ffmpeg_bin,
@@ -35,8 +35,9 @@ YUNET_URL = (
     "models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
 )
 
-# Версия алгоритма — для cache-bust при изменениях пайплайна.
+# Версии алгоритма — для cache-bust при изменениях пайплайна.
 SELECTIVE_OUTLINE_ALGO = "person-v1"
+SELECTIVE_BLUR_ALGO = "person-blur-v1"
 
 _REMBG_SESSION: Any | None = None
 _YUNET_DETECTOR: Any | None = None
@@ -251,6 +252,33 @@ def _detect_faces_yunet(frame_bgr: np.ndarray, detector: Any) -> list[tuple[floa
     return out
 
 
+def person_render_style() -> str:
+    """Режим обработки человека: blur (по умолчанию) или outline."""
+    raw = str(getattr(settings, "motion_outline_person_style", "blur") or "blur").strip().lower()
+    if raw in {"outline", "edges", "canny", "line", "lines"}:
+        return "outline"
+    return "blur"
+
+
+def selective_outline_cache_tag() -> str:
+    if person_render_style() == "outline":
+        return SELECTIVE_OUTLINE_ALGO
+    return SELECTIVE_BLUR_ALGO
+
+
+def _blur_sigmas() -> tuple[float, float]:
+    body = float(getattr(settings, "motion_outline_person_blur_sigma_body", 18.0) or 18.0)
+    face = float(getattr(settings, "motion_outline_person_blur_sigma_face", 10.0) or 10.0)
+    return body, face
+
+
+def _odd_kernel_from_sigma(sigma: float) -> int:
+    k = int(max(3, round(sigma * 6)))
+    if k % 2 == 0:
+        k += 1
+    return k
+
+
 def _draw_rotated_ellipse_mask(shape: tuple[int, int], track: _FaceTrack) -> np.ndarray:
     import cv2
 
@@ -359,6 +387,95 @@ def _process_frame_person_outline(
     )
 
 
+def _build_face_mask_from_tracks(
+    tracks: list[_FaceTrack],
+    shape: tuple[int, int],
+    person_mask: np.ndarray,
+) -> np.ndarray | None:
+    import cv2
+
+    if not tracks:
+        return None
+    face_combined = np.zeros(shape, dtype=np.uint8)
+    for tr in tracks:
+        face_combined = np.maximum(face_combined, _draw_rotated_ellipse_mask(shape, tr))
+    face_combined = cv2.bitwise_and(face_combined, person_mask)
+    if face_combined.max() == 0:
+        return None
+    return face_combined
+
+
+def _compose_person_blur_frame(
+    frame_bgr: np.ndarray,
+    *,
+    person_mask: np.ndarray,
+    face_mask: np.ndarray | None,
+    sigma_body: float,
+    sigma_face: float,
+) -> np.ndarray:
+    """Размывает человека по rembg-маске; лицо — слабее blur, чтобы читались эмоции."""
+    import cv2
+
+    h, w = frame_bgr.shape[:2]
+    mask_f = cv2.GaussianBlur(person_mask, (11, 11), 0).astype(np.float32) / 255.0
+    ys, xs = np.where(person_mask > 32)
+    if len(xs) == 0:
+        return frame_bgr
+
+    x0, x1 = int(xs.min()), int(xs.max())
+    y0, y1 = int(ys.min()), int(ys.max())
+    pad = int(max(sigma_body * 3, 24))
+    x0 = max(0, x0 - pad)
+    y0 = max(0, y0 - pad)
+    x1 = min(w - 1, x1 + pad)
+    y1 = min(h - 1, y1 + pad)
+
+    crop = frame_bgr[y0 : y1 + 1, x0 : x1 + 1]
+    k_body = _odd_kernel_from_sigma(sigma_body)
+    blurred_body = cv2.GaussianBlur(crop, (k_body, k_body), sigma_body)
+    k_face = _odd_kernel_from_sigma(sigma_face)
+    blurred_face = cv2.GaussianBlur(crop, (k_face, k_face), sigma_face)
+
+    person_layer = blurred_body.astype(np.float32)
+    if face_mask is not None and face_mask.max() > 0:
+        fm = face_mask[y0 : y1 + 1, x0 : x1 + 1].astype(np.float32) / 255.0
+        fm = cv2.GaussianBlur(fm, (7, 7), 0)
+        fm = fm[..., None]
+        person_layer = blurred_body.astype(np.float32) * (1.0 - fm) + blurred_face.astype(np.float32) * fm
+
+    crop_mask = mask_f[y0 : y1 + 1, x0 : x1 + 1][..., None]
+    out = frame_bgr.copy()
+    out[y0 : y1 + 1, x0 : x1 + 1] = (
+        crop.astype(np.float32) * (1.0 - crop_mask) + person_layer * crop_mask
+    ).astype(np.uint8)
+    return out
+
+
+def _process_frame_person_blur(
+    frame_bgr: np.ndarray,
+    *,
+    rembg_session: Any,
+    tracker: _FaceTracker,
+    yunet: Any | None,
+    sigma_body: float,
+    sigma_face: float,
+) -> np.ndarray:
+    person_mask = _human_mask_bgr(frame_bgr, rembg_session)
+    face_mask: np.ndarray | None = None
+    if yunet is not None:
+        dets = _detect_faces_yunet(frame_bgr, yunet)
+        tracks = tracker.update(dets)
+        face_mask = _build_face_mask_from_tracks(tracks, person_mask.shape, person_mask)
+
+    return _compose_person_blur_frame(
+        frame_bgr,
+        person_mask=person_mask,
+        face_mask=face_mask,
+        sigma_body=sigma_body,
+        sigma_face=sigma_face,
+    )
+
+
 def _iter_frames_bgr(source: Path) -> tuple[float, int, int, Iterator[np.ndarray]]:
     w, h, _dur = probe_motion_video_stream(source)
     fps = _probe_fps(source)
@@ -454,8 +571,14 @@ def _encode_frames_bgr(
         raise
 
 
-def render_person_selective_outline(source: Path, dest: Path, params: EdgeOutlineParams, *, timeout: float) -> None:
-    """Покадровый силуэт человека: rembg-маска + контур внутри, фон — оригинал."""
+def _render_person_outline_video(
+    source: Path,
+    dest: Path,
+    params: EdgeOutlineParams,
+    *,
+    timeout: float,
+) -> None:
+    """Покадровый силуэт: rembg-маска + Canny-контур, фон — оригинал."""
     fps, w, h, frame_iter = _iter_frames_bgr(source)
     rembg_session = _get_rembg_session()
     tracker = _FaceTracker()
@@ -463,7 +586,7 @@ def render_person_selective_outline(source: Path, dest: Path, params: EdgeOutlin
     try:
         yunet = _get_yunet_detector(w, h)
     except Exception as e:
-        log.warning("motion selective outline: YuNet unavailable (%s), body-only edges", e)
+        log.warning("motion person outline: YuNet unavailable (%s), body-only edges", e)
 
     def processed() -> Iterator[np.ndarray]:
         for frame in frame_iter:
@@ -486,10 +609,56 @@ def render_person_selective_outline(source: Path, dest: Path, params: EdgeOutlin
         timeout=timeout,
     )
 
+
+def _render_person_blur_video(
+    source: Path,
+    dest: Path,
+    params: EdgeOutlineParams,
+    *,
+    timeout: float,
+) -> None:
+    """Покадровое размытие человека по rembg-маске; фон — оригинал."""
+    fps, w, h, frame_iter = _iter_frames_bgr(source)
+    rembg_session = _get_rembg_session()
+    tracker = _FaceTracker()
+    sigma_body, sigma_face = _blur_sigmas()
+    yunet: Any | None = None
+    try:
+        yunet = _get_yunet_detector(w, h)
+    except Exception as e:
+        log.warning("motion person blur: YuNet unavailable (%s), uniform body blur", e)
+
+    def processed() -> Iterator[np.ndarray]:
+        for frame in frame_iter:
+            yield _process_frame_person_blur(
+                frame,
+                rembg_session=rembg_session,
+                tracker=tracker,
+                yunet=yunet,
+                sigma_body=sigma_body,
+                sigma_face=sigma_face,
+            )
+
+    _encode_frames_bgr(
+        dest,
+        fps=fps,
+        width=w,
+        height=h,
+        frames=processed(),
+        out_w=params.out_w,
+        out_h=params.out_h,
+        timeout=timeout,
+    )
+
+
+def render_person_selective_outline(source: Path, dest: Path, params: EdgeOutlineParams, *, timeout: float) -> None:
+    """Motion-референс по человеку (blur или outline — см. motion_outline_person_style)."""
+    style = person_render_style()
+    if style == "outline":
+        _render_person_outline_video(source, dest, params, timeout=timeout)
+    else:
+        _render_person_blur_video(source, dest, params, timeout=timeout)
+
     if source_has_audio_stream(source):
         if not mux_original_audio_onto_video(dest, source):
-            log.warning("motion selective outline: failed to mux audio onto %s", dest.name)
-
-
-def selective_outline_cache_tag() -> str:
-    return SELECTIVE_OUTLINE_ALGO
+            log.warning("motion person reference: failed to mux audio onto %s", dest.name)
