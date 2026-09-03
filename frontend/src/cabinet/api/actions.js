@@ -563,7 +563,8 @@ export async function runMotionVideo(params) {
   const endpoint = params.videoBackend === 'evolink'
     ? '/api/studio/seedance-sale/render-video'
     : '/api/studio/motion/render-video'
-  return postStudioJob(endpoint, { method: 'POST', body: fd })
+  // Только 202 + job_id: outline/WaveSpeed идут в фоне, UI опрашивает pending.
+  return postStudioJobStart(endpoint, { method: 'POST', body: fd })
 }
 
 export async function fetchSupportTickets() {

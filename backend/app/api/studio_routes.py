@@ -7847,6 +7847,8 @@ async def api_studio_motion_render_video(
     if is_evolink and not settings.evolink_video_enabled:
         raise HTTPException(status_code=503, detail="Seedance Sale временно недоступен.")
     assert_permission(user, PERM_STUDIO_GENERATE)
+    # mc_wizard нужен ниже по коду (до присвоения в блоке валидации промпта).
+    mc_wizard = _truthy_wavespeed_flag(motion_control_wizard)
     oid = workspace_owner_id(user)
     sub_b, _llm, ws_row, plan, _credits, _demo = await load_owner_studio_billing(session, oid)
     _require_studio_subscription(user, sub_b, credits_balance=_credits, demo_generations_remaining=_demo)
@@ -7897,7 +7899,6 @@ async def api_studio_motion_render_video(
             )
 
     if not (prompt or "").strip() and not (auto_mp and mv_id_early):
-        mc_wizard = _truthy_wavespeed_flag(motion_control_wizard)
         turn_raw = (turnaround_generation_id or "").strip()
         # Wizard без промпта: развёртка ИЛИ (силуэт + первый кадр) — как в evolink/wavespeed worker.
         use_outline_wizard = mc_wizard and _truthy_wavespeed_flag(use_motion_outline)
@@ -8008,7 +8009,6 @@ async def api_studio_motion_render_video(
 
     mv_id = str(motion_video_file_id).strip()
     ref_video_duration: int | None = None
-    mc_wizard = _truthy_wavespeed_flag(motion_control_wizard)
     trim_mode_n = (trim_mode or "full").strip().lower()
     trim_start_f: float | None = None
     trim_end_f: float | None = None

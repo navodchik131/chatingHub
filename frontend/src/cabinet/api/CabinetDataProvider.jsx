@@ -37,14 +37,42 @@ function applyJobToOptimisticArchive(current, tempIds, accepted) {
         })
       }
     })
+    // Опрос архива мог снять optimistic-карточку до ответа POST — вернуть server-side id.
+    const missing = tempIds.filter((tid) => !next.some((g) => g.id === tid || realIds.includes(g.id)))
+    if (missing.length && realIds.length) {
+      const seed = current.find((g) => tempIds.includes(g.id))
+      for (let i = 0; i < missing.length; i += 1) {
+        const rid = realIds[i]
+        if (!rid || next.some((g) => g.id === rid)) continue
+        next = prependOptimisticStudioArchive(next, {
+          ...(seed || {}),
+          id: rid,
+          status: 'processing',
+          job_id: accepted?.job_id ?? null,
+        })
+      }
+    }
     return next
   }
   const realId = coerceJobGenerationId(accepted)
   if (realId && tempIds.length === 1) {
-    return replaceOptimisticStudioArchiveId(next, tempIds[0], realId, {
-      status: 'processing',
-      job_id: accepted?.job_id ?? null,
-    })
+    const tid = tempIds[0]
+    if (next.some((g) => g.id === tid)) {
+      return replaceOptimisticStudioArchiveId(next, tid, realId, {
+        status: 'processing',
+        job_id: accepted?.job_id ?? null,
+      })
+    }
+    const seed = current.find((g) => g.id === tid)
+    if (!next.some((g) => g.id === realId)) {
+      return prependOptimisticStudioArchive(next, {
+        ...(seed || {}),
+        id: realId,
+        status: 'processing',
+        job_id: accepted?.job_id ?? null,
+      })
+    }
+    return next
   }
   if (accepted?.job_id) {
     return next.map((g) =>
@@ -1348,10 +1376,13 @@ export function CabinetDataProvider({ children }) {
           trimEndSec: wizard?.trimEndSec,
           useMotionOutline: Boolean(mcWizard && wizard?.useMotionOutline),
         })
+        if (!accepted?.job_id && !coerceJobGenerationId(accepted)) {
+          throw new Error('Сервер не принял задачу видео. Обновите страницу и попробуйте снова.')
+        }
         setArchive((prev) => applyJobToOptimisticArchive(prev, [tempId], accepted))
       } catch (e) {
         setArchive((prev) => removeOptimisticStudioArchive(prev, tempId))
-        setError(e?.message || String(e))
+        setError(e?.message || String(e) || 'Не удалось запустить генерацию видео')
       } finally {
         setVideoSubmitting(null)
       }

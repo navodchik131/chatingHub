@@ -85,7 +85,10 @@ export async function refreshPendingArchiveImages(current) {
     if (newcomers.length) {
       let images = [...next]
       for (const nr of newcomers) {
-        const optIdx = images.findIndex((g) => isOptimisticStudioArchiveId(g.id))
+        // Не снимаем чужую optimistic-карточку: job_id ещё нет, пока POST не вернул 202.
+        const optIdx = nr.job_id != null
+          ? images.findIndex((g) => isOptimisticStudioArchiveId(g.id) && g.job_id === nr.job_id)
+          : -1
         if (optIdx >= 0) images.splice(optIdx, 1)
         images.unshift(nr)
         known.add(nr.id)
@@ -152,7 +155,9 @@ export async function refreshPendingArchiveVideos(current, { videoBackend = 'wav
     if (newcomers.length) {
       let videos = [...next]
       for (const nr of newcomers) {
-        const optIdx = videos.findIndex((g) => isOptimisticStudioArchiveId(g.id))
+        const optIdx = nr.job_id != null
+          ? videos.findIndex((g) => isOptimisticStudioArchiveId(g.id) && g.job_id === nr.job_id)
+          : -1
         if (optIdx >= 0) videos.splice(optIdx, 1)
         videos.unshift(nr)
         known.add(nr.id)
