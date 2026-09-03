@@ -59,22 +59,22 @@ def test_selective_outline_cache_tag_outline(monkeypatch):
     assert selective_outline_cache_tag() == "person-v1"
 
 
-def test_motion_outline_prompt_uses_blur_by_default():
+def test_motion_outline_prompt_uses_outline_by_default():
     from app.services.motion_video_outline import motion_outline_video_prompt_block
 
-    text = motion_outline_video_prompt_block(appearance_refs="@Image1")
-    assert "privacy-blurred" in text
-    assert "white canvas" not in text
-
-
-def test_motion_outline_prompt_outline_mode(monkeypatch):
-    from app.config import settings
-    from app.services.motion_video_outline import motion_outline_video_prompt_block
-
-    monkeypatch.setattr(settings, "motion_outline_person_style", "outline")
     text = motion_outline_video_prompt_block(appearance_refs="@Image1")
     assert "white canvas" in text
     assert "privacy-blurred" not in text
+
+
+def test_motion_outline_prompt_blur_mode(monkeypatch):
+    from app.config import settings
+    from app.services.motion_video_outline import motion_outline_video_prompt_block
+
+    monkeypatch.setattr(settings, "motion_outline_person_style", "blur")
+    text = motion_outline_video_prompt_block(appearance_refs="@Image1")
+    assert "privacy-blurred" in text
+    assert "white canvas" not in text
 
 
 def test_canny_thresholds_from_edge_params():

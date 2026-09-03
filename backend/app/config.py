@@ -473,7 +473,7 @@ class Settings(BaseSettings):
     motion_outline_subprocess_memory_mb: int = Field(default=4096, ge=0, le=8192)
     motion_outline_max_parallel: int = Field(default=1, ge=1, le=8)
     # person style для motion-референса: blur (размытие человека) или outline (контуры Canny).
-    motion_outline_person_style: str = Field(default="blur")
+    motion_outline_person_style: str = Field(default="outline")
     # Сигма Gaussian blur: тело/одежда сильнее, лицо слабее — эмоции и повороты головы читаются.
     motion_outline_person_blur_sigma_body: float = Field(default=18.0, ge=1.0, le=80.0)
     motion_outline_person_blur_sigma_face: float = Field(default=10.0, ge=1.0, le=80.0)
