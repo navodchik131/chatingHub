@@ -15,8 +15,8 @@ from app.services.motion_video_outline import _ffmpeg_bin, _ffprobe_bin, _run_cm
 
 log = logging.getLogger(__name__)
 
-# v2: рабочий URL model-small.onnx + rembg-маска + нормализация по человеку.
-DEPTH_MAP_ALGO = "v2"
+# v3: полная сцена MiDaS + rembg усиливает силуэт человека (фон не чёрный).
+DEPTH_MAP_ALGO = "v3"
 MIDAS_DIR = (BACKEND_DIR / "data" / "models" / "midas").resolve()
 # В релизе v2_1 файл называется model-small.onnx (midas_v21_small_256.onnx — 404).
 MIDAS_MODEL = MIDAS_DIR / "model-small.onnx"
@@ -58,7 +58,7 @@ def _get_midas_session():
 
 
 def _get_rembg_session_safe() -> Any | None:
-    """rembg для чёрного фона; при OOM/ошибке — depth без маски."""
+    """rembg для усиления силуэта человека; при OOM — depth только по MiDaS."""
     try:
         from app.services.motion_selective_outline import _get_rembg_session
 
@@ -80,33 +80,58 @@ def _human_mask_bgr_safe(frame_bgr: np.ndarray, rembg_session: Any | None) -> np
         return None
 
 
-def _normalize_depth_to_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) -> np.ndarray:
+def _percentile_norm01(values: np.ndarray, *, lo_pct: float, hi_pct: float) -> np.ndarray:
+    lo = float(np.percentile(values, lo_pct))
+    hi = float(np.percentile(values, hi_pct))
+    if hi <= lo:
+        hi = lo + 1e-6
+    return np.clip((values - lo) / (hi - lo), 0.0, 1.0)
+
+
+def _soft_person_alpha(fg_mask: np.ndarray) -> np.ndarray:
+    """Мягкая маска 0..1 для плавного перехода человек ↔ окружение."""
+    import cv2
+
+    m = (fg_mask > 127).astype(np.float32)
+    if not np.any(m > 0.01):
+        return m
+    return cv2.GaussianBlur(m, (21, 21), 0)
+
+
+def _compose_scene_depth_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) -> np.ndarray:
     """
     Белый = ближе, чёрный = дальше.
-    Нормализация по процентилям внутри маски человека — как на эталонных depth-картах.
+    Окружение и предметы видны (глобальная нормализация MiDaS).
+    Человек ярче и контрастнее фона — rembg-маска усиливает локальную глубину тела.
     """
     import cv2
 
     d = depth.astype(np.float32)
-    if fg_mask is not None and np.any(fg_mask > 127):
-        fg = fg_mask > 127
-        vals = d[fg]
-        lo = float(np.percentile(vals, 3))
-        hi = float(np.percentile(vals, 97))
+    # Слой сцены: стены, пол, реквизит — всё остаётся читаемым.
+    scene01 = _percentile_norm01(d, lo_pct=2, hi_pct=98)
+    scene_gray = (scene01 * 255.0).astype(np.float32)
+
+    if fg_mask is None or not np.any(fg_mask > 127):
+        gray = scene_gray
     else:
-        lo = float(np.percentile(d, 2))
-        hi = float(np.percentile(d, 98))
-    if hi <= lo:
-        hi = lo + 1e-6
-    norm = np.clip((d - lo) / (hi - lo), 0.0, 1.0)
-    gray = (norm * 255.0).astype(np.uint8)
-    if fg_mask is not None:
-        gray = np.where(fg_mask > 127, gray, 0).astype(np.uint8)
-    # Сглаживание без размытия силуэта (в отличие от Gaussian 9×9).
-    gray = cv2.bilateralFilter(gray, 7, 40, 40)
-    if fg_mask is not None:
-        gray = np.where(fg_mask > 127, gray, 0).astype(np.uint8)
-    return gray
+        fg = fg_mask > 127
+        person01 = _percentile_norm01(d[fg], lo_pct=4, hi_pct=96)
+        person_full = np.zeros_like(d, dtype=np.float32)
+        person_full[fg] = person01
+        # Человек: широкий диапазон 48–255; окружение приглушено (~62% яркости).
+        person_gray = 48.0 + person_full * 207.0
+        scene_layer = scene_gray * 0.62
+        alpha = _soft_person_alpha(fg_mask)
+        gray = alpha * person_gray + (1.0 - alpha) * scene_layer
+
+    out = np.clip(gray, 0, 255).astype(np.uint8)
+    out = cv2.bilateralFilter(out, 7, 40, 40)
+    return out
+
+
+def _normalize_depth_to_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) -> np.ndarray:
+    """Обратная совместимость для тестов."""
+    return _compose_scene_depth_gray(depth, fg_mask=fg_mask)
 
 
 def _run_midas_depth(frame_bgr: np.ndarray, session) -> np.ndarray:
@@ -130,36 +155,39 @@ def _frame_to_depth_bgr(
     *,
     rembg_session: Any | None = None,
 ) -> np.ndarray:
-    """MiDaS depth + маска человека на чёрном фоне."""
+    """MiDaS depth: сцена + предметы + усиленный силуэт человека."""
     import cv2
 
     mask = _human_mask_bgr_safe(frame_bgr, rembg_session)
     depth = _run_midas_depth(frame_bgr, session)
-    gray = _normalize_depth_to_gray(depth, fg_mask=mask)
+    gray = _compose_scene_depth_gray(depth, fg_mask=mask)
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
 def _fallback_depth_bgr(frame_bgr: np.ndarray, *, rembg_session: Any | None = None) -> np.ndarray:
     """
-    Запасной control-signal без MiDaS: rembg-силуэт + pseudo-depth внутри маски.
-    Лучше, чем Canny+distanceTransform (давал «облака» без людей).
+    Запасной control-signal без MiDaS: яркость кадра как грубая глубина сцены
+    + rembg pseudo-depth для усиления человека.
     """
     import cv2
 
     mask = _human_mask_bgr_safe(frame_bgr, rembg_session)
-    h, w = frame_bgr.shape[:2]
-    if mask is None or not np.any(mask > 127):
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (11, 11), 0)
-        gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    gray = cv2.GaussianBlur(gray, (7, 7), 0)
+    scene_depth = gray.copy()
 
-    fg = (mask > 127).astype(np.uint8)
-    dist = cv2.distanceTransform(fg, cv2.DIST_L2, 5)
-    if float(dist.max()) > 1e-3:
-        dist = dist / float(dist.max())
-    gray = (dist * 255.0).astype(np.uint8)
-    gray = _normalize_depth_to_gray(gray.astype(np.float32), fg_mask=mask)
+    if mask is not None and np.any(mask > 127):
+        fg = (mask > 127).astype(np.uint8)
+        dist = cv2.distanceTransform(fg, cv2.DIST_L2, 5)
+        if float(dist.max()) > 1e-3:
+            dist = dist / float(dist.max())
+        person_depth = dist * 255.0
+        # Смешиваем псевдо-глубину человека с яркостью сцены.
+        blend_src = np.maximum(scene_depth, person_depth)
+        gray = _compose_scene_depth_gray(blend_src, fg_mask=mask)
+    else:
+        gray = _compose_scene_depth_gray(scene_depth, fg_mask=None)
+
     return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
@@ -290,7 +318,7 @@ def _encode_depth_video(
 
 
 def render_motion_depth_map_video(source: Path, dest: Path, *, timeout: float = 600.0) -> None:
-    """Покадровая depth-map: white=near, black=far, силуэт человека на чёрном фоне."""
+    """Покадровая depth-map: white=near, black=far; человек контрастнее окружения."""
     fps, w, h, frame_iter = _iter_frames_bgr(source)
     session = None
     rembg_session = _get_rembg_session_safe()

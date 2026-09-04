@@ -208,8 +208,11 @@ async def execute_evolink_motion_render_video(
     ref_video_duration: int | None = None
     if mv_id:
         from app.services.studio_motion_video import (
+            ensure_motion_reference_audio,
             motion_outline_requested,
             prepare_motion_video_file_for_duration,
+            probe_video_duration_seconds,
+            resolve_motion_audio_file,
             resolve_motion_video_file,
             resolve_motion_video_for_render,
             save_motion_video_bytes,
@@ -255,7 +258,6 @@ async def execute_evolink_motion_render_video(
         if motion_control_wizard:
             mv_id_eff = mv_id
             vpath_eff = vpath
-            from app.services.studio_motion_video import probe_video_duration_seconds
 
             probed = probe_video_duration_seconds(vpath_eff) if vpath_eff else None
             ref_video_duration = (
@@ -272,6 +274,15 @@ async def execute_evolink_motion_render_video(
             raise RuntimeError(
                 "Референс-видео не найдено на сервере. Загрузите файл заново на шаге 1."
             )
+        if wants_reference_audio:
+            await anyio.to_thread.run_sync(
+                lambda: ensure_motion_reference_audio(
+                    owner_id=oid,
+                    file_id=mv_id_eff,
+                    source=vpath_eff,
+                    target_sec=None if motion_control_wizard else ds_effective,
+                )
+            )
         # EvoLink: зеркалим с диска, а не через JWT URL (частый 404 при устаревшем file_id).
         from app.services.evolink_client import evolink_upload_file_bytes
 
@@ -284,6 +295,12 @@ async def execute_evolink_motion_render_video(
         motion_vid_url = f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
         if wants_reference_audio and resolve_motion_audio_file(oid, mv_id_eff) is not None:
             motion_aud_url = f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
+        elif wants_reference_audio:
+            log.warning(
+                "evolink motion_render job=%s: ref audio missing file_id=%s",
+                job.id,
+                mv_id_eff,
+            )
 
     ref_images: list[str] = []
     ref_videos: list[str] = []
@@ -463,7 +480,7 @@ async def execute_evolink_motion_render_video(
             aspect_ratio=ar_t2v,
             resolution=video_res,
             duration=ds_effective,
-            generate_audio=wants_reference_audio,
+            generate_audio=bool(motion_aud_url),
             session=session,
         )
         log.info(

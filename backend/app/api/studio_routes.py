@@ -1418,7 +1418,7 @@ async def public_studio_motion_video(t: str) -> FileResponse:
 
 @router.get("/studio/public-motion-depth-video")
 async def public_studio_motion_depth_video(t: str) -> FileResponse:
-    """Grayscale depth-map control video по JWT (пара {file_id}.depth.v2.mp4)."""
+    """Grayscale depth-map control video по JWT (пара {file_id}.depth.v3.mp4)."""
     from app.services.motion_depth_map import motion_depth_video_path
 
     try:
@@ -8400,8 +8400,8 @@ async def _studio_job_execute_motion_render_video(
         "false",
         "no",
     )
-    # «Без звука» — часто ограничение API; звук референса приклеиваем локально после генерации.
-    post_mux_reference_audio = bool(mv_id and send_video_reference and not wants_reference_audio)
+    # «Без звука»: не шлём reference_audios в API, приклеиваем дорожку реф-видео после генерации.
+    post_mux_reference_audio = bool(mv_id and not wants_reference_audio)
 
     clothing_ref = None
     environment_ref = None
@@ -8599,6 +8599,8 @@ async def _studio_job_execute_motion_render_video(
 
             await ensure_motion_outline_ready(oid, mv_id)
         from app.services.studio_motion_video import (
+            ensure_motion_reference_audio,
+            resolve_motion_audio_file,
             resolve_motion_video_file,
             resolve_motion_video_for_render,
             save_motion_video_bytes,
@@ -8653,13 +8655,26 @@ async def _studio_job_execute_motion_render_video(
             motion_vid_url = (
                 f"{pub}/api/studio/public-motion-video?t={quote(vid_tok, safe='')}"
             )
-            if (
-                wants_reference_audio
-                and resolve_motion_audio_file(oid, mv_id_eff) is not None
-            ):
-                motion_aud_url = (
-                    f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
+            if wants_reference_audio and vpath is not None:
+                audio_target_sec = None if motion_control_wizard else ds_for_fit
+                await anyio.to_thread.run_sync(
+                    lambda: ensure_motion_reference_audio(
+                        owner_id=oid,
+                        file_id=mv_id_eff,
+                        source=vpath,
+                        target_sec=audio_target_sec,
+                    )
                 )
+                if resolve_motion_audio_file(oid, mv_id_eff) is not None:
+                    motion_aud_url = (
+                        f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
+                    )
+                else:
+                    log.warning(
+                        "motion_render_video job=%s: ref audio missing file_id=%s",
+                        job.id,
+                        mv_id_eff,
+                    )
             if _truthy_wavespeed_flag(auto_motion_prompt) and not motion_summary:
                 try:
                     if (
@@ -9202,7 +9217,8 @@ async def _studio_job_execute_motion_render_video(
                         aspect_ratio=ar_t2v,
                         resolution=video_res,
                         duration=ds_effective,
-                        generate_audio=wants_reference_audio,
+                        # Со звуком: только reference_audios (не генерировать новый AI-саунд).
+                        generate_audio=bool(motion_aud_url),
                         variant=seedance_v,
                     )
                     motion_provider = "seedance_t2v"

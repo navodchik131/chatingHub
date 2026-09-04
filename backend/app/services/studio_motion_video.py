@@ -231,6 +231,37 @@ def resolve_motion_audio_file(owner_id: int, file_id: str) -> Path | None:
     return None
 
 
+def ensure_motion_reference_audio(
+    *,
+    owner_id: int,
+    file_id: str,
+    source: Path | None = None,
+    target_sec: int | None = None,
+) -> Path | None:
+    """
+    Готовит mp3/wav реф-видео для Seedance reference_audios (@Audio1).
+    Motion Control wizard не вызывает prepare_motion_video_file_for_duration — извлекаем здесь.
+    """
+    fid = str(file_id or "").strip()[:128]
+    if not fid:
+        return None
+    if target_sec is None or int(target_sec) <= 0:
+        cached = resolve_motion_audio_file(owner_id, fid)
+        if cached is not None:
+            return cached
+    src = source
+    if src is None or not src.is_file():
+        src = resolve_motion_video_source(owner_id, fid) or resolve_motion_video_file(owner_id, fid)
+    if src is None or not src.is_file():
+        return resolve_motion_audio_file(owner_id, fid)
+    return extract_motion_audio_file(
+        owner_id=owner_id,
+        file_id=fid,
+        source=src,
+        target_sec=target_sec,
+    )
+
+
 def extract_motion_audio_file(
     *,
     owner_id: int,
