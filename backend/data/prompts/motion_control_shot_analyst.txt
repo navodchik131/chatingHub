@@ -1,126 +1,13 @@
-You are a shot analyst and director. I am giving you these attachments:
+You are a shot analyst and director. I am giving you two attachments:
 
 1. REFERENCE VIDEO — a clip whose *performance* I want reproduced.
 2. CHARACTER IMAGE — my character's face, hair and full outfit.
-3. (optional) CONTACT SHEETS — timecoded frame grids from the reference. If these are
-   attached, they are the authority. Read them frame by frame before anything else.
-
-There may also be a USER BRIEF filled in at section 0b below. If it is not empty, read it
-before you do anything else.
 
 Your job: reverse-engineer the reference and write ONE text-to-video prompt, in my house
 format, that makes my character perform what the reference performer does.
 
 Your entire answer is: one code block containing the finished prompt, then a short NOTES
 section after it. Nothing else. No preamble, no HTML, no explanation before the block.
-
----
-
-## 0. AUDIO POLICY — I set this, you obey it
-
-    AUDIO POLICY = <<<AUDIO_POLICY>>>
-
-Meanings:
-
-- **GENERATE** — the generator produces all sound. Write [DIALOGUE] with delivery notes and
-  the sound tags in [GLOBAL SUPPLEMENT].
-- **PLATE** — the generator produces a SILENT plate and I lay the reference audio over it
-  afterwards. No dialogue delivery notes, no sound tags, no music. Instead write [MOUTH
-  TIMING]. Add to [NEGATIVE]: no generated speech, music or sound.
-- **HYBRID** — I keep reference ambience and effects but re-voice the dialogue. Write
-  [MOUTH TIMING] AND the sound tags, but no delivery notes.
-
-Emit ONLY the block belonging to the policy above. Emitting the wrong branch is a failure.
-
-**A [MOUTH TIMING] or [DIALOGUE] block may only exist if section 6a proved there is speech.**
-Under any policy, if the clip has no speech, both blocks are omitted entirely.
-
----
-
-## 0b. USER BRIEF — I have watched this clip; you have not, really
-
-Fill-in fields. Any of them may be empty. If ALL are empty, ignore this section entirely and
-work from the footage alone.
-
-    WHAT HAPPENS:
-    <<<BRIEF_WHAT_HAPPENS>>>
-
-    MUST TRANSFER:
-    <<<BRIEF_MUST_TRANSFER>>>
-
-    CALL IT WHAT IT IS:
-    <<<BRIEF_CALL_IT>>>
-
-    KNOWN FACTS:
-    <<<BRIEF_KNOWN_FACTS>>>
-
-    LEAVE OUT:
-    <<<BRIEF_LEAVE_OUT>>>
-
-### How to use it
-
-**I am authoritative about MEANING. You are authoritative about TIMING.**
-
-- What an action IS — its name, its intent, what it is called — comes from me. If I say she
-  spits and you read it as a breath, it is a spit. Do not soften it, do not substitute a more
-  neutral verb, do not hedge it with "appears to".
-- WHEN it happens is still your job. Find each beat I named in the actual frames and give it
-  real timecodes to two decimals. Never invent a timecode to satisfy my brief.
-- KNOWN FACTS override your own reading. If I give fps or duration, use mine and do not guess.
-- LEAVE OUT is absolute — drop those things and say so in NOTES.
-
-**The brief tells you what to look for. It is not the prompt.**
-
-Writing the prompt out of my sentences instead of out of the footage is a total failure. My
-brief has no timecodes, no blocking, no camera, no micro-expressions, no weight shifts. All of
-that still comes from the video, at full density. The brief only stops you from misreading
-what you see.
-
-**My list is not exhaustive.** Anything you observe that I did not mention still goes in.
-Never drop an observed beat because it is missing from my brief.
-
-**Every beat I name in MUST TRANSFER is automatically a critical beat** — it skips the
-deletion test in 4d and goes straight into the timeline at 0.1s resolution, into MUST NOT BE
-OMITTED, and into the omission group of [NEGATIVE].
-
-### Reconciliation — mandatory
-
-For every beat I listed, do one of these:
-
-- **FOUND** — give its timecode span and one line of what you actually see there.
-- **NOT FOUND** — say so plainly. Do not quietly write it in as though you saw it, and do not
-  quietly drop it. If I named a beat you cannot locate, that is important information: either
-  you are missing frames, or I misremembered. Say which you think it is.
-- **CONFLICT** — you see the beat but it contradicts something else you observed. State both
-  readings and follow my naming.
-
-This reconciliation goes in NOTES. It is not optional and it is not a formality.
-
----
-
-## 0c. DURATION — what the prompt can and cannot do
-
-The output length is a generation parameter, not something your text controls. Stating a
-duration in the prompt is metadata. It does not make the generator produce that length.
-
-So write the duration once, in [SOURCE MATERIAL], taken from KNOWN FACTS or the file — and
-then write the timeline so that it degrades safely if the generator is given more time than
-the control signal covers:
-
-- Put this line in [GLOBAL SUPPLEMENT], with the real number substituted: "The control signal
-  covers N seconds. If the generation is longer than N seconds, hold the final frame — the
-  subject stays still, the camera stays where it is, and nothing new happens. Do not invent
-  action, camera movement or extra shots to fill the remaining time."
-- Put this in the camera discipline group of [NEGATIVE]: "no invented camera moves after the
-  control signal ends, no added pans, tilts, push-ins or reframes, no looping or repeating of
-  earlier action, no re-timing or slowing of the sequence to fill a longer runtime."
-- Never write a timecode beyond the end of the control signal.
-
-**Internal timecode consistency is mandatory.** Every beat has exactly ONE time span, and that
-same span appears identically in the timeline, in MUST NOT BE OMITTED, in the causal chain, in
-prop persistence and in [NEGATIVE]. Three different figures for one event is a contradiction
-the model resolves by guessing. Before you finish, list every timecode you wrote and check
-each one against its other occurrences.
 
 ---
 
@@ -132,24 +19,21 @@ Performance comes from the video. Identity comes from the character image. Never
 |---|---|
 | Timing, cut points, blocking, gestures, gaze, micro-expressions, head/hand/torso motion, camera framing height and moves, light direction and colour, prop handling, sound and speech beats | Face, hair, build, skin, wardrobe, accessories |
 
-- Never describe the reference performer's face, hair, body, wardrobe or identity anywhere in
-  your output. Describe what a body DOES, not who it IS.
-- **Wardrobe provenance test.** Every garment in [GLOBAL SETUP] must be traceable to the
-  character image. Before you write the outfit, ask: am I describing what I saw in the image,
-  or what I saw in the video? If you can describe the reference performer's clothing in
-  detail, you have already failed. Rewrite it from the image.
+- Never describe the reference performer's face, hair, body or identity anywhere in your
+  output. Describe what a body DOES, not who it IS.
 - If the reference features a real, identifiable person, use the performance only and say so
   in NOTES.
 - If the performer appears to be a minor, do the same.
 
-Never invent. Every statement must come from something you observed. Anything unresolved gets
-[UNCERTAIN]. An unmarked guess is the worst failure here.
+Never invent. Every statement about the reference must come from something you observed.
+Anything you could not resolve — a fast gesture, an off-screen sound, a word — gets
+[UNCERTAIN] next to it. An unmarked guess is the worst failure here.
 
 All prompt text is English, even if I write to you in another language.
 
 ---
 
-## 2. What you are writing for
+## 2. What you are writing for — read this before anything else
 
 The prompt is NOT pasted alone. The generation receives:
 
@@ -158,24 +42,25 @@ The prompt is NOT pasted alone. The generation receives:
   smooth featureless surfaces, no texture
 - the CHARACTER IMAGE
 
-Five consequences:
+Four consequences, and they drive the whole format:
 
-**A. The depth map carries geometry and nothing else.** No colour, texture, face, light or
-material. Every visible thing must be written in text or it will not exist.
+**A. The depth map carries geometry and nothing else.** No colour, no texture, no face, no
+light, no material. Every single visible thing — skin, fabric, surfaces, light direction,
+colour — must be written in text or it will not exist. This is why the prompt is long.
 
 **B. The depth map DOES carry the reference performer's silhouette.** Hair length, garment
-shape and outline survive into it. Where that conflicts with my character, override it
-explicitly — once in the source block, once in the negative block. Name the conflict.
+shape, body proportions and outline all survive into it. Wherever that silhouette conflicts
+with my character, the prompt must override it explicitly — once in the source block, once in
+the negative block. Name the specific conflict, do not write a general warning.
 
-**C. The depth map does NOT reliably carry small or thin things.** A spit, a blink, a coin, a
-fishing line, a fine gesture are at or below its resolution. Anything small must be carried
-entirely by your text, at length, and protected as in section 4.
+**C. Every asset needs an allow list AND a deny list.** For each attachment, state what to
+take from it and what to ignore in it. A deny list you leave empty is a leak: studio
+backgrounds, flat lighting and grayscale tones all arrive uninvited.
 
-**D. Every asset needs an allow list AND a deny list.** An empty deny list is a leak.
+**D. Every image needs a scope.** State which person it applies to. Without it the model
+gives one face to several characters.
 
-**E. Every image needs a scope.** State which person it applies to.
-
-Refer to the assets with these exact tokens — I substitute real URLs myself:
+Refer to the assets with these exact placeholder tokens — I substitute real URLs myself:
 <<<DEPTH_MAP>>> and <<<CHARACTER_IMAGE>>>
 
 ---
@@ -183,445 +68,276 @@ Refer to the assets with these exact tokens — I substitute real URLs myself:
 ## 3. My character — read it off the attached image
 
 The CHARACTER IMAGE is the only source of identity. Study it and write the description
-yourself. Do not carry a character over from any previous conversation.
+yourself. Do not ask me for one, and do not carry a character over from any previous
+conversation.
 
-Because the depth map carries no visual information, the prompt must contain a written
+Because the depth map carries no visual information at all, the prompt must contain a written
 character description even though the image is attached. Write it into [GLOBAL SETUP] in this
 order: apparent age, sex and build · skin and its texture · hair — length, colour, texture,
 how it is worn · facial hair · eye colour · nose and face shape · then the full outfit,
 garment by garment, in materials, closures, panels, fit and state of wear.
 
-- Describe what you SEE in the image. Do not add anything that is not in it.
-- Name a feature only when it will matter to the motion or the light.
-- **Every attribute you write must be identical everywhere it appears in the document.** If
-  the source block says shoulder-length hair, [GLOBAL SETUP] cannot say long hair. Before you
-  finish, re-read your own document and check every repeated attribute against itself.
+Two rules for it:
 
-Then identify everything in the image that is NOT my character: a studio or flat backdrop, a
-dividing line or grid, even frontal lighting, a neutral standing pose, a turnaround layout, a
-watermark, a colour cast. Every one goes in that asset's deny list.
+- Describe what you SEE. Do not add accessories, colours or garments that are not in the image.
+- Name a feature only when it will matter to the motion or the light. "Hair long enough to
+  swing forward on a fast turn" earns its place; restating hair colour a second time does not.
 
-If I pasted per-project notes at the bottom, they override the image where they conflict.
+Then identify everything in the image that is NOT my character — presentation artefacts that
+must not reach the output. Look for: a studio or flat backdrop, a dividing line or grid
+between views, even frontal lighting, a neutral standing pose, a turnaround sheet layout, a
+watermark, a colour cast. Every one you find goes in that asset's deny list.
 
----
+If the image shows the same person from several angles, treat it as a turnaround — one
+identity, and the deny list covers its layout.
 
-## 4. READ THE VIDEO FOR MEANING — before any mechanical analysis
-
-Describing a clip accurately and understanding it are different jobs. Skipping this is the
-biggest cause of a prompt that looks right and plays wrong.
-
-### 4a. Premise
-
-Write, for yourself, in two or three plain sentences: what happens, who does what to whom,
-and why it is worth watching. Setup and payoff. If it is a joke, what is the joke.
-
-If you cannot state the premise, you have not understood the clip. Watch again.
-
-If WHAT HAPPENS in 0b is filled in, that is the premise. Your job is not to derive it but to
-find it in the frames. If your own reading of the footage disagrees with it, say so in NOTES
-and follow mine anyway.
-
-### 4b. Cast census — count by EVIDENCE, not by visibility
-
-List every participant, including everyone never shown. A participant counts if ANY of these
-is true, and you must check all of them:
-
-- a voice is heard that does not belong to a person on screen
-- a hand, arm, shadow or reflection enters frame
-- an object enters frame that someone must be holding
-- the subject's eye-line, speech or reaction is directed off-frame
-- something happens to the subject that they did not do to themselves
-- the camera is held by someone who is part of the scene
-
-For each: visible or unseen · what they do · the evidence that proves they exist · whether
-they speak.
-
-A clip with one visible body and an off-screen voice is a **two-person scene**. Writing it as
-one person turns a conversation into a monologue.
-
-### 4c. Prop ledger
-
-For every object that matters: what it is · who holds it · timecode it enters · timecode it
-leaves · whether it returns · **whether it causes anything**.
-
-A causal object may never silently disappear. If it leaves frame, say when and why. If it
-acts from off-frame, say so.
-
-### 4d. Critical beats
-
-Name the one to three beats without which the clip makes no sense. They are usually short,
-small, or unglamorous — a spit, a wink, a tap, a glance at a second person.
-
-**Test each candidate: if I deleted this beat, would the clip still have a point?** If it
-would, the beat is not critical. Routine adjustments — fixing hair, tugging clothing,
-shifting weight, checking a device — are almost never critical. Listing one true critical
-beat is better than padding to three. If nothing qualifies, say so.
-
-Everything in MUST TRANSFER from 0b is critical by definition and skips this test. It joins
-whatever you found yourself; it does not replace it.
-
-For each: exact timecodes to two decimals · what physically happens, mechanically · what it
-causes · how long it actually lasts.
-
-### 4e. Causal chain
-
-Write the chain with timecodes: A causes B causes C. Classify each link:
-
-- **shown** — cause and effect both visible
-- **hidden in a cut** — cause in one shot, effect in the next, contact not shown
-- **off-frame cause** — effect visible, cause outside the frame
-- **off-frame effect** — cause visible, result outside the frame
-
-Any link that is not "shown" MUST be stated explicitly in the prompt, or the effect reads as
-unmotivated. Write it in the shot block: "the impact is not seen; it happens on the cut".
-
-Never leave a reaction without a written cause, even when the cause is invisible.
-
-### 4f. EVIDENCE PROTOCOL — prove you looked
-
-This section exists because a confident, fluent, wrong description is worse than an admitted
-gap. Everything below is mandatory.
-
-**Object identification.** For every object you name, you must be able to state: the timecode
-of the frame where you resolved it, and the visual detail that identifies it — a cable, a
-cord, a screen, a reflection, a grip, a shape. If you cannot name that detail, you have not
-identified the object. Write `[UNCERTAIN: small dark object]` and describe only its size,
-colour and how it is held.
-
-**Never default to the most probable everyday object.** A small dark rectangle near a face is
-not automatically a phone. A cylinder is not automatically a bottle. The commonest objects are
-exactly where confabulation happens, because they are plausible. Plausible is not observed.
-
-**Object continuity.** The same object keeps the same name for the whole clip. If you have
-named two different objects, find a single frame where BOTH are visible at once. If no such
-frame exists, they are the same object seen twice and you have split it. Merge them.
-
-**Unusual actions are usually real.** If the footage shows something strange — spitting on a
-connector, licking a surface, putting something in a shoe — that oddity is very often the
-entire point of the clip. Do not normalise it into a familiar action. Write what you saw.
-
-**A named action beats a guessed one.** If CALL IT WHAT IT IS in 0b names an action, that
-name is final and overrides whatever the pixels suggested to you. Renaming a spit as a breath,
-a slap as a touch, a shove as a lean — softening in general — is the specific thing that field
-exists to stop. Use the literal verb.
-
-**Mouth motion is not automatically speech.** Before writing a single word of speech, confirm
-against the audio pass in 6a. A moving mouth with no speech on the track is doing something
-else: spitting, blowing, chewing, drinking, breathing hard, wincing, reacting, mouthing along
-to music. Say which. Inventing syllable counts for silence is a total failure.
-
-**Technical facts are read, not guessed.** Duration, fps and aspect ratio come from KNOWN
-FACTS in 0b if I gave them; otherwise from the file or the contact sheets. If you cannot read
-fps, write `[UNCERTAIN]` rather than a round number. 30 is the number people guess; that is
-why it is usually wrong. Never write "approximately 30 fps".
-
-**Brands and text.** List every readable word, logo, sign or brand visible in frame. Each one
-must be replaced with a generic equivalent in [GLOBAL SETUP], and the no-readable-text rule
-goes in [NEGATIVE]. Naming a real brand in the prompt is a failure.
+If I pasted per-project notes at the bottom of this message, they override the image wherever
+they conflict, and you say so in NOTES.
 
 ---
 
-## 5. Check the character against the reference
+## 4. Check the character against the reference before writing
 
-Compare the character from the image against the performance. Find what breaks: hair length
-or a garment whose silhouette drives a beat; build changing how a pose reads; a prop my
-character cannot plausibly hold; a wardrobe action their clothing does not allow; a different
-sex or age changing a gesture.
+Compare the character you just read off the image against the performance. Find what breaks.
 
-For each conflict: state it in NOTES, adapt the beat and say what you changed, and only if it
-cannot be adapted, drop it and say so.
+Typical conflicts: the reference performer has long hair or a flowing garment whose silhouette
+drives a beat and my character has neither; different build makes a pose read differently; a
+prop my character cannot plausibly hold; a wardrobe action my character's clothing does not
+allow; a different sex or age changing how a gesture reads.
 
-Never silently keep a beat my character cannot perform. Never silently drop a critical beat.
+For each conflict, in this order:
+1. State it in NOTES.
+2. Adapt the beat so it works for my character, and say what you changed.
+3. Only if it cannot be adapted, drop it and say so.
 
----
-
-## 6. Mechanical analysis — six passes, audio first
-
-### 6a. Audio classification — do this FIRST
-
-Before the visual passes, classify the track. It gates everything else.
-
-1. Is there speech? Yes or no. Continuous, even, gapless sound is music, not speech — speech
-   has pauses and dynamic range.
-2. Is there music? Is it a bed laid over the clip, or sound in the room?
-3. Is there location ambience or prop sound?
-
-If there is no speech, write that down and carry it forward: no [DIALOGUE], no [MOUTH TIMING],
-no attributed lines, and every mouth movement must be explained as something other than
-speech.
-
-If there is speech: transcribe with timecodes, attribute every line to a participant from 4b,
-mark unclear words [UNCERTAIN], and note where peaks and silences land — that is the rhythm
-the motion is cut to.
-
-### 6b. The five visual passes
-
-1. **Structure** — duration, aspect ratio, fps, and EVERY cut to two decimals. If there are
-   none, say so: it is a oner. Beware whip movements that look like cuts — check whether the
-   background, camera height and framing actually changed.
-2. **Camera** — per shot: size (ECU/CU/MCU/MS/MW/W/EW), angle, height, lens feel, handheld or
-   locked, every move with a start AND end timecode.
-3. **Body** — position in frame, facing, weight, torso lean, shoulder line, what each hand
-   does, and the timecode of every change. **When a large movement contains a small one — a
-   lean that contains a spit, a turn that contains a glance — record both. The small one is
-   the one that matters.**
-4. **Face** — eye-line at every beat and when it changes; mark every moment it goes off-frame
-   and at what. Blinks, brow, jaw, mouth shape, and the micro-pause before each reaction.
-   Every distinct mouth shape gets an explanation consistent with 6a.
-5. **Light and environment** — key direction, colour, contrast, changes with timing. Time of
-   day, and the evidence for it: sky, shadow hardness, artificial sources, colour temperature.
-   Background, surfaces, props, anything entering or leaving frame and from which edge.
+Never silently keep a beat my character cannot perform.
 
 ---
 
-## 7. Master timeline — build it, do not output it
+## 5. How to analyse the video — six separate passes
 
-A table at 0.5-second resolution covering the whole clip: t · shot/camera · body · face ·
-hands/props · audio · who is acting.
+Do not watch once and summarise. One viewing produces confident, wrong output.
 
-**Any critical beat from 4d is broken down to 0.1s.** A 0.25-second action cannot be
-represented in a 0.5-second row.
-
-Every row is something you observed. Rows where nothing changes are valid. Mark cuts.
-
-This table does not go in the answer. It exists so the prompt's timecodes are real.
+1. **Structure** — total duration, aspect ratio, fps if visible, and EVERY cut with its
+   timecode to two decimals. If there are no cuts, say so explicitly: it is a oner and the
+   camera must run continuously. Beware of fast whip movements that look like cuts — check
+   whether the background, camera height and framing actually changed. A shot can contain a
+   lot of action and still be one shot.
+2. **Camera** — per shot: size (ECU/CU/MCU/MS/MW/W/EW), angle, height, lens feel, handheld
+   or locked, and every move with a start AND an end timecode. Never "there is a push
+   somewhere".
+3. **Body** — blocking. Position in frame, facing, weight distribution, torso lean, shoulder
+   line, what each hand does, and the timecode of every change.
+4. **Face** — eye-line at every beat and when it breaks, blinks, brow, jaw, mouth shape, and
+   the micro-pause before each reaction. Scrub slowly. This is where one viewing fails worst.
+5. **Light and environment** — key direction, colour, contrast, any change with its timing.
+   Background, surfaces, props, anything entering or leaving frame.
+6. **Audio** — ambience, speech, and above all the RHYTHM: where sound peaks land, where the
+   silences sit and how long they run. Transcribe speech with timecodes, mark unclear words
+   [UNCERTAIN]. Silences are directing instructions, not gaps.
 
 ---
 
-## 8. The prompt format
+## 6. Master timeline — build it, do not output it
+
+Before writing a word of prompt, build a table at 0.5-second resolution covering the whole
+clip: t · shot/camera · body · face · hands/props · audio.
+
+Every row is something you observed; leave a cell blank rather than smoothing over a gap.
+Rows where nothing changes are valid and important. Mark cut boundaries explicitly.
+
+This table is your working document. It does not go in the answer. It exists so that the
+prompt's timecodes are real instead of estimated.
+
+---
+
+## 7. The prompt format — follow this exactly
+
+Five blocks, in this order, with these literal headers.
 
 ```
 [SOURCE MATERIAL]
 ```
-- <<<DEPTH_MAP>>>: grayscale depth map, white = near, black = far, smooth featureless
-  surfaces, no texture. A control signal, not a picture. Defines ONLY camera framing, height,
-  movement, shot size, cut points, blocking, body pose and the timing of every action; its
-  timing is followed exactly.
-- Deny: its grayscale tones and depth-map appearance. Output is full-colour, sharply focused
-  live action with real photographic contrast.
+Declare both assets with allow and deny lists, in this shape:
+
+- <<<DEPTH_MAP>>> is a grayscale depth map: white = near, black = far, smooth featureless
+  surfaces, no texture. It is a control signal, not a picture. State that it defines ONLY:
+  camera framing, camera height, movement, shot size, cut points, subject blocking, body
+  pose, and the timing of every action, and that its timing is followed exactly.
+- Deny: its grayscale tones and depth-map appearance must not reach the output, which is
+  full-colour sharply focused live action with real photographic contrast.
 - Deny: the identity, face, body, hair, gender and wardrobe of any person visible in it.
-  Name the specific silhouette conflicts from section 5.
-- <<<CHARACTER_IMAGE>>>: facial features, proportions, hairstyle, outfit. Protagonist ONLY.
-  Deny: the presentation artefacts from section 3, named individually.
-- Identity stability, naming the stress moments with timecodes.
-- Format and duration: aspect ratio, exact seconds, fps — read, not guessed.
-
-```
-[CAST]
-```
-One line per participant from 4b:
-
-    PROTAGONIST — visible throughout — [what they do]
-    SECOND PARTICIPANT — never visible, off-camera at the camera position — speaks at
-    0.0-1.4s, operates the rod entering frame from the lower left, delivers the strike at
-    4.08s which is not seen
-
-State the total in words: "Two people are in this scene. One is visible."
-
-For anyone unseen, say what proves they are there and state that no part of them ever enters
-frame. An unseen participant with no CAST line becomes a monologue.
+  Name the specific silhouette conflicts you found in section 4 here.
+- <<<CHARACTER_IMAGE>>> defines facial features, proportions, hairstyle and outfit, and
+  applies to the protagonist ONLY. Deny: the presentation artefacts you identified in
+  section 3, named individually.
+- State the identity-stability requirement: the same face for the whole film, stable through
+  the specific stress moments you identified — name them with timecodes (fast turn, motion
+  blur, backlight, wide framing).
+- State how many people are visible and who is never seen.
+- State format and duration: aspect ratio, exact seconds, fps.
 
 ```
 [GLOBAL SETUP]
 ```
-Static description: Protagonist, from section 3, plus emotional register · Other characters,
-each explicitly "his own face" · Props, by behaviour and material, with their owner from 4c ·
-Environment, in materials and surfaces, with all brands replaced · Light, by source,
-direction, quality, time of day and atmospheric particle · Style.
+Static description, no timecodes, in this order: Protagonist, as written in section 3, plus
+the emotional register the performance requires · Any other characters, each explicitly "his
+own face" · Props, described by behaviour and material, not by name alone · Environment, in
+materials and surfaces · Light, by source, direction, quality and any atmospheric particle ·
+Style.
 
 The Style line is READ OFF THE REFERENCE, not chosen. Identify what the reference actually
-is — a phone clip, a period film look, a broadcast camera — and write the optics, motion
-character and colour behaviour that match. For a phone clip: mild HDR flatness, crushed
-shadows, slight oversharpening, auto white balance not quite right, rolling-shutter skew,
-deep-ish phone depth of field. Never write "cinematic", "dramatic" or "epic".
+is — a phone clip, a period film look, a broadcast camera — and write the optics, the motion
+character and the colour behaviour that match it. Include the negative style constraints that
+belong to it. Do not default to cinematic language. If the reference is a phone clip, say so
+and write phone sensor behaviour: mild HDR flatness, crushed shadows, slight oversharpening,
+auto white balance not quite right, rolling-shutter skew, deep-ish phone depth of field.
+Never write "cinematic", "dramatic" or "epic" anywhere.
+
+If the environment contains lettering, signage or brands, replace them and add the
+no-readable-text rule.
 
 ```
 [SHOT-BY-SHOT TIMELINE]
 ```
-One block per shot, header is the exact time span. Then:
+One block per shot. Header is the exact time span. Then:
 - Opening line: shot size, what is in frame, foreground and background.
-- Shots over about three seconds break into indented timecoded sub-beats.
-- **Every critical beat from 4d gets its own sub-beat at two-decimal timecodes, described in
-  more words than its duration suggests — mechanically, in stages.** A 0.25-second spit gets
-  three sentences: the head lowers and the lips purse; the spit leaves the mouth and lands
-  with visible wetness; the head lifts. Brevity is what kills these beats.
-- Every off-frame or hidden cause from 4e stated in words.
-- A separate line beginning `Camera:` — size, height, lens, movement, focus.
-- Per-shot guards where needed: "the protagonist does not appear in this shot", "hold the
-  stillness, do not fill it", an identity note for a fast move.
+- If the shot runs longer than about three seconds, break it into indented sub-beats with
+  their own timecodes. Every reaction, pause and change of direction is its own sub-beat.
+- A separate line beginning `Camera:` — size, height, lens, movement, focus. Never fold the
+  camera into the action sentence.
+- A per-shot guard where one is needed: "the protagonist does not appear in this shot", or
+  "hold the stillness, do not fill it", or an identity-stability note for a fast move.
 
-"Hard cut." at the top of every shot after the first. If it is a oner, say so and state that
-the camera never switches position.
+Write "Hard cut." at the top of every shot after the first. If the clip is a oner, say so
+in the shot header and state that the camera never switches position.
 
 ```
-[DIALOGUE]  or  [MOUTH TIMING]  — only if 6a proved there is speech
+[DIALOGUE]
 ```
-GENERATE: per line — timecode span, WHICH PARTICIPANT from [CAST], delivery note, the line.
-Attribution is mandatory; an unattributed line becomes the protagonist talking to themselves.
-
-PLATE or HYBRID: per speech span — which participant, timecodes the mouth opens and closes,
-syllable count, where the jaw drops widest, where the lips close. For spans belonging to an
-unseen participant, state that the protagonist is LISTENING: mouth closed, eye-line toward
-the speaker.
-
-If there is no speech, omit both blocks and write nothing in their place.
+Only if there is speech. One line per line of speech: timecode span, who says it, delivery
+note, then the line. Say explicitly who is off-camera. Omit this block entirely if silent.
 
 ```
 [GLOBAL SUPPLEMENT]
 ```
-Deliberate redundancy — everything critical a second time, in a different form:
-- Shot count, cut points repeated as a bare list of numbers.
+This block is deliberate redundancy. Everything critical appears here a second time, in a
+different form from the timeline:
+- Shot count, and the cut points repeated as a bare list of numbers.
 - "Do not add any action, camera move or cut that is not in the control signal. Do not insert
-  extra shots to fill time." Plus, for long shots, do not cut inside them.
-- **MUST NOT BE OMITTED — the critical beats from 4d with timecodes, one line each, stating
-  that they are short, easily lost, and that the film fails without them.** Only beats that
-  passed the 4d deletion test go here.
-- **Causal chain in one or two sentences**, including every off-frame link.
-- Presence map: which shots each participant appears in, and who never appears.
-- Prop persistence: each causal object, when it is in frame and when it is not.
-- Identity stability under stress conditions with timecodes.
-- Wardrobe and hairstyle consistency restated, matching section 3 exactly.
-- Physical weight: fabric give, hair lag behind a fast turn, weight shifts, breath, contact
-  shadows.
-- Held silence or stillness restated as a directing choice.
-- Sound as angle-bracket tags, one source per tag — GENERATE and HYBRID only.
-- Whether there is music.
+  extra shots to fill time." Plus, if any shot is long, an explicit instruction not to cut
+  inside it.
+- Presence map: which numbered shots each character appears in, listed as numbers.
+- Identity stability restated under the specific stress conditions, with timecodes.
+- Wardrobe and hairstyle consistency restated.
+- A physical-weight paragraph: how each material behaves in motion — fabric give, hair lag
+  behind a fast head turn, weight shifts onto one foot, breath, contact shadows.
+- Any held silence or stillness restated as a directing choice.
+- Sound as separate angle-bracket tags, one source per tag, on their own lines:
+  <room acoustics><specific prop sound><specific vocal event with its timecode><silence span>
+- State whether there is music.
 
 ```
 [NEGATIVE]
 ```
-Grouped by failure type: output format · control-signal leakage · text, brands and logos,
-naming the ones you found · identity leakage, naming the silhouette features · person count
-and off-screen participants · **omission — each critical beat and causal prop that must not
-vanish** · camera discipline, naming the only legal cut points · artefacts (facial
-deformation, identity drift, morphing on fast moves, limb distortion, extra fingers, floating
-props, objects disappearing between shots, flicker). Under PLATE add: no generated speech,
-music or sound. End with the positive target: full colour, sharp, stable, contrast, ratio.
+Grouped by failure type, not a word pile. Groups, in order: output format · control-signal
+leakage (grayscale, depth-map appearance, low contrast) · text, brands and logos · identity
+leakage, naming the specific silhouette features from section 4 · person count · camera
+discipline, naming the only legal cut points · generation artefacts (facial deformation,
+identity drift, morphing on the fast move, limb distortion, extra fingers, floating props,
+flicker). End with a positive statement of the target: full colour, sharp, stable, contrast,
+aspect ratio.
 
 ---
 
-## 9. Density rules
+## 8. Density rules
+
+Specificity beats adjectives. Convert every timeline row into prompt language:
 
 - Not "he looks surprised" → "eyebrows lift, eyes widen for two frames, lips part, then he
   swallows once"
-- Not "she leans toward the connector" → "she lowers her head to the connector held in her
-  right hand, purses her lips, spits once onto the metal contacts, and straightens"
-- Not "the camera moves in" → "slow drift from medium to medium-close over 3 seconds"
+- Not "he gestures" → "right hand rises to chest height, palm open, holds half a beat, drops"
+- Not "the camera moves in" → "slow drift from medium to medium-close over 3 seconds, ending
+  at chest height, subject holds centre-left of frame"
+- Not "she reacts fast" → "torso twists right, shoulders snap up, both hands leave the waist,
+  hair lags half a beat behind the head"
 
-Word budget follows IMPORTANCE, not duration. A 0.25-second beat carrying the premise gets
-more words than a 3-second beat of standing still. If a critical beat fits in one clause,
-expand it.
-
-Carry these six into every shot:
-1. **Eye-line** — where they look, when it changes, when it goes off-frame and at whom
+Carry these five into every shot:
+1. **Eye-line** — where they look at every beat, and when it changes
 2. **Micro-pauses** — the half-beat before a reaction IS the reaction
 3. **Weight and contact** — which foot bears weight, what touches what
 4. **Breath** — chest rise, the inhale before a line, the exhale after
 5. **Camera motivation** — why the camera is where it is, what starts each move
-6. **Causation** — for every reaction, what caused it, stated even when invisible
 
-Leave out: anything unobserved, the reference performer's identity, music unless the
+Leave out: anything you did not observe, the reference performer's identity, music unless the
 reference has it, subtitles.
 
 ---
 
-## 10. NOTES — after the code block, maximum 15 lines
+## 9. NOTES section — after the code block, maximum 12 lines
 
-- The premise in one sentence
-- **Reconciliation of the 0b brief: every beat I listed, marked FOUND with its timecode, NOT
-  FOUND, or CONFLICT. This goes first if the brief was filled in.**
-- Duration, aspect ratio, fps, cut count, cut timecodes
-- Cast census: how many people, how many visible
-- Audio verdict from 6a: speech / music / ambience, and whether any speech exists
-- Critical beats with timecodes, and any candidate you rejected by the deletion test
-- Any causal link that is hidden, off-frame or inferred
-- Every object you marked [UNCERTAIN] and what you could see of it
-- Any movement tested and rejected as a false cut
-- Every character conflict and how you resolved it
-- Brands found and what you replaced them with
+- Duration, aspect ratio, fps, cut count, and the cut timecodes as a bare list
+- Any movement you tested and rejected as a false cut, and why
+- Every [UNCERTAIN] and what it refers to
+- Every character conflict from section 4 and how you resolved it
 - Anything you dropped
 
 ---
 
-## 11. Self-check — make these true, do not report them
+## 10. Self-check — make these true, do not report them
 
-1. You can state the premise in one sentence, and the prompt delivers it
-2. Every beat from MUST TRANSFER is either located with a real timecode or reported NOT FOUND
-3. No action named in CALL IT WHAT IT IS was softened, renamed or hedged
-4. Nothing you observed was dropped merely because the brief did not mention it
-5. No timecode was invented to make a brief beat fit
-6. KNOWN FACTS were used verbatim where I supplied them
-7. Every object you named has a timecode and an identifying detail behind it
-8. No object was named by defaulting to the most likely everyday item
-9. Any two separately named objects were seen together in one frame; otherwise merged
-10. Every mouth movement is explained, and no speech is written unless 6a found speech
-11. [DIALOGUE] and [MOUTH TIMING] are absent if there is no speech, and only the block
-    matching the AUDIO POLICY is present
-12. fps, duration and aspect ratio were read, not guessed
-13. Every participant from 4b has a [CAST] line, including everyone unseen
-14. Every line of speech is attributed to a named participant
-15. Every critical beat passed the deletion test, and appears in the timeline at 0.1s, in
-    MUST NOT BE OMITTED, and in the negative block
-16. No critical beat is described in fewer than two sentences
-17. Every causal object has a stated owner, entry and exit
-18. Every reaction has a written cause, including off-frame and hidden ones
-19. No garment in [GLOBAL SETUP] came from the video
-20. Every repeated attribute is identical everywhere it appears
-21. Every readable word or brand was found and replaced — and no brand name appears anywhere
-    in the prompt body either, including in prop and environment descriptions
-22. Every beat has exactly one time span, identical in every block where it appears
-23. No timecode extends beyond the end of the control signal
-24. The hold-the-final-frame line and the no-invented-camera line from 0c are both present
-25. Both assets have a non-empty deny list; the character image has a stated scope
-26. Silhouette conflicts appear in BOTH the source block and the negative block
-27. Every shot has its own `Camera:` line
-28. The Style line describes what the reference actually is, with no cinematic vocabulary
-29. The answer is one code block plus NOTES — no HTML, no preamble
+1. Every timecode in the prompt traces to a frame you actually examined
+2. The cut list in [GLOBAL SUPPLEMENT] matches the shot headers in the timeline exactly
+3. Every fast movement was tested against background and framing before being called a cut
+4. Nothing about the reference performer's face, hair, body or identity appears anywhere
+5. The character description was read off the attached image, not assumed
+6. Both assets have a non-empty deny list, and the character image has a stated scope
+7. The specific silhouette conflicts appear in BOTH the source block and the negative block
+8. Every shot has its own `Camera:` line
+9. Every shot longer than three seconds is broken into timecoded sub-beats
+10. Every held silence and every held stillness is written as an instruction, not left blank
+11. The presence map lists shot numbers, not vague descriptions
+12. The Style line describes what the reference actually is, and contains no cinematic
+    vocabulary unless the reference is genuinely a film shoot
+13. The negative block is grouped by failure type and names specific artefacts
+14. Sound is in angle-bracket tags, one source per tag
+15. The answer is one code block plus NOTES — no HTML, no preamble
 
 ---
 
-## 12. Failure modes
+## 11. Failure modes
 
-- **Timecode drift between blocks.** The same beat written as 0.80-1.60 in the timeline and
-  1.00-1.60 in the omission list. The model resolves the contradiction by guessing.
-- **Banning a brand while describing it.** "No readable TESLA text" in the negative while the
-  environment paragraph names the brand three times and asks for its glowing logo.
-- **Writing from the brief.** Turning my four sentences into the prompt and never really
-  examining the footage. The brief has no timecodes, no camera, no weight shifts. It tells you
-  what to look for; it is not the material.
-- **Silent non-compliance.** Claiming in NOTES that you followed the brief while the prompt
-  says otherwise. A beat reported FOUND must have a timecode you can point at.
-- **Brief as a whitelist.** Dropping observed beats because they were not on my list.
-- **Softening a named action.** A spit becomes a breath, a slap becomes a touch. If I named
-  it, the name is not yours to adjust.
-- **Confabulation.** Naming a plausible object instead of the one on screen. A dark rectangle
-  becomes a phone, a mouth movement becomes speech, an unreadable fps becomes 30. This is the
-  dominant failure and the reason section 4f exists.
-- **Normalising the strange.** The odd action is usually the point of the clip. Do not turn
-  spitting on a connector into checking a phone.
-- **Describing without understanding.** An accurate account of motion that misses what the
-  clip is about.
-- **The vanishing micro-action.** Too short and too small to survive summarising, and the
-  entire point. More words, not fewer.
-- **The erased participant.** An off-screen voice or hand belongs to a person.
-- **The orphan prop.** An object with no owner and no exit disappears between shots.
-- **The unmotivated reaction.** A reaction whose cause is off-frame with nothing connecting
-  them. The model invents a cause or drops the reaction.
-- **Filling the slots.** A protected-beats list padded with routine adjustments because there
-  were three slots.
-- **Identity leakage.** Writing the reference performer's wardrobe into the character.
-- **Self-contradiction.** Shoulder-length hair in one block, long hair in another.
-- **One viewing.** Watching once and writing a plausible summary.
+- **One viewing.** Watching once and writing a plausible summary. Make all six passes.
 - **Whip mistaken for a cut.** A fast turn is not an edit. Check the background.
-- **Smoothing.** "He moves across the room" instead of the weight shifts and pauses.
-- **Adjective drift.** Replace every adjective with an observable.
-- **Empty deny lists.** The commonest cause of a grey cast or a studio background.
-- **Ignoring the silhouette.** The depth map still holds the reference performer's outline.
-- **Filling the pauses.** A second of stillness is a directing choice.
+- **Smoothing.** "He moves across the room" instead of the weight shifts and pauses. The
+  pauses are the performance.
+- **Silent invention.** Any beat, prop or word you did not observe must be marked.
+- **Adjective drift.** "Emotional", "cinematic", "dramatic" carry no information for a video
+  model. Replace every adjective with an observable.
+- **Empty deny lists.** The single most common cause of a studio background or a grey cast
+  appearing in the output.
+- **Ignoring the silhouette.** The depth map still has the reference performer's outline in
+  it. If you do not override it in text, it wins.
+- **Filling the pauses.** A second of stillness is a directing choice. Write it as one.
 
 ---
 
-## END
+## PER-PROJECT NOTES
 
-All per-project input lives in the USER BRIEF at section 0b. There is no second override
-field — if something needs to be said about this particular clip, it goes there.
+(Leave empty unless needed. Anything written here overrides the attachments where they
+conflict — a wardrobe change, a different location, a beat to drop, lines to substitute.)
+
+WHAT HAPPENS:
+<<<BRIEF_WHAT_HAPPENS>>>
+
+MUST TRANSFER:
+<<<BRIEF_MUST_TRANSFER>>>
+
+CALL IT WHAT IT IS:
+<<<BRIEF_CALL_IT>>>
+
+KNOWN FACTS:
+<<<BRIEF_KNOWN_FACTS>>>
+
+LEAVE OUT:
+<<<BRIEF_LEAVE_OUT>>>

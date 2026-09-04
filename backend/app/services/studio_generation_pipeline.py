@@ -17,10 +17,11 @@ _WAVE_MODEL_LABELS: dict[str, str] = {
     "wan-2.7-pro": "Wan 2.7 Pro",
 }
 
+# variant=standard в job params = Seedance 2.0 на WaveSpeed (не путать со старым «1.5» в UI архива).
 _SEEDANCE_VARIANT_LABELS: dict[str, str] = {
-    "standard": "Seedance 1.5",
+    "standard": "Seedance 2.0",
     "seedance_25": "Seedance 2.5",
-    "mini": "Seedance Mini",
+    "mini": "Seedance 2.0 Mini",
 }
 
 
@@ -52,11 +53,14 @@ def _wave_engine_label(params: dict[str, Any]) -> str | None:
 
 
 def _seedance_engine_label(params: dict[str, Any], *, video_backend: str) -> str:
-    if (video_backend or "").strip().lower() == "evolink":
-        variant = str(params.get("seedance_variant") or "standard").strip().lower()
-        return _SEEDANCE_VARIANT_LABELS.get(variant, "Seedance Sale")
+    vb = (video_backend or "").strip().lower()
     variant = str(params.get("seedance_variant") or "standard").strip().lower()
-    return _SEEDANCE_VARIANT_LABELS.get(variant, "Seedance 1.5")
+    if vb == "evolink":
+        # EvoLink Motion Control / Sale → fast-reference-to-video (Seedance 2.0 tier).
+        if variant == "seedance_25":
+            return "Seedance 2.5"
+        return "Seedance 2.0 Sale"
+    return _SEEDANCE_VARIANT_LABELS.get(variant, "Seedance 2.0")
 
 
 def _image_mode_key(params: dict[str, Any]) -> str:
