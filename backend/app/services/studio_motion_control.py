@@ -41,7 +41,7 @@ def motion_control_turnaround_prompt() -> str:
 
 
 # Legacy alias — используйте motion_control_turnaround_prompt().
-MOTION_CONTROL_TURNAROUND_PROMPT = ""
+MOTION_CONTROL_TURNAROUND_PROMPT = ""  # не использовать; промпт из data/prompts или _bundled_prompts
 
 # Развёртка Motion Control — горизонтальный лист 16:9.
 MOTION_CONTROL_SHEET_ASPECT = "16:9"

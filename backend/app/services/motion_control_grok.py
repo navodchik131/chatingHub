@@ -21,22 +21,50 @@ from app.config import settings
 
 log = logging.getLogger(__name__)
 
-_SHOT_ANALYST_PATH = (BACKEND_DIR / "data" / "prompts" / "motion_control_shot_analyst.txt").resolve()
+_SHOT_ANALYST_NAME = "motion_control_shot_analyst.txt"
+_TURNAROUND_SHEET_NAME = "motion_control_turnaround_sheet.txt"
+
+
+def _motion_control_prompt_candidates(filename: str) -> list[Path]:
+    """data/prompts (Docker volume) → _bundled_prompts (образ) — как у Grok compose."""
+    ordered = [
+        (BACKEND_DIR / "data" / "prompts" / filename).resolve(),
+        (BACKEND_DIR / "_bundled_prompts" / filename).resolve(),
+    ]
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for path in ordered:
+        if path in seen:
+            continue
+        seen.add(path)
+        out.append(path)
+    return out
+
+
+def _read_first_nonempty_prompt_file(candidates: list[Path]) -> str | None:
+    for path in candidates:
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    return None
 
 
 def load_motion_control_turnaround_prompt() -> str:
-    path = (BACKEND_DIR / "data" / "prompts" / "motion_control_turnaround_sheet.txt").resolve()
-    if path.is_file():
-        return path.read_text(encoding="utf-8").strip()
-    from app.services.studio_motion_control import MOTION_CONTROL_TURNAROUND_PROMPT
-
-    return MOTION_CONTROL_TURNAROUND_PROMPT
+    text = _read_first_nonempty_prompt_file(_motion_control_prompt_candidates(_TURNAROUND_SHEET_NAME))
+    if text:
+        return text
+    tried = ", ".join(str(p) for p in _motion_control_prompt_candidates(_TURNAROUND_SHEET_NAME))
+    raise RuntimeError(f"Промпт развёртки Motion Control не найден (пробовали: {tried})")
 
 
 def load_motion_control_shot_analyst_prompt() -> str:
-    if _SHOT_ANALYST_PATH.is_file():
-        return _SHOT_ANALYST_PATH.read_text(encoding="utf-8").strip()
-    raise RuntimeError(f"Missing prompt file: {_SHOT_ANALYST_PATH}")
+    text = _read_first_nonempty_prompt_file(_motion_control_prompt_candidates(_SHOT_ANALYST_NAME))
+    if text:
+        return text
+    tried = ", ".join(str(p) for p in _motion_control_prompt_candidates(_SHOT_ANALYST_NAME))
+    raise RuntimeError(f"Промпт Grok shot-analyst не найден (пробовали: {tried})")
 
 
 def extract_shot_analyst_prompt_block(text: str) -> str:
