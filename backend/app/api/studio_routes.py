@@ -1416,6 +1416,21 @@ async def public_studio_motion_video(t: str) -> FileResponse:
     return FileResponse(path, media_type=mime, filename=path.name)
 
 
+@router.get("/studio/public-motion-depth-video")
+async def public_studio_motion_depth_video(t: str) -> FileResponse:
+    """Grayscale depth-map control video по JWT (пара {file_id}.depth.mp4)."""
+    from app.services.motion_depth_map import motion_depth_video_path
+
+    try:
+        uid, fid = decode_motion_video_access_token(t)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Недействительная ссылка") from None
+    path = motion_depth_video_path(uid, fid)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Depth-map не найден") from None
+    return FileResponse(path, media_type="video/mp4", filename=path.name)
+
+
 @router.get("/studio/public-motion-audio")
 async def public_studio_motion_audio(t: str) -> FileResponse:
     """Исходный звук референс-видео по JWT — Seedance @Audio1."""
@@ -2612,7 +2627,7 @@ async def api_studio_motion_upload_driving_video(
         status="uploaded",
         motion_reference_prompt=prompt_block,
         duration_seconds=meta.duration_sec,
-        message="Видео загружено. Контурная обработка начнётся при генерации.",
+        message="Видео загружено. Генерация начнётся после развёртки и Grok-анализа.",
     )
 
 
@@ -8422,9 +8437,7 @@ async def _studio_job_execute_motion_render_video(
     ff_gid_raw = str(params.get("first_frame_generation_id") or "").strip()
     if not prompt.strip() and not workflow_source:
         if not (_truthy_wavespeed_flag(auto_motion_prompt) and mv_id):
-            wizard_ready = motion_control_wizard and mv_id and (
-                turnaround_gid_raw or (use_outline_wizard and ff_gid_raw)
-            )
+            wizard_ready = motion_control_wizard and mv_id and bool(turnaround_gid_raw)
             if not wizard_ready:
                 raise RuntimeError("Опишите сцену и движение для видео.")
 
@@ -8783,31 +8796,28 @@ async def _studio_job_execute_motion_render_video(
         if (
             motion_control_wizard
             and turnaround_gid_raw
-            and motion_vid_url
-            and not (use_outline_wizard and ff_url)
+            and vpath is not None
+            and vpath.is_file()
         ):
-            from app.services.studio_motion_control import MOTION_CONTROL_VIDEO_EDIT_PROMPT
+            from app.services.motion_control_render import prepare_motion_control_depth_t2v
 
             try:
                 turnaround_gid = int(turnaround_gid_raw)
             except ValueError as e:
                 raise RuntimeError("Некорректный turnaround_generation_id") from e
-            ta_row = await session.get(StudioGeneration, turnaround_gid)
-            if not ta_row or ta_row.user_id != oid:
-                raise RuntimeError("Развёртка не найдена")
-            turnaround_url = generation_still_public_url(
+            pkg = await prepare_motion_control_depth_t2v(
+                session=session,
                 owner_id=oid,
-                generation_id=turnaround_gid,
-                public_app_base=pub,
-                token_factory=create_generation_image_access_token,
+                pub=pub,
+                vpath=vpath,
+                mv_id=mv_id,
+                turnaround_gid=turnaround_gid,
+                per_project_notes=prompt.strip(),
             )
-            if not turnaround_url:
-                raise RuntimeError("Не удалось подготовить URL развёртки")
-            ref_images = [turnaround_url]
-            ref_videos = []
-            seed_prompt = MOTION_CONTROL_VIDEO_EDIT_PROMPT
-            prompt_source = "motion_control_video_edit"
-            use_boardstory_video_edit = True
+            seed_prompt = pkg.seed_prompt
+            ref_images = pkg.ref_images
+            ref_videos = pkg.ref_videos
+            prompt_source = pkg.prompt_source
             n_start = 0
         elif use_seedance_i2v:
             seed_prompt = prompt.strip()

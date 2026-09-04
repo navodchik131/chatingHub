@@ -33,31 +33,15 @@ _MOTION_CONTROL_BODY_NO_FACE_INSTRUCTION = (
     "Keep body proportions, outfit, hairstyle silhouette, and skin tone consistent across panels."
 )
 
-# Turnaround sheet для Motion Control (16:9, face + outfit из шага «Образ»).
-MOTION_CONTROL_TURNAROUND_PROMPT = (
-    "Create a character turnaround reference sheet based on the attached face photo, "
-    "in a 16:9 horizontal layout with the following arrangement:\n\n"
-    "Left third:\n"
-    "One large close-up of the face, front view only (facing camera)\n"
-    "Tight crop on head/face, same lighting and skin tone as the reference photo\n\n"
-    "Right two-thirds:\n"
-    "Full body, front view (facing camera)\n"
-    "Full body, 3/4 view (turned ~45°)\n"
-    "Full body, side/profile view (90°)\n"
-    "Full body, back view (180°)\n"
-    "All four body views shown at the same scale/zoom, standing neutrally "
-    "(relaxed A-pose, arms slightly away from body)\n"
-    "Identical clothing, hairstyle and body proportions across all four body views\n\n"
-    f"{_MOTION_CONTROL_BODY_NO_FACE_INSTRUCTION}\n\n"
-    "General requirements:\n"
-    "Flat, even studio lighting — no dramatic shadows — consistent across the whole sheet\n"
-    "Plain neutral background (light grey or white)\n"
-    "Photorealistic style, consistent skin tone and texture throughout\n"
-    "No text, no watermarks, no borders/dividers between sections\n"
-    "Layout should fit naturally into a 16:9 canvas: face close-up occupies the left third, "
-    "the four full-body views share the right two-thirds evenly, arranged so each view is "
-    "clearly separated and fully visible"
-)
+def motion_control_turnaround_prompt() -> str:
+    """Двухпанельный референс-лист: Image1=лицо, Image2=одежда."""
+    from app.services.motion_control_grok import load_motion_control_turnaround_prompt
+
+    return load_motion_control_turnaround_prompt()
+
+
+# Legacy alias — используйте motion_control_turnaround_prompt().
+MOTION_CONTROL_TURNAROUND_PROMPT = ""
 
 # Развёртка Motion Control — горизонтальный лист 16:9.
 MOTION_CONTROL_SHEET_ASPECT = "16:9"

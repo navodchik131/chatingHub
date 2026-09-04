@@ -103,9 +103,7 @@ async def execute_evolink_motion_render_video(
     ff_gid_raw = str(params.get("first_frame_generation_id") or "").strip()
 
     if not prompt.strip() and not (_truthy_flag(auto_motion_prompt) and mv_id):
-        wizard_ready = motion_control_wizard and mv_id and (
-            turnaround_gid_raw or (use_outline_wizard and ff_gid_raw)
-        )
+        wizard_ready = motion_control_wizard and mv_id and bool(turnaround_gid_raw)
         if not wizard_ready:
             raise RuntimeError("Опишите сцену и движение для видео.")
 
@@ -288,35 +286,64 @@ async def execute_evolink_motion_render_video(
             motion_aud_url = f"{pub}/api/studio/public-motion-audio?t={quote(vid_tok, safe='')}"
 
     ref_images: list[str] = []
-    ref_videos = [motion_vid_evolink_url or motion_vid_url] if (motion_vid_evolink_url or motion_vid_url) else []
+    ref_videos: list[str] = []
+    if not (motion_control_wizard and turnaround_gid_raw):
+        ref_videos = (
+            [motion_vid_evolink_url or motion_vid_url]
+            if (motion_vid_evolink_url or motion_vid_url)
+            else []
+        )
     n_model = 0
     n_outfit = 0
     prompt_source = "template"
+    seed_prompt = ""
     ar_t2v = aspect_ratio_for_seedance_i2v(output_aspect)
 
     if (
         motion_control_wizard
         and turnaround_gid_raw
-        and motion_vid_url
-        and not (use_outline_wizard and ff_url)
+        and vpath is not None
+        and vpath.is_file()
     ):
-        from app.services.studio_motion_control import MOTION_CONTROL_VIDEO_EDIT_PROMPT
+        from app.services.evolink_client import evolink_upload_file_bytes
+        from app.services.motion_control_render import prepare_motion_control_depth_t2v
+        from app.services.motion_depth_map import motion_depth_video_path
 
         try:
             turnaround_gid = int(turnaround_gid_raw)
         except ValueError as e:
             raise RuntimeError("Некорректный turnaround_generation_id") from e
-        ta_row = await session.get(StudioGeneration, turnaround_gid)
-        if not ta_row or ta_row.user_id != oid:
+        turnaround_row = await session.get(StudioGeneration, turnaround_gid)
+        if not turnaround_row or turnaround_row.user_id != oid:
             raise RuntimeError("Развёртка не найдена")
         await ensure_studio_generation_image_archived_for_external_fetch(
             session,
-            ta_row,
+            turnaround_row,
             wavespeed_api_key=ws_key,
             label="Развёртка Motion Control",
         )
+        pkg = await prepare_motion_control_depth_t2v(
+            session=session,
+            owner_id=oid,
+            pub=pub,
+            vpath=vpath,
+            mv_id=mv_id,
+            turnaround_gid=turnaround_gid,
+            per_project_notes=prompt.strip(),
+        )
+        seed_prompt = pkg.seed_prompt
+        prompt_source = pkg.prompt_source
+        depth_path = motion_depth_video_path(oid, mv_id)
+        if not depth_path.is_file():
+            raise RuntimeError("Depth-map не подготовлен")
+        depth_evolink_url = await evolink_upload_file_bytes(
+            data=depth_path.read_bytes(),
+            filename="motion_depth.mp4",
+            content_type="video/mp4",
+        )
+        ref_videos = [depth_evolink_url]
         turnaround_url = generation_still_fetch_url(
-            row=ta_row,
+            row=turnaround_row,
             owner_id=oid,
             public_app_base=pub,
             token_factory=create_generation_image_access_token,
@@ -324,8 +351,6 @@ async def execute_evolink_motion_render_video(
         if not turnaround_url:
             raise RuntimeError("Не удалось подготовить URL развёртки")
         ref_images = [turnaround_url]
-        seed_prompt = MOTION_CONTROL_VIDEO_EDIT_PROMPT
-        prompt_source = "motion_control_video_edit"
     else:
         if motion_vid_url:
             model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))

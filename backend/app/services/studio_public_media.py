@@ -92,6 +92,18 @@ async def read_studio_public_media_bytes(
             return None
         return vpath.read_bytes()
 
+    if path.endswith("/studio/public-motion-depth-video"):
+        try:
+            uid, file_id = decode_motion_video_access_token(tok)
+        except ValueError:
+            return None
+        from app.services.motion_depth_map import motion_depth_video_path
+
+        dpath = motion_depth_video_path(uid, file_id)
+        if not dpath.is_file():
+            return None
+        return dpath.read_bytes()
+
     if path.endswith("/studio/public-motion-audio"):
         try:
             uid, file_id = decode_motion_video_access_token(tok)

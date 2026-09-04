@@ -93,8 +93,8 @@ export default function MotionControlWizard({
   const [trimMode, setTrimMode] = useState('full');
   const [trimIn, setTrimIn] = useState(0);
   const [trimOut, setTrimOut] = useState(5);
-  /** Конвертация реф-видео в силуэт (edge-outline) перед отправкой в Seedance. */
-  const [useMotionOutline, setUseMotionOutline] = useState(true);
+  /** Режим силуэта отключён — Motion Control v2: развёртка + depth map + Grok. */
+  const [useMotionOutline] = useState(false);
   /** idle → loading → preview (результат) → accepted (подтверждён для видео). */
   const [ffState, setFfState] = useState('idle');
   const [ffSource, setFfSource] = useState('generate');
@@ -138,7 +138,6 @@ export default function MotionControlWizard({
       if (saved.trimMode) setTrimMode(saved.trimMode);
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
-      if (typeof saved.useMotionOutline === 'boolean') setUseMotionOutline(saved.useMotionOutline);
       if (saved.ffModelId) setFfModelId(saved.ffModelId);
       if (saved.ffSource === 'upload' || saved.ffSource === 'generate') setFfSource(saved.ffSource);
       if (saved.ffPendingGenId != null) setFfPendingGenId(Number(saved.ffPendingGenId));
@@ -625,16 +624,7 @@ export default function MotionControlWizard({
       cabinet.setError(lang === 'ru' ? 'Загрузите референс-видео' : 'Upload reference video');
       return;
     }
-    if (useMotionOutline) {
-      if (!cabinet.firstFrameGenId || ffState !== 'accepted') {
-        cabinet.setError(
-          lang === 'ru'
-            ? 'Сгенерируйте первый кадр и нажмите «Использовать»'
-            : 'Generate the first frame and click “Use this one”',
-        );
-        return;
-      }
-    } else if (!turnaroundGenId) {
+    if (!turnaroundGenId) {
       cabinet.setError(lang === 'ru' ? 'Подготовьте развёртку перед видео' : 'Prepare turnaround before video');
       return;
     }
@@ -642,14 +632,14 @@ export default function MotionControlWizard({
     try {
       await onGenerate({
         motionControlWizard: true,
-        turnaroundGenerationId: useMotionOutline ? null : turnaroundGenId,
-        firstFrameGenerationId: useMotionOutline ? cabinet.firstFrameGenId : null,
+        turnaroundGenerationId: turnaroundGenId,
+        firstFrameGenerationId: null,
         outfitGenerationId: outfitGenId,
         trimMode,
         trimStartSec: trimMode === 'part' ? trimIn : null,
         trimEndSec: trimMode === 'part' ? trimOut : null,
         durationSeconds: Math.ceil(clipDuration),
-        useMotionOutline,
+        useMotionOutline: false,
       });
     } catch {
       /* ошибка уже в cabinet.setError */
@@ -778,31 +768,7 @@ export default function MotionControlWizard({
                   lang={lang}
                 />
               )}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 10,
-                  marginTop: 12,
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  color: color.textMid,
-                  lineHeight: 1.45,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={useMotionOutline}
-                  onChange={(e) => setUseMotionOutline(e.target.checked)}
-                  style={{ marginTop: 2, accentColor: color.lime }}
-                />
-                <span>
-                  {lang === 'ru'
-                    ? 'Перевести референс в силуэт человека (контур тела на фоне оригинала) — лучше подменяет модель. Без галочки уйдёт оригинальное цветное видео.'
-                    : 'Convert reference to a person-only silhouette (body outline on the original background). Unchecked sends the original color clip.'}
-                </span>
-              </label>
-              {useMotionOutline && (
+              {false && useMotionOutline && (
                 <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line.hair}` }}>
                   <div style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: 1.1, color: color.textGhost, marginBottom: 8 }}>
                     {lang === 'ru' ? 'ПЕРВЫЙ КАДР' : 'FIRST FRAME'}
@@ -1219,14 +1185,9 @@ export default function MotionControlWizard({
         </div>
 
         {/* 4 · Развёртка */}
-        <div style={{ ...stepBlock, opacity: useMotionOutline ? 0.55 : 1 }}>
+        <div style={stepBlock}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Eyebrow>{lang === 'ru' ? '4 · РАЗВЁРТКА' : '4 · TURNAROUND'}</Eyebrow>
-            {useMotionOutline && (
-              <span style={{ fontSize: 10, color: color.textGhost }}>
-                {lang === 'ru' ? 'не нужна при силуэте' : 'not needed with silhouette'}
-              </span>
-            )}
             <div style={{ flex: 1 }} />
             <div style={{ display: 'flex', gap: 5 }}>
               <Chip on={turnSource === 'generate'} onClick={() => setTurnSource('generate')}>
@@ -1238,7 +1199,9 @@ export default function MotionControlWizard({
             </div>
           </div>
           <div style={{ fontSize: 11, color: color.textDim, marginTop: 6, lineHeight: 1.45 }}>
-            {lang === 'ru' ? 'Character sheet 16:9 для video-edit' : '16:9 character sheet for video-edit'}
+            {lang === 'ru'
+              ? 'Двухпанельный лист 16:9: лицо + одежда — референс для Grok и Seedance'
+              : '16:9 two-panel sheet: face + outfit — reference for Grok and Seedance'}
           </div>
 
           {turnSource === 'generate' ? (
@@ -1489,13 +1452,9 @@ export default function MotionControlWizard({
           </div>
         )}
         <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 8, lineHeight: 1.45 }}>
-          {useMotionOutline
-            ? (lang === 'ru'
-              ? 'Силуэт + первый кадр: motion swap по контуру. Развёртка не используется.'
-              : 'Silhouette + first frame: motion swap via edge outline. Turnaround skipped.')
-            : (lang === 'ru'
-              ? 'Video-edit: развёртка + цветной фрагмент реф-видео.'
-              : 'Video-edit: turnaround + color reference clip.')}
+          {lang === 'ru'
+            ? 'Grok анализирует реф-видео, пишет промпт. В Seedance: @Video1 = depth map, @Image1 = развёртка.'
+            : 'Grok analyzes the reference clip and writes the prompt. Seedance gets @Video1 depth map + @Image1 turnaround.'}
         </div>
       </div>
     </div>

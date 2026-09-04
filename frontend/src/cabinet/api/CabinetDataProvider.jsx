@@ -1298,8 +1298,8 @@ export function CabinetDataProvider({ children }) {
         setError('Загрузите референс-видео')
         return
       }
-      if (mcWizard && !wizard?.turnaroundGenerationId && !(wizard?.useMotionOutline && (wizard?.firstFrameGenerationId || firstFrameGenId))) {
-        setError('Подготовьте развёртку или сгенерируйте первый кадр (режим силуэта)')
+      if (mcWizard && !wizard?.turnaroundGenerationId) {
+        setError('Подготовьте развёртку перед генерацией видео')
         return
       }
       const prompt = (appState.motionPrompt || appState.studioPrompt || '').trim()
@@ -1359,9 +1359,7 @@ export function CabinetDataProvider({ children }) {
           resolution: appState.vidQuality || '1080',
           durationSeconds: (wizard?.durationSeconds ?? Number(appState.vidTime)) || 5,
           motionVideoFileId: motionControl ? motionVideoFileId : null,
-          firstFrameGenerationId: mcWizard && wizard?.useMotionOutline
-            ? (wizard?.firstFrameGenerationId || firstFrameGenId)
-            : (mcWizard ? null : ffGenId),
+          firstFrameGenerationId: mcWizard ? null : ffGenId,
           frameFile: mcWizard ? null : (!ffGenId && frameFile ? frameFile : null),
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId) && !mcWizard,
           promptOnlyMode: promptMode,
@@ -1369,12 +1367,12 @@ export function CabinetDataProvider({ children }) {
           seedanceVariant: appState.vidSeedanceVariant || 'standard',
           videoBackend: isEvolink ? 'evolink' : 'wavespeed',
           motionControlWizard: mcWizard,
-          turnaroundGenerationId: wizard?.useMotionOutline ? null : wizard?.turnaroundGenerationId,
+          turnaroundGenerationId: wizard?.turnaroundGenerationId,
           outfitGenerationId: wizard?.outfitGenerationId || null,
           trimMode: wizard?.trimMode || 'full',
           trimStartSec: wizard?.trimStartSec,
           trimEndSec: wizard?.trimEndSec,
-          useMotionOutline: Boolean(mcWizard && wizard?.useMotionOutline),
+          useMotionOutline: false,
         })
         if (!accepted?.job_id && !coerceJobGenerationId(accepted)) {
           throw new Error('Сервер не принял задачу видео. Обновите страницу и попробуйте снова.')

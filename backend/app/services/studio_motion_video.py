@@ -514,7 +514,7 @@ def resolve_motion_video_uploaded(owner_id: int, file_id: str) -> Path | None:
 
 
 def motion_outline_requested(params: dict[str, Any]) -> bool:
-    """Нужна ли contour/silhouette-обработка референс-видео для этой задачи."""
+    """Нужна ли contour/silhouette-обработка референс-видеo для этой задачи."""
     from app.config import settings
 
     mc_wizard = str(params.get("motion_control_wizard") or "").strip().lower() in (
@@ -523,13 +523,9 @@ def motion_outline_requested(params: dict[str, Any]) -> bool:
         "yes",
         "on",
     )
+    # Motion Control wizard v2: depth map + Grok — без rembg/outline.
     if mc_wizard:
-        return str(params.get("use_motion_outline") or "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
+        return False
     return bool(settings.motion_outline_enabled)
 
 

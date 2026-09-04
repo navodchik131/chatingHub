@@ -38,7 +38,7 @@ from app.services.studio_generation_storage import (
 )
 from app.services.studio_motion_control import (
     MOTION_CONTROL_SHEET_ASPECT,
-    MOTION_CONTROL_TURNAROUND_PROMPT,
+    motion_control_turnaround_prompt,
 )
 from app.services.studio_motion_video import (
     extract_first_frame_jpeg,
@@ -429,7 +429,7 @@ async def api_motion_control_turnaround(
         "wave_model_id": wave_model,
         "wan_edit_tier": wan_tier,
         "studio_wave_profile": wave_profile,
-        "prompt": MOTION_CONTROL_TURNAROUND_PROMPT,
+        "prompt": motion_control_turnaround_prompt(),
         "output_aspect": MOTION_CONTROL_SHEET_ASPECT,
     }
     return await _accept_motion_control_job(
@@ -591,7 +591,7 @@ async def execute_motion_control_turnaround(
     face_url = _model_image_public_url(oid, face_id, pub)
     if not outfit_url:
         raise RuntimeError("URL образа недоступен")
-    prompt = str(p.get("prompt") or MOTION_CONTROL_TURNAROUND_PROMPT)
+    prompt = str(p.get("prompt") or motion_control_turnaround_prompt())
     aspect = str(p.get("output_aspect") or MOTION_CONTROL_SHEET_ASPECT)
     wave_model = str(p.get("wave_model_id") or "gpt-image-2").strip().lower()
     wan_tier = str(p.get("wan_edit_tier") or "standard").strip().lower()
