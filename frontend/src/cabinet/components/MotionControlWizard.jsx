@@ -11,6 +11,7 @@ import { quoteStudioImageCredits, formatImageCostBadge } from '../../studioImage
 import {
   computeEvolinkVideoCreditCost,
   computeMotionVideoCreditCost,
+  evolinkDurationMax,
   formatMotionCreditCost,
   mergeEvolinkVideoPricing,
 } from '../../studioMotionPricing';
@@ -95,6 +96,8 @@ export default function MotionControlWizard({
   const [trimOut, setTrimOut] = useState(5);
   /** Уточнения по реф-клипу → секция 0b USER BRIEF для Grok shot-analyst. */
   const [clipBrief, setClipBrief] = useState('');
+  /** EvoLink reference-to-video: явная длина результата (не длина ref-видео). */
+  const [outputDurationSec, setOutputDurationSec] = useState(() => Number(s.vidTime) || 5);
   /** Режим силуэта отключён — Motion Control v2: развёртка + depth map + Grok. */
   const [useMotionOutline] = useState(false);
   /** idle → loading → preview (результат) → accepted (подтверждён для видео). */
@@ -141,6 +144,7 @@ export default function MotionControlWizard({
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
       if (typeof saved.clipBrief === 'string') setClipBrief(saved.clipBrief);
+      if (typeof saved.outputDurationSec === 'number') setOutputDurationSec(saved.outputDurationSec);
       if (saved.ffModelId) setFfModelId(saved.ffModelId);
       if (saved.ffSource === 'upload' || saved.ffSource === 'generate') setFfSource(saved.ffSource);
       if (saved.ffPendingGenId != null) setFfPendingGenId(Number(saved.ffPendingGenId));
@@ -261,6 +265,7 @@ export default function MotionControlWizard({
       trimIn,
       trimOut,
       clipBrief,
+      outputDurationSec,
       useMotionOutline,
       ffModelId,
       ffSource,
@@ -292,6 +297,7 @@ export default function MotionControlWizard({
     trimIn,
     trimOut,
     clipBrief,
+    outputDurationSec,
     useMotionOutline,
     ffModelId,
     ffSource,
@@ -350,6 +356,26 @@ export default function MotionControlWizard({
   const clipDuration = trimMode === 'part'
     ? Math.max(0.5, trimOut - trimIn)
     : durationSec;
+
+  const seedanceVariant = s.vidSeedanceVariant || 'standard';
+  const evolinkOutputDurationOpts = useMemo(() => {
+    if (!isEvolink) return [];
+    const maxDur = evolinkDurationMax(seedanceVariant, evolinkPricing);
+    const minDur = evolinkPricing.duration_min ?? 4;
+    const len = Math.max(1, maxDur - minDur + 1);
+    return Array.from({ length: len }, (_, i) => {
+      const sec = i + minDur;
+      return { l: lang === 'ru' ? `${sec} с` : `${sec}s`, v: sec };
+    });
+  }, [isEvolink, evolinkPricing, seedanceVariant, lang]);
+
+  /** Держим выбранную длину результата в допустимых границах EvoLink. */
+  useEffect(() => {
+    if (!isEvolink || !evolinkOutputDurationOpts.length) return;
+    const minDur = evolinkOutputDurationOpts[0].v;
+    const maxDur = evolinkOutputDurationOpts[evolinkOutputDurationOpts.length - 1].v;
+    setOutputDurationSec((cur) => Math.max(minDur, Math.min(maxDur, Number(cur) || minDur)));
+  }, [isEvolink, evolinkOutputDurationOpts]);
 
   const firstFrameDisplayUrl = ffPreviewUrl
     || cabinet.firstFrameUrl
@@ -449,8 +475,9 @@ export default function MotionControlWizard({
     const variant = s.vidSeedanceVariant || 'standard';
     const resolution = vidQualityToResolution(s.vidQuality);
     const refDur = cabinet.motionVideoFileId ? Math.ceil(clipDuration) : null;
+    const billDuration = isEvolink ? outputDurationSec : clipDuration;
     if (isEvolink) {
-      return computeEvolinkVideoCreditCost(clipDuration, Boolean(cabinet.motionVideoFileId), evolinkPricing, {
+      return computeEvolinkVideoCreditCost(billDuration, Boolean(cabinet.motionVideoFileId), evolinkPricing, {
         variant,
         resolution,
         referenceVideoDuration: refDur,
@@ -461,7 +488,7 @@ export default function MotionControlWizard({
       resolution,
       referenceVideoDuration: refDur,
     });
-  }, [isEvolink, evolinkPricing, cabinet.health, cabinet.motionVideoFileId, clipDuration, s.vidQuality, s.vidSeedanceVariant]);
+  }, [isEvolink, evolinkPricing, cabinet.health, cabinet.motionVideoFileId, clipDuration, outputDurationSec, s.vidQuality, s.vidSeedanceVariant]);
 
   const totalCredits = (outfitSource === 'generate' && outfitState !== 'done' ? dressCredits : 0)
     + (turnSource === 'generate' && turnState !== 'done' ? turnCredits : 0)
@@ -643,7 +670,7 @@ export default function MotionControlWizard({
         trimMode,
         trimStartSec: trimMode === 'part' ? trimIn : null,
         trimEndSec: trimMode === 'part' ? trimOut : null,
-        durationSeconds: Math.ceil(clipDuration),
+        durationSeconds: isEvolink ? outputDurationSec : Math.ceil(clipDuration),
         useMotionOutline: false,
         motionGrokBrief: clipBrief.trim(),
       });
@@ -1399,6 +1426,33 @@ export default function MotionControlWizard({
           </div>
         </div>
 
+        {isEvolink && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>
+              {lang === 'ru' ? 'Длина результата' : 'Output length'}
+            </div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {evolinkOutputDurationOpts.map((opt) => (
+                <Chip
+                  key={opt.v}
+                  on={outputDurationSec === opt.v}
+                  onClick={() => {
+                    setOutputDurationSec(opt.v);
+                    setS({ vidTime: String(opt.v) });
+                  }}
+                >
+                  {opt.l}
+                </Chip>
+              ))}
+            </div>
+            <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6, lineHeight: 1.45 }}>
+              {lang === 'ru'
+                ? 'Seedance Sale (reference-to-video): длина задаётся явно. Референс — только motion/depth.'
+                : 'Seedance Sale (reference-to-video): output length is explicit. Reference carries motion/depth only.'}
+            </div>
+          </div>
+        )}
+
         {/* generate_audio → API: звук из реф-видео в Seedance (CabinetDataProvider читает vidGenerateAudio). */}
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>{t.vidRefSound}</div>
@@ -1451,7 +1505,14 @@ export default function MotionControlWizard({
         </div>
 
         <div style={{ marginBottom: 14, fontSize: 11, color: color.textDim, lineHeight: 1.5 }}>
-          <div>{lang === 'ru' ? 'Длина клипа' : 'Clip length'}: {clipDuration.toFixed(1)}s</div>
+          {isEvolink ? (
+            <>
+              <div>{lang === 'ru' ? 'Референс (motion)' : 'Reference (motion)'}: {clipDuration.toFixed(1)}s</div>
+              <div>{lang === 'ru' ? 'Результат' : 'Output'}: {outputDurationSec}s</div>
+            </>
+          ) : (
+            <div>{lang === 'ru' ? 'Длина клипа' : 'Clip length'}: {clipDuration.toFixed(1)}s</div>
+          )}
           <div>{lang === 'ru' ? 'Оценка за запуск' : 'Run estimate'}: ~{Math.round(totalCredits)} {t.cr}</div>
         </div>
 

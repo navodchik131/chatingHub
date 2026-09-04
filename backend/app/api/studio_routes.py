@@ -2586,7 +2586,18 @@ async def api_studio_motion_upload_driving_video(
         if not raw_video:
             raise HTTPException(status_code=400, detail="Пустой файл видео.")
         fid = save_motion_video_bytes(owner_id=oid, raw=raw_video, filename=video.filename)
-        return StudioMotionDrivingVideoUploadOut(motion_video_file_id=fid, status="ready")
+        from app.services.studio_motion_video import probe_video_duration_seconds
+
+        probed_dur: float | None = None
+        vpath = resolve_motion_video_uploaded(oid, fid)
+        if vpath is not None and vpath.is_file():
+            probed_dur = probe_video_duration_seconds(vpath)
+        return StudioMotionDrivingVideoUploadOut(
+            motion_video_file_id=fid,
+            status="ready",
+            duration_seconds=probed_dur,
+            message="Видео загружено.",
+        )
 
     if video is None or not (video.filename or "").strip():
         raise HTTPException(status_code=400, detail="Выберите файл видео (MP4/WebM/MOV).")
