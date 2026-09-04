@@ -83,12 +83,43 @@ def extract_shot_analyst_prompt_block(text: str) -> str:
     return raw
 
 
-def bind_motion_control_seedance_tags(prompt: str) -> str:
-    """Подставляем @Video1/@Image1 вместо плейсхолдеров Grok."""
+def bind_motion_control_seedance_tags(prompt: str, *, has_first_frame: bool = False) -> str:
+    """Подставляем @Video1/@ImageN вместо плейсхолдеров Grok."""
     out = (prompt or "").strip()
     out = out.replace("<<<DEPTH_MAP>>>", "@Video1")
-    out = out.replace("<<<CHARACTER_IMAGE>>>", "@Image1")
+    if has_first_frame:
+        out = out.replace("<<<FIRST_FRAME_IMAGE>>>", "@Image1")
+        out = out.replace("<<<CHARACTER_IMAGE>>>", "@Image2")
+    else:
+        out = out.replace("<<<CHARACTER_IMAGE>>>", "@Image1")
+        out = out.replace("<<<FIRST_FRAME_IMAGE>>>", "")
     return out
+
+
+_FIRST_FRAME_GROK_APPENDIX = """
+---
+
+## ATTACHED THIS RUN: FIRST FRAME IMAGE (second still after CHARACTER IMAGE)
+
+A **FIRST FRAME IMAGE** is attached after the CHARACTER IMAGE. It is the **opening frame at t=0**
+of the target video: the character already placed in the scene — environment, lighting, camera
+framing, pose, distance, and wardrobe **in context**.
+
+Use it for:
+- [GLOBAL SETUP] environment, surfaces, light direction, time of day, and opening pose at t=0
+- Shot 1 opening sub-beats: match this frame at t=0 before motion from the depth map takes over
+
+In [SOURCE MATERIAL] you MUST write:
+- <<<FIRST_FRAME_IMAGE>>>: opening frame at t=0 — environment, pose, framing, light in scene.
+  Protagonist ONLY for placement context; deny turnaround layout artefacts.
+- <<<CHARACTER_IMAGE>>>: identity turnaround — face, hair, outfit. Protagonist ONLY.
+
+Generation asset order: @Image1 = opening first frame, @Image2 = character identity,
+@Video1 = depth map motion control.
+
+At t=0 the output must match <<<FIRST_FRAME_IMAGE>>> for scene and pose; identity from
+<<<CHARACTER_IMAGE>>> for all frames. Motion timing still follows <<<DEPTH_MAP>>> exactly.
+"""
 
 
 def motion_control_grok_audio_policy(
@@ -171,6 +202,7 @@ def apply_motion_control_shot_analyst_instruction(
     audio_policy: str,
     user_brief: str = "",
     per_project_notes: str = "",
+    has_first_frame: bool = False,
 ) -> str:
     """Собирает финальную инструкцию: AUDIO POLICY + поля USER BRIEF (секция 0b)."""
     policy = (audio_policy or "PLATE").strip().upper()
@@ -184,16 +216,17 @@ def apply_motion_control_shot_analyst_instruction(
     for key, placeholder in _BRIEF_KEY_TO_PLACEHOLDER.items():
         instruction = instruction.replace(placeholder, fields.get(key, ""))
 
+    if has_first_frame:
+        instruction = f"{instruction.rstrip()}\n{_FIRST_FRAME_GROK_APPENDIX}"
     return instruction
 
 
-async def _xai_responses_video_and_image_text(
+async def _xai_responses_video_and_images_text(
     *,
     credentials: StudioOpenAiCredentials,
     instruction_text: str,
     file_id: str,
-    image_bytes: bytes,
-    image_mime: str,
+    images: list[tuple[bytes, str]],
     model: str,
     timeout_seconds: float,
     max_completion_tokens: int = 16384,
@@ -206,20 +239,17 @@ async def _xai_responses_video_and_image_text(
         "Authorization": f"Bearer {credentials.api_key.strip()}",
         "Content-Type": "application/json",
     }
-    mime = (image_mime or "image/jpeg").split(";")[0].strip() or "image/jpeg"
-    b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+    content: list[dict[str, str]] = [
+        {"type": "input_text", "text": instruction_text.strip()},
+        {"type": "input_file", "file_id": file_id.strip()},
+    ]
+    for image_bytes, image_mime in images:
+        mime = (image_mime or "image/jpeg").split(";")[0].strip() or "image/jpeg"
+        b64 = base64.standard_b64encode(image_bytes).decode("ascii")
+        content.append({"type": "input_image", "image_url": f"data:{mime};base64,{b64}"})
     body = {
         "model": model,
-        "input": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": instruction_text.strip()},
-                    {"type": "input_file", "file_id": file_id.strip()},
-                    {"type": "input_image", "image_url": f"data:{mime};base64,{b64}"},
-                ],
-            }
-        ],
+        "input": [{"role": "user", "content": content}],
         "temperature": 0.2,
     }
     if max_completion_tokens > 0:
@@ -239,6 +269,8 @@ async def grok_motion_control_shot_prompt(
     video_path: Path,
     character_image_bytes: bytes,
     character_image_mime: str = "image/jpeg",
+    first_frame_image_bytes: bytes | None = None,
+    first_frame_image_mime: str = "image/jpeg",
     credentials: StudioOpenAiCredentials | None = None,
     user_brief: str = "",
     per_project_notes: str = "",
@@ -246,10 +278,12 @@ async def grok_motion_control_shot_prompt(
     has_ref_audio: bool | None = None,
 ) -> str:
     """
-    Анализ performance-видео + CHARACTER IMAGE → готовый T2V prompt (English).
-    Возвращает текст с @Video1 (depth) и @Image1 (character).
+    Анализ performance-видео + CHARACTER IMAGE (+ optional FIRST FRAME) → T2V prompt.
+    Без первого кадра: @Image1=character, @Video1=depth.
+    С первым кадром: @Image1=opening frame, @Image2=character, @Video1=depth.
     """
     creds = credentials or grok_motion_studio_credentials()
+    has_first_frame = bool(first_frame_image_bytes and len(first_frame_image_bytes) >= 64)
     if has_ref_audio is None:
         from app.services.studio_motion_video import probe_video_has_audio
 
@@ -263,7 +297,14 @@ async def grok_motion_control_shot_prompt(
         audio_policy=audio_policy,
         user_brief=user_brief,
         per_project_notes=per_project_notes,
+        has_first_frame=has_first_frame,
     )
+
+    grok_images: list[tuple[bytes, str]] = [
+        (character_image_bytes, character_image_mime),
+    ]
+    if has_first_frame and first_frame_image_bytes is not None:
+        grok_images.append((first_frame_image_bytes, first_frame_image_mime))
 
     cap = settings.grok_motion_max_seconds
     tmp_mp4: Path | None = None
@@ -283,34 +324,32 @@ async def grok_motion_control_shot_prompt(
 
         model = _grok_full_video_responses_model()
         try:
-            raw = await _xai_responses_video_and_image_text(
+            raw = await _xai_responses_video_and_images_text(
                 credentials=creds,
                 instruction_text=instruction,
                 file_id=file_id_remote,
-                image_bytes=character_image_bytes,
-                image_mime=character_image_mime,
+                images=grok_images,
                 model=model,
                 timeout_seconds=settings.grok_motion_full_video_timeout_seconds,
                 max_completion_tokens=16384,
             )
         except RuntimeError as e:
-            # Fallback: video-only timeline + character image in chat (без native image slot).
-            log.warning("motion control grok video+image responses failed (%s), fallback chat", str(e)[:200])
+            # Fallback: video-only timeline + stills in chat.
+            log.warning("motion control grok video+images responses failed (%s), fallback chat", str(e)[:200])
             from app.services.studio_grok_motion import grok_step1_timeline_from_video
 
             timeline = await grok_step1_timeline_from_video(video_path=video_path, credentials=creds)
             from app.services.studio_openai import chat_completion_openai_compatible_text
             from app.services.studio_grok_motion import _grok_fps_stills_model
 
-            mime = (character_image_mime or "image/jpeg").split(";")[0].strip() or "image/jpeg"
-            b64 = base64.standard_b64encode(character_image_bytes).decode("ascii")
             fallback_instruction = (
                 f"{instruction}\n\n---\n\nREFERENCE VIDEO SUMMARY (fallback timeline):\n{timeline}"
             )
-            content = [
-                {"type": "text", "text": fallback_instruction},
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
-            ]
+            content: list[dict] = [{"type": "text", "text": fallback_instruction}]
+            for img_bytes, img_mime in grok_images:
+                mime = (img_mime or "image/jpeg").split(";")[0].strip() or "image/jpeg"
+                b64 = base64.standard_b64encode(img_bytes).decode("ascii")
+                content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}})
             raw = await chat_completion_openai_compatible_text(
                 model=_grok_fps_stills_model(),
                 messages=[{"role": "user", "content": content}],
@@ -322,12 +361,13 @@ async def grok_motion_control_shot_prompt(
         block = extract_shot_analyst_prompt_block(raw)
         if len(block) < 120:
             raise RuntimeError("Grok вернул слишком короткий промпт для видео.")
-        bound = bind_motion_control_seedance_tags(block)
+        bound = bind_motion_control_seedance_tags(block, has_first_frame=has_first_frame)
         log.info(
-            "motion control grok prompt chars=%s dur=%s audio_policy=%s",
+            "motion control grok prompt chars=%s dur=%s audio_policy=%s first_frame=%s",
             len(bound),
             probe_video_duration_seconds(video_path),
             audio_policy,
+            has_first_frame,
         )
         return bound
     finally:

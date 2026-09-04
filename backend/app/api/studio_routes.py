@@ -8844,6 +8844,7 @@ async def _studio_job_execute_motion_render_video(
                 vpath=vpath,
                 mv_id=mv_id,
                 turnaround_gid=turnaround_gid,
+                first_frame_gid=first_frame_gen_id,
                 user_brief=motion_grok_brief,
                 wants_reference_audio=wants_reference_audio,
                 has_ref_audio=(

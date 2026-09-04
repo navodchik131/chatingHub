@@ -1359,7 +1359,7 @@ export function CabinetDataProvider({ children }) {
           resolution: appState.vidQuality || '1080',
           durationSeconds: (wizard?.durationSeconds ?? Number(appState.vidTime)) || 5,
           motionVideoFileId: motionControl ? motionVideoFileId : null,
-          firstFrameGenerationId: mcWizard ? null : ffGenId,
+          firstFrameGenerationId: mcWizard ? (wizard?.firstFrameGenerationId ?? null) : ffGenId,
           frameFile: mcWizard ? null : (!ffGenId && frameFile ? frameFile : null),
           autoMotionPrompt: motionControl && Boolean(motionVideoFileId) && !mcWizard,
           promptOnlyMode: promptMode,

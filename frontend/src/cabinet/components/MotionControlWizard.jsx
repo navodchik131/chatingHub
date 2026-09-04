@@ -96,6 +96,8 @@ export default function MotionControlWizard({
   const [trimOut, setTrimOut] = useState(5);
   /** Уточнения по реф-клипу → секция 0b USER BRIEF для Grok shot-analyst. */
   const [clipBrief, setClipBrief] = useState('');
+  /** Нужен ли первый кадр (сцена/поза t=0) для Grok и Seedance. */
+  const [needFirstFrame, setNeedFirstFrame] = useState('no');
   /** EvoLink reference-to-video: явная длина результата (не длина ref-видео). */
   const [outputDurationSec, setOutputDurationSec] = useState(() => Number(s.vidTime) || 5);
   /** Режим силуэта отключён — Motion Control v2: развёртка + depth map + Grok. */
@@ -144,6 +146,7 @@ export default function MotionControlWizard({
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
       if (typeof saved.clipBrief === 'string') setClipBrief(saved.clipBrief);
+      if (saved.needFirstFrame === 'yes' || saved.needFirstFrame === 'no') setNeedFirstFrame(saved.needFirstFrame);
       if (typeof saved.outputDurationSec === 'number') setOutputDurationSec(saved.outputDurationSec);
       if (saved.ffModelId) setFfModelId(saved.ffModelId);
       if (saved.ffSource === 'upload' || saved.ffSource === 'generate') setFfSource(saved.ffSource);
@@ -265,6 +268,7 @@ export default function MotionControlWizard({
       trimIn,
       trimOut,
       clipBrief,
+      needFirstFrame,
       outputDurationSec,
       useMotionOutline,
       ffModelId,
@@ -433,6 +437,13 @@ export default function MotionControlWizard({
     cabinet.setUploadFile('mc-first-frame-upload', null);
   }, [cabinet]);
 
+  useEffect(() => {
+    if (skipPersistRef.current) return;
+    if (needFirstFrame !== 'yes') {
+      resetFirstFrameDraft();
+    }
+  }, [needFirstFrame, resetFirstFrameDraft]);
+
   const uploadFirstFrame = useCallback(async () => {
     if (ffState === 'loading') return;
     if (!cabinet.selectedModelId) {
@@ -492,6 +503,7 @@ export default function MotionControlWizard({
 
   const totalCredits = (outfitSource === 'generate' && outfitState !== 'done' ? dressCredits : 0)
     + (turnSource === 'generate' && turnState !== 'done' ? turnCredits : 0)
+    + (needFirstFrame === 'yes' && ffState !== 'accepted' && ffSource === 'generate' ? ffCredits : 0)
     + videoCredits;
 
   const engineModels = enginesForNsfw(s.contentMode === 'nsfw', cabinet.genModels);
@@ -660,12 +672,19 @@ export default function MotionControlWizard({
       cabinet.setError(lang === 'ru' ? 'Подготовьте развёртку перед видео' : 'Prepare turnaround before video');
       return;
     }
+    if (needFirstFrame === 'yes' && ffState !== 'accepted') {
+      cabinet.setError(lang === 'ru' ? 'Подтвердите первый кадр или отключите этот шаг' : 'Accept the first frame or disable this step');
+      return;
+    }
+    const ffGenId = needFirstFrame === 'yes'
+      ? (cabinet.firstFrameGenId ?? ffPendingGenId)
+      : null;
     cabinet.setError(null);
     try {
       await onGenerate({
         motionControlWizard: true,
         turnaroundGenerationId: turnaroundGenId,
-        firstFrameGenerationId: null,
+        firstFrameGenerationId: ffGenId,
         outfitGenerationId: outfitGenId,
         trimMode,
         trimStartSec: trimMode === 'part' ? trimIn : null,
@@ -801,28 +820,46 @@ export default function MotionControlWizard({
                   lang={lang}
                 />
               )}
-              {false && useMotionOutline && (
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line.hair}` }}>
-                  <div style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: 1.1, color: color.textGhost, marginBottom: 8 }}>
-                    {lang === 'ru' ? 'ПЕРВЫЙ КАДР' : 'FIRST FRAME'}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.45, marginBottom: 10 }}>
-                    {lang === 'ru'
-                      ? 'Grok подставит лицо модели в позу с первого кадра видео — нужно для swap по силуэту.'
-                      : 'Grok composes your model into the video opening pose — required for silhouette motion swap.'}
-                  </div>
+            </>
+          )}
+        </div>
 
-                  <div style={{ display: 'flex', gap: 5, marginBottom: 12, justifyContent: 'flex-end' }}>
-                    <Chip on={ffSource === 'generate'} onClick={() => setFfSource('generate')}>
-                      {lang === 'ru' ? 'Сгенерировать' : 'Generate'}
-                    </Chip>
-                    <Chip on={ffSource === 'upload'} onClick={() => setFfSource('upload')}>
-                      {lang === 'ru' ? 'Своё фото' : 'Own photo'}
-                    </Chip>
-                  </div>
+        {/* 3 · Первый кадр (опционально) */}
+        <div style={stepBlock}>
+          <Eyebrow>{lang === 'ru' ? '3 · ПЕРВЫЙ КАДР' : '3 · FIRST FRAME'}</Eyebrow>
+          <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 8, lineHeight: 1.5 }}>
+            {lang === 'ru'
+              ? 'Кадр t=0: сцена, свет, поза и окружение. Помогает Grok и Seedance понять, где стоит персонаж.'
+              : 'Frame at t=0: scene, light, pose and environment. Helps Grok and Seedance anchor the opening.'}
+          </div>
+          <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
+            <Chip
+              on={needFirstFrame === 'no'}
+              onClick={() => setNeedFirstFrame('no')}
+            >
+              {lang === 'ru' ? 'Не нужен' : 'Not needed'}
+            </Chip>
+            <Chip
+              on={needFirstFrame === 'yes'}
+              onClick={() => setNeedFirstFrame('yes')}
+            >
+              {lang === 'ru' ? 'Да, нужен' : 'Yes, add'}
+            </Chip>
+          </div>
 
-                  {ffSource === 'generate' ? (
-                    <>
+          {needFirstFrame === 'yes' && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line.hair}` }}>
+              <div style={{ display: 'flex', gap: 5, marginBottom: 12, justifyContent: 'flex-end' }}>
+                <Chip on={ffSource === 'generate'} onClick={() => setFfSource('generate')}>
+                  {lang === 'ru' ? 'Сгенерировать' : 'Generate'}
+                </Chip>
+                <Chip on={ffSource === 'upload'} onClick={() => setFfSource('upload')}>
+                  {lang === 'ru' ? 'Своё фото' : 'Own photo'}
+                </Chip>
+              </div>
+
+              {ffSource === 'generate' ? (
+                <>
                   {!simplifiedUi && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
@@ -873,143 +910,141 @@ export default function MotionControlWizard({
                       {lang === 'ru' ? 'Собираем первый кадр…' : 'Building first frame…'}
                     </div>
                   )}
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.5 }}>
-                        {lang === 'ru'
-                          ? 'Загрузите готовый первый кадр — генерация не нужна, кредиты не списываются.'
-                          : 'Upload a ready first frame — no generation, no credits charged.'}
-                      </div>
-                      <input
-                        ref={ffUploadRef}
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) cabinet.setUploadFile('mc-first-frame-upload', file);
-                          e.target.value = '';
-                        }}
-                      />
-                      <Hoverable
-                        style={{
-                          marginTop: 12,
-                          borderRadius: 12,
-                          padding: 16,
-                          cursor: 'pointer',
-                          ...refUploadStyle(Boolean(cabinet.uploadFiles['mc-first-frame-upload'])).base,
-                        }}
-                        hover={refUploadStyle(Boolean(cabinet.uploadFiles['mc-first-frame-upload'])).hover}
-                        onClick={() => ffUploadRef.current?.click()}
-                      >
-                        <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: color.textDim }}>
-                          {cabinet.uploadFiles['mc-first-frame-upload']?.name || (lang === 'ru' ? 'Выбрать файл' : 'Choose file')}
-                        </span>
-                      </Hoverable>
-                      {cabinet.uploadPreviewUrls?.['mc-first-frame-upload'] && ffState !== 'accepted' && (
-                        <div style={{ marginTop: 12 }}>
-                          <img
-                            src={cabinet.uploadPreviewUrls['mc-first-frame-upload']}
-                            alt=""
-                            style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}` }}
-                          />
-                        </div>
-                      )}
-                      {(ffState === 'idle' || ffState === 'loading') && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-                          <Hoverable
-                            style={{
-                              background: 'rgba(56,189,248,.15)',
-                              border: '1px solid rgba(56,189,248,.35)',
-                              color: '#7DD3FC',
-                              fontWeight: 800,
-                              fontSize: 13,
-                              borderRadius: 11,
-                              padding: '10px 16px',
-                              cursor: ffState === 'loading' ? 'wait' : 'pointer',
-                              opacity: ffState === 'loading' ? 0.7 : 1,
-                            }}
-                            hover={{ background: 'rgba(56,189,248,.22)' }}
-                            onClick={() => { if (ffState !== 'loading') void uploadFirstFrame(); }}
-                          >
-                            {ffState === 'loading'
-                              ? (lang === 'ru' ? 'Загружаем…' : 'Uploading…')
-                              : (lang === 'ru' ? 'Использовать это фото' : 'Use this photo')}
-                          </Hoverable>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {(ffState === 'preview' || ffState === 'accepted') && firstFrameDisplayUrl && (
-                    <div style={{ marginTop: 4 }}>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11.5, color: color.textDim, lineHeight: 1.5 }}>
+                    {lang === 'ru'
+                      ? 'Загрузите готовый первый кадр — генерация не нужна, кредиты не списываются.'
+                      : 'Upload a ready first frame — no generation, no credits charged.'}
+                  </div>
+                  <input
+                    ref={ffUploadRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) cabinet.setUploadFile('mc-first-frame-upload', file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Hoverable
+                    style={{
+                      marginTop: 12,
+                      borderRadius: 12,
+                      padding: 16,
+                      cursor: 'pointer',
+                      ...refUploadStyle(Boolean(cabinet.uploadFiles['mc-first-frame-upload'])).base,
+                    }}
+                    hover={refUploadStyle(Boolean(cabinet.uploadFiles['mc-first-frame-upload'])).hover}
+                    onClick={() => ffUploadRef.current?.click()}
+                  >
+                    <span style={{ display: 'flex', width: 20, height: 20, color: color.textMuted }}><IcoUpload /></span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: color.textDim }}>
+                      {cabinet.uploadFiles['mc-first-frame-upload']?.name || (lang === 'ru' ? 'Выбрать файл' : 'Choose file')}
+                    </span>
+                  </Hoverable>
+                  {cabinet.uploadPreviewUrls?.['mc-first-frame-upload'] && ffState !== 'accepted' && (
+                    <div style={{ marginTop: 12 }}>
                       <img
-                        src={firstFrameDisplayUrl}
+                        src={cabinet.uploadPreviewUrls['mc-first-frame-upload']}
                         alt=""
-                        style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}`, marginBottom: 10, display: 'block' }}
+                        style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}` }}
                       />
-                      {ffState === 'accepted' && (
-                        <div style={{ fontSize: 11, color: color.lime, marginBottom: 10 }}>
-                          ✓ {lang === 'ru' ? 'Используется для видео' : 'Used for video'}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8, maxWidth: 320 }}>
-                        <Hoverable
-                          style={{
-                            flex: 1,
-                            textAlign: 'center',
-                            border: `1px solid ${line.mid}`,
-                            borderRadius: 9,
-                            padding: 10,
-                            fontSize: 12.5,
-                            fontWeight: 700,
-                            color: color.textDim,
-                            cursor: ffState === 'loading' ? 'wait' : 'pointer',
-                          }}
-                          hover={{ borderColor: line.strong }}
-                          onClick={() => {
-                            if (ffState === 'loading') return;
-                            if (ffSource === 'upload') resetFirstFrameDraft();
-                            else void runFirstFrame();
-                          }}
-                        >
-                          ↻ {t.regen}
-                        </Hoverable>
-                        {ffState === 'preview' && (
-                          <Hoverable
-                            style={{
-                              flex: 1,
-                              textAlign: 'center',
-                              background: 'rgba(215,244,82,.12)',
-                              border: '1px solid rgba(215,244,82,.35)',
-                              borderRadius: 9,
-                              padding: 10,
-                              fontSize: 12.5,
-                              fontWeight: 800,
-                              color: color.lime,
-                              cursor: 'pointer',
-                            }}
-                            hover={{ background: 'rgba(215,244,82,.2)' }}
-                            onClick={acceptFirstFrame}
-                          >
-                            ✓ {t.useThis}
-                          </Hoverable>
-                        )}
-                      </div>
                     </div>
                   )}
+                  {(ffState === 'idle' || ffState === 'loading') && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                      <Hoverable
+                        style={{
+                          background: 'rgba(56,189,248,.15)',
+                          border: '1px solid rgba(56,189,248,.35)',
+                          color: '#7DD3FC',
+                          fontWeight: 800,
+                          fontSize: 13,
+                          borderRadius: 11,
+                          padding: '10px 16px',
+                          cursor: ffState === 'loading' ? 'wait' : 'pointer',
+                          opacity: ffState === 'loading' ? 0.7 : 1,
+                        }}
+                        hover={{ background: 'rgba(56,189,248,.22)' }}
+                        onClick={() => { if (ffState !== 'loading') void uploadFirstFrame(); }}
+                      >
+                        {ffState === 'loading'
+                          ? (lang === 'ru' ? 'Загружаем…' : 'Uploading…')
+                          : (lang === 'ru' ? 'Использовать это фото' : 'Use this photo')}
+                      </Hoverable>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {(ffState === 'preview' || ffState === 'accepted') && firstFrameDisplayUrl && (
+                <div style={{ marginTop: 4 }}>
+                  <img
+                    src={firstFrameDisplayUrl}
+                    alt=""
+                    style={{ maxWidth: 140, borderRadius: 12, border: `1px solid ${line.soft}`, marginBottom: 10, display: 'block' }}
+                  />
+                  {ffState === 'accepted' && (
+                    <div style={{ fontSize: 11, color: color.lime, marginBottom: 10 }}>
+                      ✓ {lang === 'ru' ? 'Первый кадр подтверждён' : 'First frame confirmed'}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, maxWidth: 320 }}>
+                    <Hoverable
+                      style={{
+                        flex: 1,
+                        textAlign: 'center',
+                        border: `1px solid ${line.mid}`,
+                        borderRadius: 9,
+                        padding: 10,
+                        fontSize: 12.5,
+                        fontWeight: 700,
+                        color: color.textDim,
+                        cursor: ffState === 'loading' ? 'wait' : 'pointer',
+                      }}
+                      hover={{ borderColor: line.strong }}
+                      onClick={() => {
+                        if (ffState === 'loading') return;
+                        if (ffSource === 'upload') resetFirstFrameDraft();
+                        else void runFirstFrame();
+                      }}
+                    >
+                      ↻ {t.regen}
+                    </Hoverable>
+                    {ffState === 'preview' && (
+                      <Hoverable
+                        style={{
+                          flex: 1,
+                          textAlign: 'center',
+                          background: 'rgba(215,244,82,.12)',
+                          border: '1px solid rgba(215,244,82,.35)',
+                          borderRadius: 9,
+                          padding: 10,
+                          fontSize: 12.5,
+                          fontWeight: 800,
+                          color: color.lime,
+                          cursor: 'pointer',
+                        }}
+                        hover={{ background: 'rgba(215,244,82,.2)' }}
+                        onClick={acceptFirstFrame}
+                      >
+                        ✓ {t.useThis}
+                      </Hoverable>
+                    )}
+                  </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
 
-        {/* 3 · Образ */}
+        {/* 4 · Образ */}
         <div style={stepBlock}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Eyebrow>{lang === 'ru' ? '3 · ОБРАЗ' : '3 · OUTFIT'}</Eyebrow>
+            <Eyebrow>{lang === 'ru' ? '4 · ОБРАЗ' : '4 · OUTFIT'}</Eyebrow>
             <div style={{ flex: 1 }} />
             <div style={{ display: 'flex', gap: 5 }}>
               <Chip on={outfitSource === 'generate'} onClick={() => setOutfitSource('generate')}>
@@ -1217,10 +1252,10 @@ export default function MotionControlWizard({
           )}
         </div>
 
-        {/* 4 · Развёртка */}
+        {/* 5 · Развёртка */}
         <div style={stepBlock}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Eyebrow>{lang === 'ru' ? '4 · РАЗВЁРТКА' : '4 · TURNAROUND'}</Eyebrow>
+            <Eyebrow>{lang === 'ru' ? '5 · РАЗВЁРТКА' : '5 · TURNAROUND'}</Eyebrow>
             <div style={{ flex: 1 }} />
             <div style={{ display: 'flex', gap: 5 }}>
               <Chip on={turnSource === 'generate'} onClick={() => setTurnSource('generate')}>

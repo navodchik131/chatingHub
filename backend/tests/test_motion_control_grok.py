@@ -2,6 +2,7 @@
 
 from app.services.motion_control_grok import (
     apply_motion_control_shot_analyst_instruction,
+    bind_motion_control_seedance_tags,
     motion_control_grok_audio_policy,
     parse_motion_control_user_brief,
 )
@@ -63,3 +64,15 @@ MUST TRANSFER:
     assert "бит" in out
     assert "<<<BRIEF_" not in out
     assert "## PER-PROJECT NOTES" not in out
+
+
+def test_bind_tags_with_first_frame():
+    raw = "<<<FIRST_FRAME_IMAGE>>> <<<CHARACTER_IMAGE>>> <<<DEPTH_MAP>>>"
+    out = bind_motion_control_seedance_tags(raw, has_first_frame=True)
+    assert out == "@Image1 @Image2 @Video1"
+
+
+def test_bind_tags_without_first_frame():
+    raw = "<<<CHARACTER_IMAGE>>> <<<DEPTH_MAP>>>"
+    out = bind_motion_control_seedance_tags(raw, has_first_frame=False)
+    assert out == "@Image1 @Video1"

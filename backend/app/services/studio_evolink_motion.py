@@ -331,6 +331,13 @@ async def execute_evolink_motion_render_video(
             turnaround_gid = int(turnaround_gid_raw)
         except ValueError as e:
             raise RuntimeError("Некорректный turnaround_generation_id") from e
+        mc_ff_gid: int | None = None
+        raw_ff = str(params.get("first_frame_generation_id") or "").strip()
+        if raw_ff:
+            try:
+                mc_ff_gid = int(raw_ff)
+            except ValueError as e:
+                raise RuntimeError("Некорректный first_frame_generation_id") from e
         turnaround_row = await session.get(StudioGeneration, turnaround_gid)
         if not turnaround_row or turnaround_row.user_id != oid:
             raise RuntimeError("Развёртка не найдена")
@@ -347,6 +354,7 @@ async def execute_evolink_motion_render_video(
             vpath=vpath,
             mv_id=mv_id,
             turnaround_gid=turnaround_gid,
+            first_frame_gid=mc_ff_gid,
             user_brief=motion_grok_brief,
             wants_reference_audio=wants_reference_audio,
             has_ref_audio=(

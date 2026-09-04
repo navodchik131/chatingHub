@@ -30,7 +30,9 @@ class MotionControlT2VPackage:
     depth_file_id: str = ""
 
 
-async def _load_turnaround_bytes(session: AsyncSession, *, owner_id: int, generation_id: int) -> tuple[bytes, str]:
+async def _load_generation_still_bytes(
+    session: AsyncSession, *, owner_id: int, generation_id: int
+) -> tuple[bytes, str]:
     from app.api.studio_routes import _load_owned_generation_still_for_motion
 
     row, data, mime = await _load_owned_generation_still_for_motion(
@@ -40,8 +42,12 @@ async def _load_turnaround_bytes(session: AsyncSession, *, owner_id: int, genera
         actor=None,
     )
     if row is None or len(data) < 64:
-        raise RuntimeError("Не удалось загрузить развёртку для Grok.")
+        raise RuntimeError("Не удалось загрузить изображение для Grok.")
     return data, mime or "image/jpeg"
+
+
+async def _load_turnaround_bytes(session: AsyncSession, *, owner_id: int, generation_id: int) -> tuple[bytes, str]:
+    return await _load_generation_still_bytes(session, owner_id=owner_id, generation_id=generation_id)
 
 
 async def prepare_motion_control_depth_t2v(
@@ -52,6 +58,7 @@ async def prepare_motion_control_depth_t2v(
     vpath: Path,
     mv_id: str,
     turnaround_gid: int,
+    first_frame_gid: int | None = None,
     user_brief: str = "",
     per_project_notes: str = "",
     wants_reference_audio: bool = True,
@@ -60,8 +67,9 @@ async def prepare_motion_control_depth_t2v(
     """
     Motion Control wizard v2:
     1) depth-map video из реф-клипа
-    2) Grok: video + turnaround → T2V prompt
-    3) refs: @Video1=depth, @Image1=turnaround
+    2) Grok: video + turnaround (+ optional first frame) → T2V prompt
+    3) refs: @Video1=depth; @Image1=first frame (optional), @Image2=turnaround
+       или @Image1=turnaround без первого кадра
     """
     if not grok_motion_api_configured():
         raise RuntimeError(
@@ -84,10 +92,28 @@ async def prepare_motion_control_depth_t2v(
 
     ta_bytes, ta_mime = await _load_turnaround_bytes(session, owner_id=owner_id, generation_id=turnaround_gid)
 
+    ff_bytes: bytes | None = None
+    ff_mime = "image/jpeg"
+    ff_url: str | None = None
+    if first_frame_gid is not None:
+        ff_bytes, ff_mime = await _load_generation_still_bytes(
+            session, owner_id=owner_id, generation_id=first_frame_gid
+        )
+        ff_url = generation_still_public_url(
+            owner_id=owner_id,
+            generation_id=first_frame_gid,
+            public_app_base=pub,
+            token_factory=create_generation_image_access_token,
+        )
+        if not ff_url:
+            raise RuntimeError("Не удалось подготовить URL первого кадра")
+
     seed_prompt = await grok_motion_control_shot_prompt(
         video_path=vpath,
         character_image_bytes=ta_bytes,
         character_image_mime=ta_mime,
+        first_frame_image_bytes=ff_bytes,
+        first_frame_image_mime=ff_mime,
         credentials=grok_motion_studio_credentials(),
         user_brief=user_brief,
         per_project_notes=per_project_notes,
@@ -98,9 +124,14 @@ async def prepare_motion_control_depth_t2v(
     depth_tok = create_motion_video_access_token(user_id=owner_id, file_id=mv_id)
     depth_url = f"{pub}/api/studio/public-motion-depth-video?t={quote(depth_tok, safe='')}"
 
+    ref_images: list[str] = []
+    if ff_url:
+        ref_images.append(ff_url)
+    ref_images.append(turnaround_url)
+
     return MotionControlT2VPackage(
         seed_prompt=seed_prompt,
-        ref_images=[turnaround_url],
+        ref_images=ref_images,
         ref_videos=[depth_url],
         depth_file_id=mv_id,
     )
