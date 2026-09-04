@@ -15,8 +15,13 @@ from app.services.motion_video_outline import _ffmpeg_bin, _ffprobe_bin, _run_cm
 
 log = logging.getLogger(__name__)
 
-# v3: полная сцена MiDaS + rembg усиливает силуэт человека (фон не чёрный).
-DEPTH_MAP_ALGO = "v3"
+# v4: меньше сглаживания + CLAHE внутри силуэта — руки/лицо контрастнее относительно торса.
+DEPTH_MAP_ALGO = "v4"
+# Размер ядра GaussianBlur для маски человека (нечётное); v3 было 21 — слишком «пятно».
+_PERSON_MASK_BLUR = 5
+# Лёгкий bilateral вместо v3 (7, 40, 40); 0 = выключить полностью.
+_BILATERAL_D = 5
+_BILATERAL_SIGMA = 12
 MIDAS_DIR = (BACKEND_DIR / "data" / "models" / "midas").resolve()
 # В релизе v2_1 файл называется model-small.onnx (midas_v21_small_256.onnx — 404).
 MIDAS_MODEL = MIDAS_DIR / "model-small.onnx"
@@ -89,13 +94,38 @@ def _percentile_norm01(values: np.ndarray, *, lo_pct: float, hi_pct: float) -> n
 
 
 def _soft_person_alpha(fg_mask: np.ndarray) -> np.ndarray:
-    """Мягкая маска 0..1 для плавного перехода человек ↔ окружение."""
+    """Мягкая маска 0..1 для перехода человек ↔ окружение; v4 — узкое размытие краёв."""
     import cv2
 
     m = (fg_mask > 127).astype(np.float32)
     if not np.any(m > 0.01):
         return m
-    return cv2.GaussianBlur(m, (21, 21), 0)
+    k = _PERSON_MASK_BLUR | 1  # нечётное ядро
+    return cv2.GaussianBlur(m, (k, k), 0)
+
+
+def _enhance_person_local_contrast(gray_u8: np.ndarray, fg_mask: np.ndarray | None) -> np.ndarray:
+    """CLAHE только внутри rembg-маски — усиливает локальную глубину конечностей и лица."""
+    import cv2
+
+    if fg_mask is None or not np.any(fg_mask > 127):
+        return gray_u8
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray_u8)
+    fg = fg_mask > 127
+    out = gray_u8.copy()
+    out[fg] = enhanced[fg]
+    return out
+
+
+def _light_edge_preserving_smooth(gray_u8: np.ndarray) -> np.ndarray:
+    """Минимальное сглаживание шума MiDaS без «размазывания» силуэта."""
+    import cv2
+
+    if _BILATERAL_D <= 0:
+        return gray_u8
+    d = _BILATERAL_D | 1
+    return cv2.bilateralFilter(gray_u8, d, _BILATERAL_SIGMA, _BILATERAL_SIGMA)
 
 
 def _compose_scene_depth_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) -> np.ndarray:
@@ -104,8 +134,6 @@ def _compose_scene_depth_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) 
     Окружение и предметы видны (глобальная нормализация MiDaS).
     Человек ярче и контрастнее фона — rembg-маска усиливает локальную глубину тела.
     """
-    import cv2
-
     d = depth.astype(np.float32)
     # Слой сцены: стены, пол, реквизит — всё остаётся читаемым.
     scene01 = _percentile_norm01(d, lo_pct=2, hi_pct=98)
@@ -115,7 +143,8 @@ def _compose_scene_depth_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) 
         gray = scene_gray
     else:
         fg = fg_mask > 127
-        person01 = _percentile_norm01(d[fg], lo_pct=4, hi_pct=96)
+        # Уже персентили — чуть шире диапазон, чтобы руки/голова не сливались с торсом.
+        person01 = _percentile_norm01(d[fg], lo_pct=2, hi_pct=98)
         person_full = np.zeros_like(d, dtype=np.float32)
         person_full[fg] = person01
         # Человек: широкий диапазон 48–255; окружение приглушено (~62% яркости).
@@ -125,7 +154,8 @@ def _compose_scene_depth_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) 
         gray = alpha * person_gray + (1.0 - alpha) * scene_layer
 
     out = np.clip(gray, 0, 255).astype(np.uint8)
-    out = cv2.bilateralFilter(out, 7, 40, 40)
+    out = _enhance_person_local_contrast(out, fg_mask)
+    out = _light_edge_preserving_smooth(out)
     return out
 
 
@@ -173,7 +203,8 @@ def _fallback_depth_bgr(frame_bgr: np.ndarray, *, rembg_session: Any | None = No
 
     mask = _human_mask_bgr_safe(frame_bgr, rembg_session)
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    gray = cv2.GaussianBlur(gray, (7, 7), 0)
+    # v4: меньше blur исходника в fallback — сохраняем контуры рук/лица.
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
     scene_depth = gray.copy()
 
     if mask is not None and np.any(mask > 127):

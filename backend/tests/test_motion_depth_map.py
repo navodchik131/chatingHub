@@ -43,3 +43,16 @@ def test_compose_scene_person_brighter_than_background():
     person = int(gray[10, 10])
     bg = int(gray[1, 1])
     assert person > bg
+
+
+def test_compose_scene_clahe_boosts_internal_contrast():
+    """CLAHE v4: ближняя «рука» внутри маски должна быть светлее дальнего «торса»."""
+    depth = np.full((32, 32), 5.0, dtype=np.float32)
+    depth[10:14, 22:28] = 9.0  # выступающая конечность справа
+    depth[12:20, 10:18] = 4.0  # более дальний торс
+    mask = np.zeros((32, 32), dtype=np.uint8)
+    mask[8:24, 8:30] = 255
+    gray = _compose_scene_depth_gray(depth, fg_mask=mask)
+    limb = int(gray[12, 25])
+    torso = int(gray[16, 14])
+    assert limb > torso
