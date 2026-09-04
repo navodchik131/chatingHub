@@ -347,6 +347,11 @@ async def execute_evolink_motion_render_video(
             mv_id=mv_id,
             turnaround_gid=turnaround_gid,
             per_project_notes=prompt.strip(),
+            wants_reference_audio=wants_reference_audio,
+            has_ref_audio=(
+                resolve_motion_audio_file(oid, mv_id_eff) is not None
+                or probe_video_has_audio(vpath)
+            ),
         )
         seed_prompt = pkg.seed_prompt
         prompt_source = pkg.prompt_source

@@ -91,6 +91,39 @@ def bind_motion_control_seedance_tags(prompt: str) -> str:
     return out
 
 
+def motion_control_grok_audio_policy(
+    *,
+    wants_reference_audio: bool,
+    has_ref_audio: bool,
+) -> str:
+    """
+    PLATE — ref-аудио поверх (Seedance @Audio1 или post-mux): MOUTH TIMING, без AI-звука.
+    GENERATE — нет дорожки реф-видео, провайдер синтезирует звук.
+    """
+    if has_ref_audio:
+        return "PLATE"
+    if wants_reference_audio:
+        return "GENERATE"
+    return "PLATE"
+
+
+def apply_motion_control_shot_analyst_instruction(
+    template: str,
+    *,
+    audio_policy: str,
+    per_project_notes: str = "",
+) -> str:
+    """Собирает финальную инструкцию для Grok: AUDIO POLICY + per-project notes."""
+    policy = (audio_policy or "PLATE").strip().upper()
+    if policy not in ("GENERATE", "PLATE", "HYBRID"):
+        policy = "PLATE"
+    instruction = (template or "").replace("<<<AUDIO_POLICY>>>", policy)
+    notes = (per_project_notes or "").strip()
+    if notes:
+        instruction = f"{instruction.rstrip()}\n\n## PER-PROJECT NOTES\n\n{notes}"
+    return instruction
+
+
 async def _xai_responses_video_and_image_text(
     *,
     credentials: StudioOpenAiCredentials,
@@ -145,16 +178,27 @@ async def grok_motion_control_shot_prompt(
     character_image_mime: str = "image/jpeg",
     credentials: StudioOpenAiCredentials | None = None,
     per_project_notes: str = "",
+    wants_reference_audio: bool = True,
+    has_ref_audio: bool | None = None,
 ) -> str:
     """
     Анализ performance-видео + CHARACTER IMAGE → готовый T2V prompt (English).
     Возвращает текст с @Video1 (depth) и @Image1 (character).
     """
     creds = credentials or grok_motion_studio_credentials()
-    instruction = load_motion_control_shot_analyst_prompt()
-    notes = (per_project_notes or "").strip()
-    if notes:
-        instruction = f"{instruction}\n\n## PER-PROJECT NOTES\n\n{notes}"
+    if has_ref_audio is None:
+        from app.services.studio_motion_video import probe_video_has_audio
+
+        has_ref_audio = probe_video_has_audio(video_path)
+    audio_policy = motion_control_grok_audio_policy(
+        wants_reference_audio=wants_reference_audio,
+        has_ref_audio=bool(has_ref_audio),
+    )
+    instruction = apply_motion_control_shot_analyst_instruction(
+        load_motion_control_shot_analyst_prompt(),
+        audio_policy=audio_policy,
+        per_project_notes=per_project_notes,
+    )
 
     cap = settings.grok_motion_max_seconds
     tmp_mp4: Path | None = None
@@ -214,7 +258,12 @@ async def grok_motion_control_shot_prompt(
         if len(block) < 120:
             raise RuntimeError("Grok вернул слишком короткий промпт для видео.")
         bound = bind_motion_control_seedance_tags(block)
-        log.info("motion control grok prompt chars=%s dur=%s", len(bound), probe_video_duration_seconds(video_path))
+        log.info(
+            "motion control grok prompt chars=%s dur=%s audio_policy=%s",
+            len(bound),
+            probe_video_duration_seconds(video_path),
+            audio_policy,
+        )
         return bound
     finally:
         if tmp_mp4 is not None:

@@ -8600,6 +8600,7 @@ async def _studio_job_execute_motion_render_video(
             await ensure_motion_outline_ready(oid, mv_id)
         from app.services.studio_motion_video import (
             ensure_motion_reference_audio,
+            probe_video_has_audio,
             resolve_motion_audio_file,
             resolve_motion_video_file,
             resolve_motion_video_for_render,
@@ -8828,6 +8829,11 @@ async def _studio_job_execute_motion_render_video(
                 mv_id=mv_id,
                 turnaround_gid=turnaround_gid,
                 per_project_notes=prompt.strip(),
+                wants_reference_audio=wants_reference_audio,
+                has_ref_audio=(
+                    resolve_motion_audio_file(oid, mv_id_eff) is not None
+                    or probe_video_has_audio(vpath)
+                ),
             )
             seed_prompt = pkg.seed_prompt
             ref_images = pkg.ref_images

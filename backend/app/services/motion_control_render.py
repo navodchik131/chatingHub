@@ -53,6 +53,8 @@ async def prepare_motion_control_depth_t2v(
     mv_id: str,
     turnaround_gid: int,
     per_project_notes: str = "",
+    wants_reference_audio: bool = True,
+    has_ref_audio: bool | None = None,
 ) -> MotionControlT2VPackage:
     """
     Motion Control wizard v2:
@@ -87,6 +89,8 @@ async def prepare_motion_control_depth_t2v(
         character_image_mime=ta_mime,
         credentials=grok_motion_studio_credentials(),
         per_project_notes=per_project_notes,
+        wants_reference_audio=wants_reference_audio,
+        has_ref_audio=has_ref_audio,
     )
 
     depth_tok = create_motion_video_access_token(user_id=owner_id, file_id=mv_id)
