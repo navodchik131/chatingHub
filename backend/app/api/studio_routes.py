@@ -1418,7 +1418,7 @@ async def public_studio_motion_video(t: str) -> FileResponse:
 
 @router.get("/studio/public-motion-depth-video")
 async def public_studio_motion_depth_video(t: str) -> FileResponse:
-    """Grayscale depth-map control video по JWT (пара {file_id}.depth.mp4)."""
+    """Grayscale depth-map control video по JWT (пара {file_id}.depth.v2.mp4)."""
     from app.services.motion_depth_map import motion_depth_video_path
 
     try:

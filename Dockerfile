@@ -33,7 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt ./
 RUN pip install --upgrade pip setuptools wheel \
     && pip install --no-cache-dir --prefer-binary -r requirements.txt \
-    && python -c "from rembg import new_session; new_session('u2net_human_seg')"
+    && python -c "from rembg import new_session; new_session('u2net_human_seg')" \
+    && python -c "import urllib.request; from pathlib import Path; d=Path('data/models/midas'); d.mkdir(parents=True, exist_ok=True); p=d/'model-small.onnx'; urllib.request.urlretrieve('https://github.com/isl-org/MiDaS/releases/download/v2_1/model-small.onnx', p); assert p.stat().st_size>100000"
 
 COPY backend/ ./
 COPY backend/data/prompts/ ./_bundled_prompts/

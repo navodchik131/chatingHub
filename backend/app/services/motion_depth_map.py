@@ -6,7 +6,7 @@ import logging
 import subprocess
 import urllib.request
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import numpy as np
 
@@ -15,9 +15,13 @@ from app.services.motion_video_outline import _ffmpeg_bin, _ffprobe_bin, _run_cm
 
 log = logging.getLogger(__name__)
 
+# v2: рабочий URL model-small.onnx + rembg-маска + нормализация по человеку.
+DEPTH_MAP_ALGO = "v2"
 MIDAS_DIR = (BACKEND_DIR / "data" / "models" / "midas").resolve()
-MIDAS_MODEL = MIDAS_DIR / "midas_v21_small_256.onnx"
-MIDAS_URL = "https://github.com/isl-org/MiDaS/releases/download/v2_1/midas_v21_small_256.onnx"
+# В релизе v2_1 файл называется model-small.onnx (midas_v21_small_256.onnx — 404).
+MIDAS_MODEL = MIDAS_DIR / "model-small.onnx"
+MIDAS_URL = "https://github.com/isl-org/MiDaS/releases/download/v2_1/model-small.onnx"
+MIDAS_INPUT_SIZE = 256
 
 _MIDAS_SESSION: object | None = None
 
@@ -27,7 +31,7 @@ def _ensure_midas_model() -> Path:
         return MIDAS_MODEL
     MIDAS_DIR.mkdir(parents=True, exist_ok=True)
     tmp = MIDAS_MODEL.with_suffix(".onnx.part")
-    log.info("motion depth map: downloading MiDaS model")
+    log.info("motion depth map: downloading MiDaS model-small.onnx")
     try:
         urllib.request.urlretrieve(MIDAS_URL, tmp)  # noqa: S310
         if tmp.stat().st_size < 100_000:
@@ -51,6 +55,112 @@ def _get_midas_session():
         providers=["CPUExecutionProvider"],
     )
     return _MIDAS_SESSION
+
+
+def _get_rembg_session_safe() -> Any | None:
+    """rembg для чёрного фона; при OOM/ошибке — depth без маски."""
+    try:
+        from app.services.motion_selective_outline import _get_rembg_session
+
+        return _get_rembg_session()
+    except Exception as e:
+        log.warning("motion depth map: rembg unavailable (%s), depth without person mask", e)
+        return None
+
+
+def _human_mask_bgr_safe(frame_bgr: np.ndarray, rembg_session: Any | None) -> np.ndarray | None:
+    if rembg_session is None:
+        return None
+    try:
+        from app.services.motion_selective_outline import _human_mask_bgr
+
+        return _human_mask_bgr(frame_bgr, rembg_session)
+    except Exception as e:
+        log.warning("motion depth map: rembg frame failed (%s)", e)
+        return None
+
+
+def _normalize_depth_to_gray(depth: np.ndarray, *, fg_mask: np.ndarray | None) -> np.ndarray:
+    """
+    Белый = ближе, чёрный = дальше.
+    Нормализация по процентилям внутри маски человека — как на эталонных depth-картах.
+    """
+    import cv2
+
+    d = depth.astype(np.float32)
+    if fg_mask is not None and np.any(fg_mask > 127):
+        fg = fg_mask > 127
+        vals = d[fg]
+        lo = float(np.percentile(vals, 3))
+        hi = float(np.percentile(vals, 97))
+    else:
+        lo = float(np.percentile(d, 2))
+        hi = float(np.percentile(d, 98))
+    if hi <= lo:
+        hi = lo + 1e-6
+    norm = np.clip((d - lo) / (hi - lo), 0.0, 1.0)
+    gray = (norm * 255.0).astype(np.uint8)
+    if fg_mask is not None:
+        gray = np.where(fg_mask > 127, gray, 0).astype(np.uint8)
+    # Сглаживание без размытия силуэта (в отличие от Gaussian 9×9).
+    gray = cv2.bilateralFilter(gray, 7, 40, 40)
+    if fg_mask is not None:
+        gray = np.where(fg_mask > 127, gray, 0).astype(np.uint8)
+    return gray
+
+
+def _run_midas_depth(frame_bgr: np.ndarray, session) -> np.ndarray:
+    """Сырой depth map MiDaS, размер как у кадра."""
+    import cv2
+
+    h, w = frame_bgr.shape[:2]
+    inp = cv2.resize(frame_bgr, (MIDAS_INPUT_SIZE, MIDAS_INPUT_SIZE), interpolation=cv2.INTER_AREA)
+    rgb = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+    rgb = (rgb - 0.5) / 0.5
+    blob = rgb.transpose(2, 0, 1)[None, ...]
+    input_name = session.get_inputs()[0].name
+    depth = session.run(None, {input_name: blob})[0]
+    depth = np.squeeze(depth).astype(np.float32)
+    return cv2.resize(depth, (w, h), interpolation=cv2.INTER_CUBIC)
+
+
+def _frame_to_depth_bgr(
+    frame_bgr: np.ndarray,
+    session,
+    *,
+    rembg_session: Any | None = None,
+) -> np.ndarray:
+    """MiDaS depth + маска человека на чёрном фоне."""
+    import cv2
+
+    mask = _human_mask_bgr_safe(frame_bgr, rembg_session)
+    depth = _run_midas_depth(frame_bgr, session)
+    gray = _normalize_depth_to_gray(depth, fg_mask=mask)
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+
+def _fallback_depth_bgr(frame_bgr: np.ndarray, *, rembg_session: Any | None = None) -> np.ndarray:
+    """
+    Запасной control-signal без MiDaS: rembg-силуэт + pseudo-depth внутри маски.
+    Лучше, чем Canny+distanceTransform (давал «облака» без людей).
+    """
+    import cv2
+
+    mask = _human_mask_bgr_safe(frame_bgr, rembg_session)
+    h, w = frame_bgr.shape[:2]
+    if mask is None or not np.any(mask > 127):
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (11, 11), 0)
+        gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+    fg = (mask > 127).astype(np.uint8)
+    dist = cv2.distanceTransform(fg, cv2.DIST_L2, 5)
+    if float(dist.max()) > 1e-3:
+        dist = dist / float(dist.max())
+    gray = (dist * 255.0).astype(np.uint8)
+    gray = _normalize_depth_to_gray(gray.astype(np.float32), fg_mask=mask)
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
 def _probe_fps(path: Path) -> float:
@@ -90,44 +200,6 @@ def _probe_fps(path: Path) -> float:
             except ValueError:
                 continue
     return 30.0
-
-
-def _frame_to_depth_bgr(frame_bgr: np.ndarray, session) -> np.ndarray:
-    """Белый = ближе, чёрный = дальше; гладкие поверхности без текстуры."""
-    import cv2
-
-    h, w = frame_bgr.shape[:2]
-    inp = cv2.resize(frame_bgr, (256, 256), interpolation=cv2.INTER_AREA)
-    rgb = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-    rgb = (rgb - 0.5) / 0.5
-    blob = rgb.transpose(2, 0, 1)[None, ...]
-    input_name = session.get_inputs()[0].name
-    depth = session.run(None, {input_name: blob})[0]
-    depth = np.squeeze(depth).astype(np.float32)
-    depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_CUBIC)
-    dmin, dmax = float(depth.min()), float(depth.max())
-    if dmax > dmin:
-        norm = (depth - dmin) / (dmax - dmin)
-    else:
-        norm = np.zeros_like(depth)
-    # MiDaS: больше значение ≈ ближе → белый
-    gray = (norm * 255.0).astype(np.uint8)
-    gray = cv2.GaussianBlur(gray, (9, 9), 0)
-    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-
-
-def _fallback_depth_bgr(frame_bgr: np.ndarray) -> np.ndarray:
-    """Запасной control-signal без MiDaS — distance transform + blur."""
-    import cv2
-
-    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-    gray = cv2.bilateralFilter(gray, 9, 75, 75)
-    edges = cv2.Canny(gray, 40, 120)
-    inv = cv2.bitwise_not(edges)
-    dist = cv2.distanceTransform(inv, cv2.DIST_L2, 5)
-    dist = cv2.normalize(dist, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    dist = cv2.GaussianBlur(dist, (15, 15), 0)
-    return cv2.cvtColor(dist, cv2.COLOR_GRAY2BGR)
 
 
 def _iter_frames_bgr(source: Path) -> tuple[float, int, int, Iterator[np.ndarray]]:
@@ -196,7 +268,7 @@ def _encode_depth_video(
         "-preset",
         "ultrafast",
         "-crf",
-        "28",
+        "18",
         "-pix_fmt",
         "yuv420p",
         str(dest),
@@ -218,25 +290,41 @@ def _encode_depth_video(
 
 
 def render_motion_depth_map_video(source: Path, dest: Path, *, timeout: float = 600.0) -> None:
-    """Покадровая depth-map: white=near, black=far, без текстуры."""
+    """Покадровая depth-map: white=near, black=far, силуэт человека на чёрном фоне."""
     fps, w, h, frame_iter = _iter_frames_bgr(source)
     session = None
+    rembg_session = _get_rembg_session_safe()
     try:
         session = _get_midas_session()
+        log.info("motion depth map: MiDaS model-small ready algo=%s", DEPTH_MAP_ALGO)
     except Exception as e:
-        log.warning("motion depth map: MiDaS unavailable (%s), fallback depth", e)
+        log.error("motion depth map: MiDaS unavailable (%s), using rembg fallback depth", e)
+
+    used_midas = session is not None
+    frame_idx = 0
 
     def processed() -> Iterator[np.ndarray]:
+        nonlocal frame_idx
         for frame in frame_iter:
+            frame_idx += 1
             if session is not None:
                 try:
-                    yield _frame_to_depth_bgr(frame, session)
+                    yield _frame_to_depth_bgr(frame, session, rembg_session=rembg_session)
                     continue
                 except Exception:
-                    log.warning("motion depth map: MiDaS frame failed, fallback", exc_info=True)
-            yield _fallback_depth_bgr(frame)
+                    log.warning(
+                        "motion depth map: MiDaS frame %s failed, fallback",
+                        frame_idx,
+                        exc_info=True,
+                    )
+            yield _fallback_depth_bgr(frame, rembg_session=rembg_session)
 
     _encode_depth_video(dest, fps=fps, width=w, height=h, frames=processed(), timeout=timeout)
+    if not used_midas:
+        log.warning(
+            "motion depth map: rendered WITHOUT MiDaS (%s frames) — проверьте model-small.onnx",
+            frame_idx,
+        )
 
 
 def motion_depth_video_path(owner_id: int, file_id: str) -> Path:
@@ -244,7 +332,7 @@ def motion_depth_video_path(owner_id: int, file_id: str) -> Path:
 
     base = (MOTION_VIDEO_ROOT / str(int(owner_id))).resolve()
     fid = str(file_id).strip()[:128]
-    return base / f"{fid}.depth.mp4"
+    return base / f"{fid}.depth.{DEPTH_MAP_ALGO}.mp4"
 
 
 def ensure_motion_depth_map_video(owner_id: int, file_id: str, source: Path, *, timeout: float = 600.0) -> Path:
