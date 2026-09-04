@@ -1373,6 +1373,7 @@ export function CabinetDataProvider({ children }) {
           trimStartSec: wizard?.trimStartSec,
           trimEndSec: wizard?.trimEndSec,
           useMotionOutline: false,
+          motionGrokBrief: wizard?.motionGrokBrief || '',
         })
         if (!accepted?.job_id && !coerceJobGenerationId(accepted)) {
           throw new Error('Сервер не принял задачу видео. Обновите страницу и попробуйте снова.')

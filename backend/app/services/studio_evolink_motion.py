@@ -80,6 +80,7 @@ async def execute_evolink_motion_render_video(
     oid = workspace_owner_id(user)
     mid = int(params["model_id"])
     prompt = str(params.get("prompt") or "")
+    motion_grok_brief = str(params.get("motion_grok_brief") or "").strip()
     output_aspect = str(params.get("output_aspect") or "9:16")
     mv_id = str(params.get("motion_video_file_id") or "").strip()
     outfit_gid = params.get("outfit_generation_id")
@@ -346,7 +347,7 @@ async def execute_evolink_motion_render_video(
             vpath=vpath,
             mv_id=mv_id,
             turnaround_gid=turnaround_gid,
-            per_project_notes=prompt.strip(),
+            user_brief=motion_grok_brief,
             wants_reference_audio=wants_reference_audio,
             has_ref_audio=(
                 resolve_motion_audio_file(oid, mv_id_eff) is not None

@@ -7851,6 +7851,7 @@ async def api_studio_motion_render_video(
     trim_start_sec: str = Form(""),
     trim_end_sec: str = Form(""),
     turnaround_generation_id: str = Form(""),
+    motion_grok_brief: str = Form(""),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut | JSONResponse:
@@ -8177,6 +8178,7 @@ async def api_studio_motion_render_video(
             "trim_start_sec": trim_start_f,
             "trim_end_sec": trim_end_f,
             "turnaround_generation_id": (turnaround_generation_id or "").strip(),
+            "motion_grok_brief": (motion_grok_brief or "").strip(),
         }
         dedupe_key = studio_jobs.motion_render_video_dedupe_key(accept_params)
         accept_params["dedupe_key"] = dedupe_key
@@ -8256,6 +8258,7 @@ async def api_seedance_sale_render_video(
     trim_start_sec: str = Form(""),
     trim_end_sec: str = Form(""),
     turnaround_generation_id: str = Form(""),
+    motion_grok_brief: str = Form(""),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> StudioMotionVideoOut | JSONResponse:
@@ -8286,6 +8289,7 @@ async def api_seedance_sale_render_video(
         trim_start_sec=trim_start_sec,
         trim_end_sec=trim_end_sec,
         turnaround_generation_id=turnaround_generation_id,
+        motion_grok_brief=motion_grok_brief,
         session=session,
         user=user,
     )
@@ -8368,6 +8372,7 @@ async def _studio_job_execute_motion_render_video(
         session, user, mid, load_images=sheet_gid_raw is None
     )
     prompt = str(params.get("prompt") or "")
+    motion_grok_brief = str(params.get("motion_grok_brief") or "").strip()
     output_aspect = str(params.get("output_aspect") or "9:16")
     mv_id = str(params.get("motion_video_file_id") or "").strip()
     outfit_gid = params.get("outfit_generation_id")
@@ -8828,7 +8833,7 @@ async def _studio_job_execute_motion_render_video(
                 vpath=vpath,
                 mv_id=mv_id,
                 turnaround_gid=turnaround_gid,
-                per_project_notes=prompt.strip(),
+                user_brief=motion_grok_brief,
                 wants_reference_audio=wants_reference_audio,
                 has_ref_audio=(
                     resolve_motion_audio_file(oid, mv_id_eff) is not None

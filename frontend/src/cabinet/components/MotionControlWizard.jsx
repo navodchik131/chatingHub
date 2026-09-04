@@ -93,6 +93,8 @@ export default function MotionControlWizard({
   const [trimMode, setTrimMode] = useState('full');
   const [trimIn, setTrimIn] = useState(0);
   const [trimOut, setTrimOut] = useState(5);
+  /** Уточнения по реф-клипу → секция 0b USER BRIEF для Grok shot-analyst. */
+  const [clipBrief, setClipBrief] = useState('');
   /** Режим силуэта отключён — Motion Control v2: развёртка + depth map + Grok. */
   const [useMotionOutline] = useState(false);
   /** idle → loading → preview (результат) → accepted (подтверждён для видео). */
@@ -138,6 +140,7 @@ export default function MotionControlWizard({
       if (saved.trimMode) setTrimMode(saved.trimMode);
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
+      if (typeof saved.clipBrief === 'string') setClipBrief(saved.clipBrief);
       if (saved.ffModelId) setFfModelId(saved.ffModelId);
       if (saved.ffSource === 'upload' || saved.ffSource === 'generate') setFfSource(saved.ffSource);
       if (saved.ffPendingGenId != null) setFfPendingGenId(Number(saved.ffPendingGenId));
@@ -257,6 +260,7 @@ export default function MotionControlWizard({
       trimMode,
       trimIn,
       trimOut,
+      clipBrief,
       useMotionOutline,
       ffModelId,
       ffSource,
@@ -287,6 +291,7 @@ export default function MotionControlWizard({
     trimMode,
     trimIn,
     trimOut,
+    clipBrief,
     useMotionOutline,
     ffModelId,
     ffSource,
@@ -640,6 +645,7 @@ export default function MotionControlWizard({
         trimEndSec: trimMode === 'part' ? trimOut : null,
         durationSeconds: Math.ceil(clipDuration),
         useMotionOutline: false,
+        motionGrokBrief: clipBrief.trim(),
       });
     } catch {
       /* ошибка уже в cabinet.setError */
@@ -1406,6 +1412,41 @@ export default function MotionControlWizard({
           </div>
           <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6, lineHeight: 1.45 }}>
             {t.vidRefSoundMusicHint}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: color.textDim, marginBottom: 6 }}>
+            {lang === 'ru' ? 'Уточнения по клипу' : 'Clip notes'}
+          </div>
+          <textarea
+            value={clipBrief}
+            onChange={(e) => setClipBrief(e.target.value)}
+            placeholder={
+              lang === 'ru'
+                ? 'Необязательно. Что происходит, какие биты важны, что назвать буквально…\nИли секции: WHAT HAPPENS:, MUST TRANSFER:, CALL IT WHAT IT IS:, KNOWN FACTS:, LEAVE OUT:'
+                : 'Optional. What happens, must-keep beats, literal action names…\nOr sections: WHAT HAPPENS:, MUST TRANSFER:, CALL IT WHAT IT IS:, KNOWN FACTS:, LEAVE OUT:'
+            }
+            rows={5}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+              minHeight: 88,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${line.soft}`,
+              background: color.surfaceAlt || 'rgba(255,255,255,.03)',
+              color: color.text,
+              fontSize: 11.5,
+              lineHeight: 1.45,
+              fontFamily: 'inherit',
+            }}
+          />
+          <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6, lineHeight: 1.45 }}>
+            {lang === 'ru'
+              ? 'Помогает Grok понять смысл клипа. Тайминг и камера — из видео.'
+              : 'Helps Grok read clip meaning. Timing and camera still come from the video.'}
           </div>
         </div>
 

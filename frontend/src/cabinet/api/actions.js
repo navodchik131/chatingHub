@@ -560,6 +560,7 @@ export async function runMotionVideo(params) {
   if (params.trimStartSec != null) fd.append('trim_start_sec', String(params.trimStartSec))
   if (params.trimEndSec != null) fd.append('trim_end_sec', String(params.trimEndSec))
   if (params.durationSeconds != null) fd.append('duration_seconds', String(params.durationSeconds))
+  if (params.motionGrokBrief) fd.append('motion_grok_brief', String(params.motionGrokBrief))
   const endpoint = params.videoBackend === 'evolink'
     ? '/api/studio/seedance-sale/render-video'
     : '/api/studio/motion/render-video'

@@ -107,20 +107,83 @@ def motion_control_grok_audio_policy(
     return "PLATE"
 
 
+_BRIEF_HEADER_TO_KEY: dict[str, str] = {
+    "what happens": "what_happens",
+    "must transfer": "must_transfer",
+    "call it what it is": "call_it",
+    "known facts": "known_facts",
+    "leave out": "leave_out",
+}
+
+_BRIEF_KEY_TO_PLACEHOLDER: dict[str, str] = {
+    "what_happens": "<<<BRIEF_WHAT_HAPPENS>>>",
+    "must_transfer": "<<<BRIEF_MUST_TRANSFER>>>",
+    "call_it": "<<<BRIEF_CALL_IT>>>",
+    "known_facts": "<<<BRIEF_KNOWN_FACTS>>>",
+    "leave_out": "<<<BRIEF_LEAVE_OUT>>>",
+}
+
+
+def parse_motion_control_user_brief(raw: str) -> dict[str, str]:
+    """
+    Разбирает текст USER BRIEF из wizard.
+    Без заголовков весь текст идёт в WHAT HAPPENS; с заголовками — по секциям 0b.
+    """
+    text = (raw or "").strip()
+    buckets: dict[str, list[str]] = {key: [] for key in _BRIEF_KEY_TO_PLACEHOLDER}
+    if not text:
+        return {key: "" for key in _BRIEF_KEY_TO_PLACEHOLDER}
+
+    current: str | None = None
+    saw_header = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        matched_header = False
+        for label, key in _BRIEF_HEADER_TO_KEY.items():
+            low = stripped.lower()
+            prefix = f"{label}:"
+            if low == prefix or low.startswith(prefix):
+                current = key
+                saw_header = True
+                matched_header = True
+                rest = stripped.split(":", 1)[1].strip() if ":" in stripped else ""
+                if rest:
+                    buckets[key].append(rest)
+                break
+        if matched_header:
+            continue
+        if current:
+            buckets[current].append(line.rstrip())
+        elif stripped:
+            buckets["what_happens"].append(line.rstrip())
+
+    if saw_header:
+        return {key: "\n".join(buckets[key]).strip() for key in _BRIEF_KEY_TO_PLACEHOLDER}
+    return {
+        key: ("\n".join(buckets[key]).strip() if key == "what_happens" else "")
+        for key in _BRIEF_KEY_TO_PLACEHOLDER
+    }
+
+
 def apply_motion_control_shot_analyst_instruction(
     template: str,
     *,
     audio_policy: str,
+    user_brief: str = "",
     per_project_notes: str = "",
 ) -> str:
-    """Собирает финальную инструкцию для Grok: AUDIO POLICY + per-project notes."""
+    """Собирает финальную инструкцию: AUDIO POLICY + поля USER BRIEF (секция 0b)."""
     policy = (audio_policy or "PLATE").strip().upper()
     if policy not in ("GENERATE", "PLATE", "HYBRID"):
         policy = "PLATE"
     instruction = (template or "").replace("<<<AUDIO_POLICY>>>", policy)
-    notes = (per_project_notes or "").strip()
-    if notes:
-        instruction = f"{instruction.rstrip()}\n\n## PER-PROJECT NOTES\n\n{notes}"
+
+    # Совместимость: старый per_project_notes → WHAT HAPPENS, если user_brief пуст.
+    brief_raw = (user_brief or per_project_notes or "").strip()
+    fields = parse_motion_control_user_brief(brief_raw)
+    for key, placeholder in _BRIEF_KEY_TO_PLACEHOLDER.items():
+        instruction = instruction.replace(placeholder, fields.get(key, ""))
+
     return instruction
 
 
@@ -177,6 +240,7 @@ async def grok_motion_control_shot_prompt(
     character_image_bytes: bytes,
     character_image_mime: str = "image/jpeg",
     credentials: StudioOpenAiCredentials | None = None,
+    user_brief: str = "",
     per_project_notes: str = "",
     wants_reference_audio: bool = True,
     has_ref_audio: bool | None = None,
@@ -197,6 +261,7 @@ async def grok_motion_control_shot_prompt(
     instruction = apply_motion_control_shot_analyst_instruction(
         load_motion_control_shot_analyst_prompt(),
         audio_policy=audio_policy,
+        user_brief=user_brief,
         per_project_notes=per_project_notes,
     )
 
