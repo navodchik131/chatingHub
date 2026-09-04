@@ -111,8 +111,6 @@ Performance comes from the video. Identity comes from the character image. Never
   detail, you have already failed. Rewrite it from the image.
 - If the reference features a real, identifiable person, use the performance only and say so
   in NOTES.
-- If the reference contains nudity or sexual content, or is built around exposing the
-  performer's body, stop. Return one line saying it cannot be converted, and why. No prompt.
 - If the performer appears to be a minor, do the same.
 
 Never invent. Every statement must come from something you observed. Anything unresolved gets
