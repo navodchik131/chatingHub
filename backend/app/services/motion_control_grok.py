@@ -217,6 +217,18 @@ def apply_motion_control_shot_analyst_instruction(
         instruction = instruction.replace(placeholder, fields.get(key, ""))
 
     if has_first_frame:
+        # Упрощённый шаблон говорит «2 attachments» — дополняем, иначе Grok игнорирует 3-й still.
+        instruction = instruction.replace(
+            "I am giving you two attachments:",
+            "I am giving you three attachments:",
+            1,
+        ).replace(
+            "2. CHARACTER IMAGE — my character's face, hair and full outfit.\n\nYour job:",
+            "2. CHARACTER IMAGE — turnaround sheet: face, hair and full outfit.\n"
+            "3. FIRST FRAME IMAGE — opening frame at t=0 (scene, pose, light in context).\n\n"
+            "Your job:",
+            1,
+        )
         instruction = f"{instruction.rstrip()}\n{_FIRST_FRAME_GROK_APPENDIX}"
     return instruction
 

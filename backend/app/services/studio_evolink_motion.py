@@ -347,6 +347,16 @@ async def execute_evolink_motion_render_video(
             wavespeed_api_key=ws_key,
             label="Развёртка Motion Control",
         )
+        if mc_ff_gid is not None:
+            ff_row = await session.get(StudioGeneration, mc_ff_gid)
+            if not ff_row or ff_row.user_id != oid:
+                raise RuntimeError("Первый кадр не найден")
+            await ensure_studio_generation_image_archived_for_external_fetch(
+                session,
+                ff_row,
+                wavespeed_api_key=ws_key,
+                label="Первый кадр Motion Control",
+            )
         pkg = await prepare_motion_control_depth_t2v(
             session=session,
             owner_id=oid,
@@ -373,15 +383,10 @@ async def execute_evolink_motion_render_video(
             content_type="video/mp4",
         )
         ref_videos = [depth_evolink_url]
-        turnaround_url = generation_still_fetch_url(
-            row=turnaround_row,
-            owner_id=oid,
-            public_app_base=pub,
-            token_factory=create_generation_image_access_token,
-        )
-        if not turnaround_url:
-            raise RuntimeError("Не удалось подготовить URL развёртки")
-        ref_images = [turnaround_url]
+        # pkg.ref_images: [@Image1=first frame?, @Image2=turnaround] — не только развёртку.
+        ref_images = list(pkg.ref_images)
+        if not ref_images:
+            raise RuntimeError("Не удалось подготовить reference images для EvoLink")
     else:
         if motion_vid_url:
             model_imgs = filter_model_images_for_seedance_motion_swap(list(sm.images))
