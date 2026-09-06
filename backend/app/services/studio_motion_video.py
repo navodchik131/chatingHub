@@ -554,9 +554,15 @@ def motion_outline_requested(params: dict[str, Any]) -> bool:
         "yes",
         "on",
     )
-    # Motion Control wizard v2: depth map + Grok — без rembg/outline.
     if mc_wizard:
-        return False
+        # Wizard: режим силуэта (outline) включается явным use_motion_outline=1.
+        # Depth map + Grok v2 — только если outline выключен и есть turnaround.
+        return str(params.get("use_motion_outline") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
     return bool(settings.motion_outline_enabled)
 
 

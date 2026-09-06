@@ -8453,7 +8453,10 @@ async def _studio_job_execute_motion_render_video(
     ff_gid_raw = str(params.get("first_frame_generation_id") or "").strip()
     if not prompt.strip() and not workflow_source:
         if not (_truthy_wavespeed_flag(auto_motion_prompt) and mv_id):
-            wizard_ready = motion_control_wizard and mv_id and bool(turnaround_gid_raw)
+            wizard_ready = motion_control_wizard and mv_id and (
+                (bool(turnaround_gid_raw) and not use_outline_wizard)
+                or (use_outline_wizard and bool(ff_gid_raw))
+            )
             if not wizard_ready:
                 raise RuntimeError("Опишите сцену и движение для видео.")
 
@@ -8828,6 +8831,7 @@ async def _studio_job_execute_motion_render_video(
         if (
             motion_control_wizard
             and turnaround_gid_raw
+            and not use_outline_wizard
             and vpath is not None
             and vpath.is_file()
         ):

@@ -48,6 +48,9 @@ function photoPickStyle(on) {
   };
 }
 
+/** Wizard: режим силуэта с контурами (depth+Grok v2 временно в архиве). */
+const MC_WIZARD_OUTLINE_MODE = true;
+
 /** Wizard Motion Control по макету desktop/mobile Video. */
 export default function MotionControlWizard({
   t,
@@ -94,14 +97,14 @@ export default function MotionControlWizard({
   const [trimMode, setTrimMode] = useState('full');
   const [trimIn, setTrimIn] = useState(0);
   const [trimOut, setTrimOut] = useState(5);
-  /** Уточнения по реф-клипу → секция 0b USER BRIEF для Grok shot-analyst. */
+  /** Уточнения по клипу → опциональные заметки в промпт Seedance. */
   const [clipBrief, setClipBrief] = useState('');
-  /** Нужен ли первый кадр (сцена/поза t=0) для Grok и Seedance. */
-  const [needFirstFrame, setNeedFirstFrame] = useState('no');
+  /** Первый кадр обязателен в режиме силуэта; в depth v2 — опционален. */
+  const [needFirstFrame, setNeedFirstFrame] = useState(MC_WIZARD_OUTLINE_MODE ? 'yes' : 'no');
   /** EvoLink reference-to-video: явная длина результата (не длина ref-видео). */
   const [outputDurationSec, setOutputDurationSec] = useState(() => Number(s.vidTime) || 5);
-  /** Режим силуэта отключён — Motion Control v2: развёртка + depth map + Grok. */
-  const [useMotionOutline] = useState(false);
+  /** Режим силуэта: человек в кадре → контур/линии, @Video1 = motion ref. */
+  const useMotionOutline = MC_WIZARD_OUTLINE_MODE;
   /** idle → loading → preview (результат) → accepted (подтверждён для видео). */
   const [ffState, setFfState] = useState('idle');
   const [ffSource, setFfSource] = useState('generate');
@@ -501,8 +504,8 @@ export default function MotionControlWizard({
     });
   }, [isEvolink, evolinkPricing, cabinet.health, cabinet.motionVideoFileId, clipDuration, outputDurationSec, s.vidQuality, s.vidSeedanceVariant]);
 
-  const totalCredits = (outfitSource === 'generate' && outfitState !== 'done' ? dressCredits : 0)
-    + (turnSource === 'generate' && turnState !== 'done' ? turnCredits : 0)
+  const totalCredits = (MC_WIZARD_OUTLINE_MODE ? 0 : (outfitSource === 'generate' && outfitState !== 'done' ? dressCredits : 0)
+    + (turnSource === 'generate' && turnState !== 'done' ? turnCredits : 0))
     + (needFirstFrame === 'yes' && ffState !== 'accepted' && ffSource === 'generate' ? ffCredits : 0)
     + videoCredits;
 
@@ -668,30 +671,36 @@ export default function MotionControlWizard({
       cabinet.setError(lang === 'ru' ? 'Загрузите референс-видео' : 'Upload reference video');
       return;
     }
-    if (!turnaroundGenId) {
+    if (MC_WIZARD_OUTLINE_MODE) {
+      if (ffState !== 'accepted') {
+        cabinet.setError(lang === 'ru' ? 'Подтвердите первый кадр («Использовать»)' : 'Accept the first frame before video');
+        return;
+      }
+    } else if (!turnaroundGenId) {
       cabinet.setError(lang === 'ru' ? 'Подготовьте развёртку перед видео' : 'Prepare turnaround before video');
       return;
     }
-    if (needFirstFrame === 'yes' && ffState !== 'accepted') {
+    if (!MC_WIZARD_OUTLINE_MODE && needFirstFrame === 'yes' && ffState !== 'accepted') {
       cabinet.setError(lang === 'ru' ? 'Подтвердите первый кадр или отключите этот шаг' : 'Accept the first frame or disable this step');
       return;
     }
-    const ffGenId = needFirstFrame === 'yes'
+    const ffGenId = (MC_WIZARD_OUTLINE_MODE || needFirstFrame === 'yes')
       ? (cabinet.firstFrameGenId ?? ffPendingGenId)
       : null;
     cabinet.setError(null);
     try {
       await onGenerate({
         motionControlWizard: true,
-        turnaroundGenerationId: turnaroundGenId,
+        turnaroundGenerationId: MC_WIZARD_OUTLINE_MODE ? null : turnaroundGenId,
         firstFrameGenerationId: ffGenId,
-        outfitGenerationId: outfitGenId,
+        outfitGenerationId: MC_WIZARD_OUTLINE_MODE ? null : outfitGenId,
         trimMode,
         trimStartSec: trimMode === 'part' ? trimIn : null,
         trimEndSec: trimMode === 'part' ? trimOut : null,
         durationSeconds: isEvolink ? outputDurationSec : Math.ceil(clipDuration),
-        useMotionOutline: false,
-        motionGrokBrief: clipBrief.trim(),
+        useMotionOutline,
+        userClipNotes: clipBrief.trim(),
+        motionGrokBrief: MC_WIZARD_OUTLINE_MODE ? '' : clipBrief.trim(),
       });
     } catch {
       /* ошибка уже в cabinet.setError */
@@ -743,9 +752,13 @@ export default function MotionControlWizard({
           </div>
           {model && (
             <div style={{ fontSize: 12, color: color.textDim, marginTop: 8, lineHeight: 1.45 }}>
-              {lang === 'ru'
-                ? `Лицо для развёртки — тег face (${faceImages.length} фото). Образ собирается на шаге 3.`
-                : `Face tag for turnaround (${faceImages.length}). Outfit on step 3.`}
+              {MC_WIZARD_OUTLINE_MODE
+                ? (lang === 'ru'
+                  ? `Лицо персонажа — тег face (${faceImages.length} фото). Первый кадр задаёт сцену и одежду.`
+                  : `Character face — face tag (${faceImages.length} photos). First frame sets scene and outfit.`)
+                : (lang === 'ru'
+                  ? `Лицо для развёртки — тег face (${faceImages.length} фото). Образ собирается на шаге 3.`
+                  : `Face tag for turnaround (${faceImages.length}). Outfit on step 3.`)}
             </div>
           )}
         </div>
@@ -801,8 +814,15 @@ export default function MotionControlWizard({
             )}
           </Hoverable>
 
-          {cabinet.motionVideoFileId && (
+            {cabinet.motionVideoFileId && (
             <>
+              <div style={{ fontSize: 11, color: color.textDim, marginTop: 10, lineHeight: 1.45 }}>
+                {MC_WIZARD_OUTLINE_MODE
+                  ? (lang === 'ru'
+                    ? 'Из реф-видео соберётся силуэт с контурами — по нему Seedance копирует движение.'
+                    : 'Reference video becomes a silhouette with contour lines — Seedance copies motion from it.')
+                  : null}
+              </div>
               <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
                 {[['full', lang === 'ru' ? 'Всё видео' : 'Full'], ['part', lang === 'ru' ? 'Отрезок' : 'Segment']].map(([k, label]) => (
                   <Chip key={k} on={trimMode === k} onClick={() => setTrimMode(k)}>{label}</Chip>
@@ -824,14 +844,19 @@ export default function MotionControlWizard({
           )}
         </div>
 
-        {/* 3 · Первый кадр (опционально) */}
+        {/* 3 · Первый кадр */}
         <div style={stepBlock}>
           <Eyebrow>{lang === 'ru' ? '3 · ПЕРВЫЙ КАДР' : '3 · FIRST FRAME'}</Eyebrow>
           <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 8, lineHeight: 1.5 }}>
-            {lang === 'ru'
-              ? 'Кадр t=0: сцена, свет, поза и окружение. Помогает Grok и Seedance понять, где стоит персонаж.'
-              : 'Frame at t=0: scene, light, pose and environment. Helps Grok and Seedance anchor the opening.'}
+            {MC_WIZARD_OUTLINE_MODE
+              ? (lang === 'ru'
+                ? 'Обязательный кадр t=0: сцена, свет, поза, одежда и окружение. Лицо подтягивается из фото модели.'
+                : 'Required frame at t=0: scene, light, pose, outfit and environment. Face comes from model photos.')
+              : (lang === 'ru'
+                ? 'Кадр t=0: сцена, свет, поза и окружение. Помогает Grok и Seedance понять, где стоит персонаж.'
+                : 'Frame at t=0: scene, light, pose and environment. Helps Grok and Seedance anchor the opening.')}
           </div>
+          {!MC_WIZARD_OUTLINE_MODE && (
           <div style={{ display: 'flex', gap: 5, marginTop: 12, flexWrap: 'wrap' }}>
             <Chip
               on={needFirstFrame === 'no'}
@@ -846,8 +871,9 @@ export default function MotionControlWizard({
               {lang === 'ru' ? 'Да, нужен' : 'Yes, add'}
             </Chip>
           </div>
+          )}
 
-          {needFirstFrame === 'yes' && (
+          {(MC_WIZARD_OUTLINE_MODE || needFirstFrame === 'yes') && (
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line.hair}` }}>
               <div style={{ display: 'flex', gap: 5, marginBottom: 12, justifyContent: 'flex-end' }}>
                 <Chip on={ffSource === 'generate'} onClick={() => setFfSource('generate')}>
@@ -1041,6 +1067,8 @@ export default function MotionControlWizard({
           )}
         </div>
 
+        {!MC_WIZARD_OUTLINE_MODE && (
+        <>
         {/* 4 · Образ */}
         <div style={stepBlock}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1412,6 +1440,8 @@ export default function MotionControlWizard({
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* Правая колонка: параметры видео */}
@@ -1481,9 +1511,13 @@ export default function MotionControlWizard({
               ))}
             </div>
             <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6, lineHeight: 1.45 }}>
-              {lang === 'ru'
-                ? 'Seedance Sale (reference-to-video): длина задаётся явно. Референс — только motion/depth.'
-                : 'Seedance Sale (reference-to-video): output length is explicit. Reference carries motion/depth only.'}
+              {MC_WIZARD_OUTLINE_MODE
+                ? (lang === 'ru'
+                  ? 'Seedance Sale: длина результата задаётся явно. @Video1 = силуэт с движением.'
+                  : 'Seedance Sale: output length is explicit. @Video1 = silhouette motion reference.')
+                : (lang === 'ru'
+                  ? 'Seedance Sale (reference-to-video): длина задаётся явно. Референс — только motion/depth.'
+                  : 'Seedance Sale (reference-to-video): output length is explicit. Reference carries motion/depth only.')}
             </div>
           </div>
         )}
@@ -1533,9 +1567,13 @@ export default function MotionControlWizard({
             }}
           />
           <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 6, lineHeight: 1.45 }}>
-            {lang === 'ru'
-              ? 'Помогает Grok понять смысл клипа. Тайминг и камера — из видео.'
-              : 'Helps Grok read clip meaning. Timing and camera still come from the video.'}
+            {MC_WIZARD_OUTLINE_MODE
+              ? (lang === 'ru'
+                ? 'Необязательно. Попадёт в промпт Seedance как дополнительные заметки.'
+                : 'Optional. Added to the Seedance prompt as extra notes.')
+              : (lang === 'ru'
+                ? 'Помогает Grok понять смысл клипа. Тайминг и камера — из видео.'
+                : 'Helps Grok read clip meaning. Timing and camera still come from the video.')}
           </div>
         </div>
 
@@ -1589,9 +1627,13 @@ export default function MotionControlWizard({
           </div>
         )}
         <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 8, lineHeight: 1.45 }}>
-          {lang === 'ru'
-            ? 'Grok анализирует реф-видео, пишет промпт. В Seedance: @Video1 = depth map, @Image1 = развёртка.'
-            : 'Grok analyzes the reference clip and writes the prompt. Seedance gets @Video1 depth map + @Image1 turnaround.'}
+          {MC_WIZARD_OUTLINE_MODE
+            ? (lang === 'ru'
+              ? 'Реф-видео → силуэт с линиями (@Video1). Первый кадр + лицо модели (@Image). Без depth map и Grok.'
+              : 'Ref video → silhouette with lines (@Video1). First frame + model face (@Image). No depth map or Grok.')
+            : (lang === 'ru'
+              ? 'Grok анализирует реф-видео, пишет промпт. В Seedance: @Video1 = depth map, @Image1 = развёртка.'
+              : 'Grok analyzes the reference clip and writes the prompt. Seedance gets @Video1 depth map + @Image1 turnaround.')}
         </div>
       </div>
     </div>

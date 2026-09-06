@@ -104,7 +104,10 @@ async def execute_evolink_motion_render_video(
     ff_gid_raw = str(params.get("first_frame_generation_id") or "").strip()
 
     if not prompt.strip() and not (_truthy_flag(auto_motion_prompt) and mv_id):
-        wizard_ready = motion_control_wizard and mv_id and bool(turnaround_gid_raw)
+        wizard_ready = motion_control_wizard and mv_id and (
+            (bool(turnaround_gid_raw) and not use_outline_wizard)
+            or (use_outline_wizard and bool(ff_gid_raw))
+        )
         if not wizard_ready:
             raise RuntimeError("Опишите сцену и движение для видео.")
 
@@ -305,7 +308,7 @@ async def execute_evolink_motion_render_video(
 
     ref_images: list[str] = []
     ref_videos: list[str] = []
-    if not (motion_control_wizard and turnaround_gid_raw):
+    if not (motion_control_wizard and turnaround_gid_raw and not use_outline_wizard):
         ref_videos = (
             [motion_vid_evolink_url or motion_vid_url]
             if (motion_vid_evolink_url or motion_vid_url)
@@ -320,6 +323,7 @@ async def execute_evolink_motion_render_video(
     if (
         motion_control_wizard
         and turnaround_gid_raw
+        and not use_outline_wizard
         and vpath is not None
         and vpath.is_file()
     ):
@@ -469,7 +473,7 @@ async def execute_evolink_motion_render_video(
         seed_prompt = append_motion_original_audio_prompt(seed_prompt)
 
     image_to_video = prompt_only_mode and ff_url and not mv_id and not (
-        motion_control_wizard and turnaround_gid_raw
+        motion_control_wizard and turnaround_gid_raw and not use_outline_wizard
     )
     evolink_images = [ff_url] if image_to_video and ff_url else ref_images
 
