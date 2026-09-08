@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCabinetData } from '../api/CabinetDataProvider';
 import {
@@ -107,6 +107,7 @@ export function AppProvider({ children, forceMobile = false }) {
   const page = pageFromPathname(location.pathname);
   const cabinet = useCabinetData();
   const [state, setState] = useState(initial);
+  const pathnameResetSkipRef = useRef(true);
   const { isMobile, isNarrow } = useViewport(forceMobile);
 
   const lang = state.lang === 'en' ? 'en' : 'ru';
@@ -157,8 +158,43 @@ export function AppProvider({ children, forceMobile = false }) {
       return
     }
     navigate(pathnameFromPage(nextPage))
-    setS({ connDetail: null, charDetail: null, moreOpen: false })
+    setS({
+      connDetail: null,
+      charDetail: null,
+      moreOpen: false,
+      lightbox: null,
+      mediaStep: null,
+      vidLightbox: null,
+      ffPreviewOpen: false,
+      mobileChat: false,
+      msgReact: null,
+      emojiOpen: false,
+      photoMenu: null,
+    })
   }, [navigate, setS])
+
+  // Browser back/forward и прямой ввод URL — сбрасываем overlay, иначе «URL сменился, экран застыл».
+  useEffect(() => {
+    if (pathnameResetSkipRef.current) {
+      pathnameResetSkipRef.current = false;
+      return;
+    }
+    setS({
+      connDetail: null,
+      charDetail: null,
+      moreOpen: false,
+      lightbox: null,
+      mediaStep: null,
+      vidLightbox: null,
+      ffPreviewOpen: false,
+      mobileChat: false,
+      msgReact: null,
+      emojiOpen: false,
+      photoMenu: null,
+    });
+    cabinet.clearBusy();
+    cabinet.resetVideoSubmitting?.();
+  }, [location.pathname, setS, cabinet]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

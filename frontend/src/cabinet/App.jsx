@@ -127,10 +127,9 @@ function Shell() {
           <div style={contentPad}>
             <Page />
           </div>
+          <Lightbox />
+          <MediaModal />
         </main>
-
-        <Lightbox />
-        <MediaModal />
 
         {isMobile && <MobileNav />}
         {moreOpen && <MoreSheet />}

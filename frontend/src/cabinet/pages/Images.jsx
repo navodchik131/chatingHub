@@ -240,14 +240,21 @@ function Slot({ slot, index }) {
       {slot.archive ? (
         <div style={{ display: 'flex', gap: 3, background: color.bgPanel, border: `1px solid ${line.soft}`, borderRadius: 8, padding: 3 }}>
           <div style={seg(src === 'upload')} onClick={() => {
-            setS({ slotSource: { ...s.slotSource, [key]: 'upload' } });
+            cabinet.setUploadFile(uploadKey, null);
+            cabinet.setSlotArchivePicks((prev) => clearSlotArchivePick(prev, mode, index));
+            const patch = { slotSource: { ...s.slotSource, [key]: 'upload' } };
+            if (mode === 'carousel') patch.carouselPickId = null;
+            setS(patch);
           }}>
             {t.srcUpload}
           </div>
           <div style={seg(src === 'archive')} onClick={() => {
             // Сбрасываем stale upload, иначе backend может получить пустой multipart вместо archive id.
             cabinet.setUploadFile(uploadKey, null);
-            setS({ slotSource: { ...s.slotSource, [key]: 'archive' } });
+            cabinet.setSlotArchivePicks((prev) => clearSlotArchivePick(prev, mode, index));
+            const patch = { slotSource: { ...s.slotSource, [key]: 'archive' } };
+            if (mode === 'carousel') patch.carouselPickId = null;
+            setS(patch);
           }}>
             {t.srcArchive}
           </div>
@@ -312,7 +319,9 @@ function Slot({ slot, index }) {
               if (file) {
                 cabinet.setUploadFile(uploadKey, file);
                 cabinet.setSlotArchivePicks((prev) => clearSlotArchivePick(prev, mode, index));
-                setS({ slotSource: { ...s.slotSource, [key]: 'upload' } });
+                const patch = { slotSource: { ...s.slotSource, [key]: 'upload' } };
+                if (mode === 'carousel') patch.carouselPickId = null;
+                setS(patch);
               }
               e.target.value = '';
             }}
@@ -780,17 +789,6 @@ export default function Images() {
                 hover={pending || failed ? {} : { borderColor: borderHoverOff }}
                 onClick={() => {
                   if (pending || failed) return;
-                  if (s.imgMode === 'carousel') {
-                    cabinet.setUploadFile('carousel', null);
-                    cabinet.setSlotArchivePicks((prev) => syncRefArchivePicks(prev, 'carousel', 0, item.id));
-                    setS({
-                      carouselPickId: item.id,
-                      slotSource: { ...(s.slotSource || {}), 'carousel:0': 'archive' },
-                      showGenError: false,
-                      genErrors: [],
-                    });
-                    return;
-                  }
                   setS({ lightbox: item.id ?? i });
                 }}
               >

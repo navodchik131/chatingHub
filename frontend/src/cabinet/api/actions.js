@@ -565,7 +565,7 @@ export async function runMotionVideo(params) {
     ? '/api/studio/seedance-sale/render-video'
     : '/api/studio/motion/render-video'
   // Только 202 + job_id: outline/WaveSpeed идут в фоне, UI опрашивает pending.
-  return postStudioJobStart(endpoint, { method: 'POST', body: fd })
+  return postStudioJobStart(endpoint, { method: 'POST', body: fd, timeoutMs: 120_000 })
 }
 
 export async function fetchSupportTickets() {

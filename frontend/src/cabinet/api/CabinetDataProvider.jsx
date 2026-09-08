@@ -298,6 +298,12 @@ export function CabinetDataProvider({ children }) {
     refreshAllInFlightRef.current = false
   }, [])
 
+  /** Сброс «залипшего» submit при уходе со страницы видео. */
+  const resetVideoSubmitting = useCallback(() => {
+    setVideoSubmitting(null)
+    setMotionVideoUploading(false)
+  }, [])
+
   const loadConversations = useCallback(async () => {
     try {
       const rows = await apiJson('/api/conversations')
@@ -1854,6 +1860,7 @@ export function CabinetDataProvider({ children }) {
       error,
       setError,
       clearBusy,
+      resetVideoSubmitting,
       me,
       health,
       conversations,
@@ -2113,6 +2120,7 @@ export function CabinetDataProvider({ children }) {
       changeAccountPassword,
       logout,
       clearBusy,
+      resetVideoSubmitting,
     ],
   )
 

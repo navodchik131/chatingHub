@@ -74,17 +74,6 @@ export function resolveActiveSlotSource(mode, index, uploadFiles, slotArchivePic
       preferredSource: 'archive',
     }
   }
-  // Карусель: pick из архива всегда важнее stale upload (даже если slotSource ещё «upload»).
-  const carouselArchiveId = mode === 'carousel' ? normalizeArchiveGenerationId(rawArchiveId) : null
-  if (carouselArchiveId != null) {
-    return {
-      file: null,
-      archiveId: carouselArchiveId,
-      uploadKey,
-      slotKey,
-      preferredSource: 'archive',
-    }
-  }
   return {
     file: rawFile || legacyFile,
     archiveId: null,
@@ -100,11 +89,23 @@ function slotHasActiveSource(mode, index, uploadFiles, slotArchivePicks, slotSou
 }
 
 /**
- * Мастер-кадр карусели: pick из архива всегда важнее upload.
- * Как mm-os-bridge resolveCarouselMasterSource — без «перебивания» stale upload.
+ * Мастер-кадр карусели: при вкладке «Загрузить» файл важнее pick из архива.
+ * Pick из slot mini-grid / lightbox «Сделать карусель» — когда вкладка «Архив».
  */
 export function resolveCarouselMasterSource(appState, uploadFiles, slotArchivePicks) {
   const slotKey = slotStateKey('carousel', 0)
+  const kind = slotSourceKind(appState?.slotSource, 'carousel', 0)
+  const uploadKey = slotUploadKey('carousel', 0)
+  const candidates = [
+    uploadFiles?.[uploadKey],
+    uploadFiles?.[LEGACY_SHARED_REF_UPLOAD_KEY],
+  ]
+  const file = candidates.find(isUsableStudioUploadFile) || null
+
+  if (kind === 'upload' && file) {
+    return { archiveId: null, file }
+  }
+
   const archiveId =
     normalizeArchiveGenerationId(slotArchivePicks?.[slotKey])
     ?? normalizeArchiveGenerationId(appState?.carouselPickId)
@@ -112,15 +113,8 @@ export function resolveCarouselMasterSource(appState, uploadFiles, slotArchivePi
   if (archiveId != null) {
     return { archiveId, file: null }
   }
-  const uploadKey = slotUploadKey('carousel', 0)
-  const candidates = [
-    uploadFiles?.[uploadKey],
-    uploadFiles?.[LEGACY_SHARED_REF_UPLOAD_KEY],
-  ]
-  for (const candidate of candidates) {
-    if (isUsableStudioUploadFile(candidate)) {
-      return { archiveId: null, file: candidate }
-    }
+  if (file) {
+    return { archiveId: null, file }
   }
   return { archiveId: null, file: null }
 }
