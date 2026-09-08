@@ -70,16 +70,14 @@ def test_static_carousel_variations_count() -> None:
 def test_static_carousel_variations_identity_and_variety() -> None:
     blocks = static_carousel_variations(8)
     joined = " ".join(blocks).lower()
-    assert "same" in joined and "master" in joined
-    assert "right" in joined and "left" in joined
-    assert "back" in joined
+    assert "story_beat" in joined
+    assert "limbs" in joined
+    assert "wardrobe" in joined
 
 
 def test_carousel_variation_order_spreads_sides() -> None:
     first_three = [carousel_variation_at(i).lower() for i in range(3)]
-    assert any("right" in s for s in first_three)
-    assert any("back" in s for s in first_three)
-    assert any("left" in s for s in first_three)
+    assert any("story_beat" in s for s in first_three)
     assert first_three[0] != first_three[1]
 
 
@@ -88,9 +86,9 @@ def test_load_grok_carousel_compose_system_capture_grammar() -> None:
 
     system = load_grok_carousel_compose_system()
     low = system.lower()
-    assert "capture_type" in low or "capture grammar" in low
-    assert "mirror_selfie" in low or "mirror selfie" in low
-    assert "phone_selfie" in low or "phone selfie" in low
+    assert "limbs" in low or "limbs_inventory" in low
+    assert "story" in low
+    assert "same room" in low or "same outfit" in low
     assert "environment" in low
 
 

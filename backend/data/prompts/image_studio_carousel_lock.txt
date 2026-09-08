@@ -1,16 +1,21 @@
 [CAROUSEL_SCENE_LOCK — mandatory for every frame in this batch]
-The first input image is the approved master render: **identity anchor** for the same shoot.
+The first input image is the approved master render: **identity + location + wardrobe anchor** for one continuous mini-session.
 
-**Always keep identical:** same person, hair color/length/style, body proportions, garments, accessories, room/location, props, and lighting quality.
+**Always identical across frames:**
+- Same person (face, skin, hair, body proportions)
+- Same room/location, props, backdrop, lighting quality/family
+- Same garment **pieces** as master (same sports bra, same leggings, same dress — not a different outfit)
 
-**Face identity (when face is visible or partially visible):** same face shape, eyes, nose, lips, jaw, skin tone — match MASTER exactly. Over-shoulder glimpses must still be the same face, not a new person.
+**Wardrobe state:**
+- SFW: clothing stays as in master — no undressing, no new items.
+- NSFW (only if SHOT_VARIATION says so): you may open/remove pieces **already worn** in master. Never add new clothing or swap outfit.
 
-**Back / partial views:** body turned away is allowed — match hair silhouette, outfit, shoulder/back skin tone, and limb proportions to MASTER. If any face skin is visible (cheek, jaw, eye), it must match MASTER.
+**Face identity:** match MASTER whenever face skin is visible (full or partial).
 
-**What MAY change per frame:** camera side, distance, height, pose, gesture, gaze, expression, crop, micro-interaction with visible props — per SHOT_VARIATION.
+**Capture grammar:** selfie stays selfie; mirror stays mirror; candid stays candid. Do not switch capture type.
 
-**Capture grammar (must match master):** If master is a phone selfie, every frame stays arm-length/front-camera selfie logic — never an external photographer. If mirror selfie, stay in the same mirror with consistent phone-in-reflection rules. Do not switch capture type mid-carousel.
+**Anatomy:** follow LIMBS section in SHOT_VARIATION — correct left/right arms, phone hand, leg stance; no extra limbs, no detached hands.
 
-**Forbidden:** different person, face swap, new outfit, new location, capture-type break (selfie → third-person), or plastic surgery–level facial redesign.
+**Forbidden:** different person, new location, new outfit items, wardrobe swap, capture-type break, ignoring limb anchors.
 
-Output = one Instagram carousel, one continuous mini-session, one model.
+Output = one story carousel, one room, one model, one continuous scenario.

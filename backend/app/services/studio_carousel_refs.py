@@ -77,8 +77,11 @@ async def resolve_carousel_reference_bundle(
     is_nsfw_story = mode in ("story_nsfw", "nsfw_story") or (
         mode == "auto" and wp == "nsfw"
     )
+    is_sfw_story = mode == "story_sfw" or (mode == "auto" and wp != "nsfw")
 
-    bundle = CarouselReferenceBundle(carousel_mode="story_nsfw" if is_nsfw_story else "standard")
+    bundle = CarouselReferenceBundle(
+        carousel_mode="story_nsfw" if is_nsfw_story else ("story_sfw" if is_sfw_story else "standard")
+    )
     slots: list[CarouselRefSlot] = []
 
     # Image 1 — master: pose/composition/camera base для этого кадра.
@@ -148,9 +151,9 @@ async def resolve_carousel_reference_bundle(
                 url=outfit_url,
                 role="outfit",
                 label=(
-                    "OUTFIT & BODY: exact clothing, fit, body proportions and silhouette "
-                    "from this dressed reference. Wardrobe locked unless SHOT_VARIATION "
-                    "explicitly describes a story wardrobe beat."
+                    "OUTFIT ANCHOR: same garment pieces as master — fit and silhouette reference only. "
+                    "Do NOT copy a different wardrobe; do NOT swap outfit. Locked unless NSFW "
+                    "WARDROBE_DELTA removes/opens an existing piece."
                 ),
             )
         )
@@ -174,7 +177,7 @@ async def resolve_carousel_reference_bundle(
                 )
                 next_idx += 1
 
-    if is_nsfw_story or wp == "nsfw":
+    if is_nsfw_story:
         gen_im = by_kind.get("genitals")
         if gen_im is not None:
             url = _model_url(gen_im)

@@ -3575,11 +3575,15 @@ async def _studio_job_execute_carousel(
         raise RuntimeError("Не удалось подготовить URL мастер-кадра")
 
     carousel_mode_raw = str(params.get("carousel_mode") or "auto").strip().lower()
-    if carousel_mode_raw not in ("auto", "standard", "story_nsfw"):
+    if carousel_mode_raw not in ("auto", "standard", "story_sfw", "story_nsfw"):
         carousel_mode_raw = "auto"
     use_nsfw_story = carousel_mode_raw == "story_nsfw" or (
         carousel_mode_raw == "auto" and wave_profile_n == "nsfw"
     )
+    use_sfw_story = carousel_mode_raw == "story_sfw" or (
+        carousel_mode_raw == "auto" and wave_profile_n != "nsfw"
+    )
+    use_story_grok = use_nsfw_story or use_sfw_story
 
     sm_loaded: UserStudioModel | None = None
     if studio_model_id is not None:
@@ -3672,17 +3676,19 @@ async def _studio_job_execute_carousel(
         billing = await ensure_can_consume_credits(session, user, cost_one)
         variation = shot_variations[shot_i] if shot_i < len(shot_variations) else static_carousel_variations(1)[0]
         ref_block = ref_bundle.prompt_binding_block() if ref_bundle.use_multi_ref else ""
-        if ref_bundle.use_multi_ref and (use_grok or user_notes or not master_text):
+        if ref_bundle.use_multi_ref and (use_story_grok or user_notes or not master_text):
             carousel_body = build_carousel_multi_ref_wave_prompt(
                 master_scene_context=scene_context,
                 shot_variation=variation,
                 ref_binding_block=ref_block,
                 story_nsfw=use_nsfw_story,
+                story_sfw=use_sfw_story,
             )
-        elif use_grok or user_notes or not master_text:
+        elif use_story_grok or user_notes or not master_text:
             carousel_body = build_carousel_grok_wave_prompt(
                 master_scene_context=scene_context,
                 shot_variation=variation,
+                story_sfw=use_sfw_story and not use_nsfw_story,
             )
         else:
             carousel_body = build_carousel_wave_prompt(

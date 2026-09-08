@@ -1,15 +1,15 @@
-[SIDE:RIGHT_3Q] Camera from subject's RIGHT three-quarter (~35°), medium waist-up. Face fully visible; soft smile; gaze slightly past camera. Clear break from a left-facing master. Same exact face, hair, outfit, room as master.
+STORY_BEAT: Hook — playful eye contact, she notices herself in mirror/phone. CAPTURE: same as master. LIMBS: keep phone hand and arm positions from master; micro head tilt only. CAMERA: slightly closer crop. GAZE/EXPR: soft smile at lens. WARDROBE: unchanged — same outfit as master.
 ---
-[SIDE:LEFT_3Q] Camera from subject's LEFT three-quarter (~35°), medium shot. Neutral expression; eyes toward lens. Opposite side from RIGHT_3Q frame. Same exact face, hair, outfit, room as master.
+STORY_BEAT: Beat — adjusts hair or strap without undressing. CAPTURE: same grammar as master. LIMBS: free hand touches hair near ear; phone hand unchanged; weight same leg. CAMERA: mild three-quarter shift ~20°. GAZE/EXPR: confident. WARDROBE: unchanged.
 ---
-[SIDE:BACK_R] Camera behind-right: subject's back and right shoulder dominate; head turns over RIGHT shoulder with partial face visible (one eye, cheek, jaw must match master). One hand visible in natural pose. Same hair, outfit, body, room as master.
+STORY_BEAT: Reaction — laughs at something off-camera, still in same spot. CAPTURE: same grammar. LIMBS: both arms plausible; no extra limbs. CAMERA: medium waist-up. GAZE/EXPR: eyes crinkle, smile. WARDROBE: unchanged.
 ---
-[POSE:FULL] Straight-on or mild three-quarter, full body farther back. New pose: weight on one leg, opposite arm relaxed or on hip — visibly different stance than master. Face fully visible. Same exact face, hair, outfit, room as master.
+STORY_BEAT: Interaction — leans on visible prop in same room. CAPTURE: same grammar. LIMBS: elbow on prop, other arm relaxed; feet stance stable. CAMERA: modest angle shift. GAZE/EXPR: calm. WARDROBE: unchanged.
 ---
-[SIDE:PROFILE_R] Near-profile from RIGHT (~60°, not full 90°): face still mostly readable; thoughtful gaze along profile; collarbone-up crop. Same exact face features and hair as master.
+STORY_BEAT: Escalation (SFW) — closer emotional moment, still dressed. CAPTURE: same grammar. LIMBS: explicit left/right arms documented; phone hand if selfie. CAMERA: punch-in close. GAZE/EXPR: intense soft gaze. WARDROBE: unchanged.
 ---
-[SIDE:LOW_L] Modest low angle from front-left three-quarter (~25°). Dynamic but natural; hair falls as in master. Face clearly visible. Same exact face, hair, outfit, room as master.
+STORY_BEAT: Mid-arc — changes expression, same session energy. CAPTURE: same grammar. LIMBS: mirror/selfie limb rules preserved. CAMERA: eye-level medium. GAZE/EXPR: playful smirk. WARDROBE: unchanged.
 ---
-[SIDE:BACK_L] Camera behind-left: back and left shoulder; subject glances over LEFT shoulder — partial face must match master (same eye/cheek/jaw). Different back angle than BACK_R. Same hair, outfit, body, room as master.
+STORY_BEAT: Payoff — confident closing frame of mini-story. CAPTURE: same grammar. LIMBS: stable anatomy, no floating hands. CAMERA: hero framing. GAZE/EXPR: direct to lens. WARDROBE: unchanged.
 ---
-[POSE:CLOSE] Medium-close, mild asymmetric framing from whichever three-quarter side differs most from master. Subtle expression change (smirk or soft laugh). Face dominant in frame. Same exact face and hair as master.
+STORY_BEAT: Coda — subtle variation, story resolves. CAPTURE: same grammar. LIMBS: match master inventory. CAMERA: slight crop change. GAZE/EXPR: relaxed. WARDROBE: unchanged.

@@ -310,11 +310,10 @@ _WAVESPEED_PHOTO_EDIT_WITH_DETAIL_PREFIX = (
 
 # Карусель: img2img от мастера, но каждый кадр ОБЯЗАН отличаться (не photo_edit «сохрани кроп»).
 _WAVESPEED_CAROUSEL_PREFIX = (
-    "[CAROUSEL_IMG2IMG] **Image 1** = master frame — identity, outfit, room, lighting quality are LOCKED. "
-    "**Every output MUST visibly differ from Image 1** per SHOT_VARIATION: change camera side/height/distance, "
-    "crop, body pose, gaze, expression, and/or prop interaction. "
-    "**Forbidden:** pixel-identical copy, same pose+angle as master, or ignoring SHOT_VARIATION. "
-    "Additional @Image refs (face/outfit/anatomy) are fidelity anchors only — do not copy their pose.\n\n"
+    "[CAROUSEL_IMG2IMG] **Image 1** = master — identity, room, and garment pieces LOCKED. "
+    "Follow SHOT_VARIATION story beat + LIMBS anchors. Same capture grammar as master. "
+    "No new location, no new outfit items. NSFW: may open/remove existing garments only. "
+    "Extra @Image refs lock face/body — do not copy their pose.\n\n"
 )
 
 _NANO_CAROUSEL_PREFIX = (

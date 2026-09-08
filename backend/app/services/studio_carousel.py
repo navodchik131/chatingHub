@@ -152,14 +152,14 @@ def load_carousel_variation_blocks() -> list[str]:
     raw = _read_text("data/prompts/image_studio_carousel_variations.txt")
     if not raw:
         return [
-            "[SIDE:LEFT_3Q] Camera LEFT three-quarter ~35°; face visible. Same exact face as master.",
-            "[SIDE:RIGHT_3Q] Camera RIGHT three-quarter ~35°; opposite side from LEFT. Same exact face as master.",
-            "[SIDE:BACK_R] Behind-right; over-shoulder partial face must match master. Same hair, outfit, body.",
-            "[POSE:FULL] Full body; new stance and arm pose. Face visible. Same exact face as master.",
-            "[SIDE:PROFILE_R] Near-profile right ~60°; face readable. Same exact face as master.",
-            "[SIDE:LOW_L] Low angle front-left three-quarter. Same exact face as master.",
-            "[SIDE:BACK_L] Behind-left; over-shoulder glance; partial face matches master.",
-            "[POSE:CLOSE] Medium-close; expression change. Same exact face as master.",
+            "STORY_BEAT: Hook. CAPTURE: same as master. LIMBS: keep phone hand from master. WARDROBE: unchanged.",
+            "STORY_BEAT: Beat. CAPTURE: same grammar. LIMBS: free hand to hair; phone hand unchanged. WARDROBE: unchanged.",
+            "STORY_BEAT: Reaction smile. LIMBS: both arms plausible. WARDROBE: unchanged.",
+            "STORY_BEAT: Prop lean same room. LIMBS: elbow on prop. WARDROBE: unchanged.",
+            "STORY_BEAT: Close emotional beat. LIMBS: explicit L/R arms. WARDROBE: unchanged.",
+            "STORY_BEAT: Playful smirk. LIMBS: mirror/selfie rules. WARDROBE: unchanged.",
+            "STORY_BEAT: Payoff gaze. LIMBS: stable anatomy. WARDROBE: unchanged.",
+            "STORY_BEAT: Coda. LIMBS: match master. WARDROBE: unchanged.",
         ]
     parts = [b.strip() for b in raw.split("\n---\n") if b.strip()]
     return parts if parts else [
@@ -194,8 +194,8 @@ _CAROUSEL_IDENTITY_REINFORCE = (
 )
 
 _CAROUSEL_FIRST_SHOT_REINFORCE = (
-    "\n\n[FIRST_FRAME_MANDATE] Carousel frame #1: output MUST differ clearly from the master input — "
-    "apply SHOT_VARIATION camera/pose/crop/expression changes; never return an unchanged copy."
+    "\n\n[FIRST_FRAME_MANDATE] Carousel frame #1: apply SHOT_VARIATION with a modest camera/pose/crop "
+    "change — same capture grammar as master (selfie stays selfie). Do not return a pixel-identical copy."
 )
 
 
@@ -205,10 +205,21 @@ def carousel_first_shot_reinforce() -> str:
 
 
 _CAROUSEL_VARIATION_APPLY = (
-    "\n\n[APPLY_SHOT] Execute this frame's camera geometry, crop, body pose, gaze, expression, "
-    "and any prop interaction from SHOT_VARIATION. Preserve the master's capture grammar "
-    "(selfie stays selfie, mirror stays mirror). Do not keep the master's identical pose/angle "
-    "unless SHOT_VARIATION says so."
+    "\n\n[APPLY_SHOT] Execute STORY_BEAT, camera, gaze, and expression from SHOT_VARIATION. "
+    "If SHOT_VARIATION includes LIMBS — match left/right arms, phone hand, and leg positions exactly; "
+    "no extra limbs or anatomically impossible poses. Preserve capture grammar (selfie stays selfie, "
+    "mirror stays mirror). Same room and same garment pieces as master unless NSFW WARDROBE_DELTA "
+    "explicitly removes/opens an existing piece."
+)
+
+_CAROUSEL_SFW_STORY_HINT = (
+    "\n\n[SFW_STORY] Mini-scenario frame — no undressing, no new clothes, no location change. "
+    "Same outfit pieces as master throughout."
+)
+
+_CAROUSEL_NSFW_STORY_HINT = (
+    "\n\n[NSFW_STORY] Execute STORY_BEAT. WARDROBE_DELTA may only open/remove garments already "
+    "worn in master — never add or swap outfit. Same room. Preserve face (@Image2) and body fidelity."
 )
 
 
@@ -232,13 +243,20 @@ def build_carousel_wave_prompt(*, master_refined_json: str, shot_index: int) -> 
     )
 
 
-def build_carousel_grok_wave_prompt(*, master_scene_context: str, shot_variation: str) -> str:
+def build_carousel_grok_wave_prompt(
+    *,
+    master_scene_context: str,
+    shot_variation: str,
+    story_sfw: bool = False,
+) -> str:
     lock = load_carousel_lock_text()
     base = (master_scene_context or "").strip() or "(master image is source of truth for identity, outfit, room)"
     variation = (shot_variation or "").strip()
+    story_hint = _CAROUSEL_SFW_STORY_HINT if story_sfw else ""
     return (
         f"{lock}\n\nBASE_SCENE (from master frame):\n{base}\n\n"
         f"[SHOT_VARIATION — Instagram carousel frame planned from master photo analysis]\n{variation}"
+        f"{story_hint}"
         f"{_CAROUSEL_VARIATION_APPLY}"
         f"{_CAROUSEL_IDENTITY_REINFORCE}"
     )
@@ -250,18 +268,17 @@ def build_carousel_multi_ref_wave_prompt(
     shot_variation: str,
     ref_binding_block: str,
     story_nsfw: bool = False,
+    story_sfw: bool = False,
 ) -> str:
-    """Multi-ref carousel: явные @ImageN роли + shot variation."""
+    """Multi-ref carousel: явные @ImageN роли + shot variation + story mode."""
     lock = load_carousel_lock_text()
     base = (master_scene_context or "").strip() or "(see reference images)"
     variation = (shot_variation or "").strip()
     story_hint = ""
     if story_nsfw:
-        story_hint = (
-            "\n\n[NSFW_STORY] Execute the STORY_BEAT in SHOT_VARIATION. "
-            "Wardrobe changes only as explicitly described in the beat. "
-            "Preserve face (@Image2), outfit anchor (@Image3), and anatomy (@Image4) fidelity."
-        )
+        story_hint = _CAROUSEL_NSFW_STORY_HINT
+    elif story_sfw:
+        story_hint = _CAROUSEL_SFW_STORY_HINT
     refs = (ref_binding_block or "").strip()
     refs_block = f"\n\n{refs}\n" if refs else "\n"
     return (
@@ -300,12 +317,11 @@ async def grok_compose_carousel_prompts(
     system = load_grok_carousel_compose_system()
     n = max(2, min(8, int(count)))
     direction = (user_direction or "").strip() or (
-        "Plan a scroll-stopping Instagram carousel tailored to THIS exact master photo. "
-        "First classify capture type (selfie / mirror selfie / candid / fixed camera) and "
-        "keep that grammar in every frame. Be creatively bold: vary emotions when the mood "
-        "allows, use real camera moves (high/low, punch-in detail crops, wider pull-back), "
-        "and natural prop/environment interactions when the scene supports them — same person, "
-        "outfit, and room throughout. Avoid generic near-duplicate three-quarters."
+        "Plan a SFW mini-story carousel from THIS master photo. "
+        "Connected narrative beats across frames — flirt, confidence, prop interaction, expression arc. "
+        "Same room, same outfit pieces, no undressing. "
+        "Respect capture grammar (selfie/mirror/candid). "
+        "In every frame specify LIMBS: which hand holds phone, left/right arms and legs."
     )
     scene = (master_scene_text or "").strip()
 
@@ -318,16 +334,14 @@ async def grok_compose_carousel_prompts(
         {
             "type": "text",
             "text": (
-                "Task: (1) read MASTER_IMAGE — capture grammar (selfie/mirror/candid), environment, "
-                "camera, pose, gaze, expression, framing; "
-                "(2) design FRAME_COUNT complementary Instagram frames that stay faithful to capture "
-                "grammar but feel creatively distinct (emotions, camera height/distance, detail crops, "
-                "prop interaction when natural); "
-                "(3) write exactly FRAME_COUNT img2img SHOT_VARIATION briefs.\n\n"
+                "Task: (1) read MASTER_IMAGE — capture grammar, limbs inventory, environment; "
+                "(2) design a SFW mini-story arc across FRAME_COUNT frames; "
+                "(3) write exactly FRAME_COUNT img2img briefs with STORY_BEAT, CAPTURE, LIMBS, "
+                "CAMERA, GAZE/EXPR, WARDROBE (unchanged).\n\n"
                 f"FRAME_COUNT: {n}\n\n"
                 f"USER_DIRECTION:\n{direction}\n\n"
                 f"MASTER_SCENE_TEXT:\n{scene or '(none — infer everything from MASTER_IMAGE)'}\n\n"
-                "Attached: MASTER_IMAGE — base your decisions on what you actually see."
+                "Attached: MASTER_IMAGE — base all limb positions and capture grammar on what you see."
             ),
         },
         {
@@ -339,7 +353,7 @@ async def grok_compose_carousel_prompts(
     model = _carousel_grok_vision_model()
     # Carousel planning needs more creative latitude than deterministic scene compose.
     temp = float(settings.grok_scene_compose_temperature)
-    temp = min(1.0, max(temp, 0.68))
+    temp = min(0.62, max(temp, 0.45))
     raw_out = await chat_completion_openai_compatible_text(
         model=model,
         messages=[
@@ -409,9 +423,10 @@ async def grok_compose_carousel_story_prompts(
     system = load_grok_carousel_nsfw_story_compose_system()
     n = max(2, min(8, int(count)))
     direction = (user_direction or "").strip() or (
-        "Plan an NSFW carousel story arc from this master photo. "
-        "Progress the scenario naturally — tease, partial reveal, interaction with clothing/props — "
-        "not just camera rotations. Same person and room throughout."
+        "Plan an 18+ story carousel from this master. "
+        "Tease→reveal arc: you may open/remove garments ALREADY worn in master — never add new clothes. "
+        "Same room throughout. Respect capture grammar. "
+        "Every frame: explicit LIMBS (left/right hands, phone hand, legs)."
     )
     scene = (master_scene_text or "").strip()
     ref_mime = (master_image_mime or "image/jpeg").split(";")[0].strip()
@@ -422,12 +437,12 @@ async def grok_compose_carousel_story_prompts(
         {
             "type": "text",
             "text": (
-                "Task: read MASTER_IMAGE, design a NSFW story arc across FRAME_COUNT frames, "
-                "write exactly FRAME_COUNT img2img briefs with STORY_BEAT + camera + pose.\n\n"
+                "Task: read MASTER_IMAGE, design NSFW story arc across FRAME_COUNT frames, "
+                "write briefs with STORY_BEAT, CAPTURE, LIMBS, CAMERA, GAZE/EXPR, WARDROBE_DELTA "
+                "(remove/open existing pieces only — no new garments).\n\n"
                 f"FRAME_COUNT: {n}\n\nUSER_DIRECTION:\n{direction}\n\n"
                 f"MASTER_SCENE_TEXT:\n{scene or '(none)'}\n\n"
-                "Additional refs (@Image2 face, @Image3 outfit, @Image4 anatomy) will be sent to the editor — "
-                "briefs must not contradict them."
+                "Refs (@Image2 face, @Image3 body) will be sent to editor — do not contradict them."
             ),
         },
         {"type": "image_url", "image_url": {"url": f"data:{ref_mime};base64,{ref_b64}"}},

@@ -79,39 +79,12 @@ async def find_outfit_generation_for_master(
     session: AsyncSession,
     master: StudioGeneration,
 ) -> int | None:
-    """Outfit gen: явная ссылка на master или последний dress anchor той же модели."""
+    """Outfit gen только при явной ссылке на master — без устаревших dress anchor из архива."""
     linked = getattr(master, "outfit_generation_id", None)
     if linked:
         row = await session.get(StudioGeneration, int(linked))
         if row and row.user_id == master.user_id:
             return int(linked)
-
-    mid = master.studio_model_id
-    if mid is None:
-        return None
-
-    stmt = (
-        select(StudioGeneration)
-        .where(
-            StudioGeneration.user_id == master.user_id,
-            StudioGeneration.studio_model_id == mid,
-            StudioGeneration.id != master.id,
-        )
-        .order_by(StudioGeneration.created_at.desc())
-        .limit(30)
-    )
-    rows = (await session.execute(stmt)).scalars().all()
-    master_ts = master.created_at
-    for row in rows:
-        if master_ts and row.created_at and row.created_at > master_ts:
-            continue
-        blob = f"{row.prompt_excerpt or ''}\n{row.refined_prompt or ''}".lower()
-        if (
-            "outfit anchor" in blob
-            or "motion control dress" in blob
-            or MOTION_DRESS_PROMPT_TAG.lower() in blob
-        ):
-            return row.id
     return None
 
 
