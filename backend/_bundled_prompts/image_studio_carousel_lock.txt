@@ -4,7 +4,7 @@ The first input image is the approved master render: **identity + location + war
 **Always identical across frames:**
 - Same person (face, skin, hair, body proportions)
 - Same room/location, props, backdrop, lighting quality/family
-- Same garment **pieces** as master (same sports bra, same leggings, same dress — not a different outfit)
+- Same garment **pieces** as master (same shirt, same jeans, same dress — not a different outfit)
 
 **Wardrobe state:**
 - SFW: clothing stays as in master — no undressing, no new items.
@@ -12,10 +12,12 @@ The first input image is the approved master render: **identity + location + war
 
 **Face identity:** match MASTER whenever face skin is visible (full or partial).
 
-**Capture grammar:** selfie stays selfie; mirror stays mirror; candid stays candid. Do not switch capture type.
+**Capture grammar:** selfie stays selfie; mirror stays mirror; candid/tripod stays candid/tripod. Do not switch capture type.
 
 **Anatomy:** follow LIMBS section in SHOT_VARIATION — correct left/right arms, phone hand, leg stance; no extra limbs, no detached hands.
 
-**Forbidden:** different person, new location, new outfit items, wardrobe swap, capture-type break, ignoring limb anchors.
+**Mandatory variation:** each frame MUST visibly change pose, expression, and/or camera framing vs master — follow POSE_DELTA and STORY_BEAT in SHOT_VARIATION. Never output a near-duplicate of the master pose.
 
-Output = one story carousel, one room, one model, one continuous scenario.
+**Forbidden:** different person, new location, new outfit items, wardrobe swap, capture-type break, ignoring limb anchors, returning an unchanged copy of master.
+
+Output = one story carousel, one room, one model, one continuous scenario — but **different photos** within that session.

@@ -118,9 +118,11 @@ def test_finalize_carousel_mode_not_photo_edit_prefix() -> None:
     assert "EDIT_BASE" not in nano
 
 
-def test_append_carousel_shot_reinforce_first_frame_only() -> None:
+def test_append_carousel_shot_reinforce_all_frames() -> None:
     from app.services.studio_carousel import append_carousel_shot_reinforce
 
     base = "lock + variation"
     assert "FIRST_FRAME_MANDATE" in append_carousel_shot_reinforce(base, shot_index=0)
-    assert append_carousel_shot_reinforce(base, shot_index=1) == base
+    follow = append_carousel_shot_reinforce(base, shot_index=1)
+    assert "POSE_MANDATE" in follow
+    assert follow.startswith(base)

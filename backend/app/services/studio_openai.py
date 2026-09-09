@@ -311,7 +311,8 @@ _WAVESPEED_PHOTO_EDIT_WITH_DETAIL_PREFIX = (
 # Карусель: img2img от мастера, но каждый кадр ОБЯЗАН отличаться (не photo_edit «сохрани кроп»).
 _WAVESPEED_CAROUSEL_PREFIX = (
     "[CAROUSEL_IMG2IMG] **Image 1** = master — identity, room, and garment pieces LOCKED. "
-    "Follow SHOT_VARIATION story beat + LIMBS anchors. Same capture grammar as master. "
+    "Apply SHOT_VARIATION fully: mandatory visible POSE_DELTA, expression, and camera/framing change; "
+    "never return a near-duplicate of Image 1. Same capture grammar as master. "
     "No new location, no new outfit items. NSFW: may open/remove existing garments only. "
     "Extra @Image refs lock face/body — do not copy their pose.\n\n"
 )

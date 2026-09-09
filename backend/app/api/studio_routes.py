@@ -3678,7 +3678,8 @@ async def _studio_job_execute_carousel(
         billing = await ensure_can_consume_credits(session, user, cost_one)
         variation = shot_variations[shot_i] if shot_i < len(shot_variations) else static_carousel_variations(1)[0]
         ref_block = ref_bundle.prompt_binding_block() if ref_bundle.use_multi_ref else ""
-        if ref_bundle.use_multi_ref and (use_story_grok or user_notes or not master_text):
+        # Всегда подставляем запланированный shot brief (Grok/static), а не legacy JSON+static index.
+        if ref_bundle.use_multi_ref:
             carousel_body = build_carousel_multi_ref_wave_prompt(
                 master_scene_context=scene_context,
                 shot_variation=variation,
@@ -3686,7 +3687,7 @@ async def _studio_job_execute_carousel(
                 story_nsfw=use_nsfw_story,
                 story_sfw=use_sfw_story,
             )
-        elif use_story_grok or user_notes or not master_text:
+        elif shot_variations or use_story_grok or user_notes or not master_text:
             carousel_body = build_carousel_grok_wave_prompt(
                 master_scene_context=scene_context,
                 shot_variation=variation,

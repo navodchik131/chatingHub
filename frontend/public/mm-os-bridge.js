@@ -3672,7 +3672,8 @@
         fd.append('description', prompt)
         fd.append('output_aspect', store.selectedAspect)
         fd.append('studio_wave_profile', isNsfwMode(s) ? 'nsfw' : 'regular')
-        fd.append('carousel_mode', isNsfwMode(s) ? 'auto' : 'standard')
+        // story_sfw/story_nsfw — Grok анализирует мастер и планирует разные позы/эмоции для карусели.
+        fd.append('carousel_mode', isNsfwMode(s) ? 'story_nsfw' : 'story_sfw')
         const wave = normalizeWaveModel(waveModelFromState(s), isNsfwMode(s))
         fd.append('workflow_wave_model', wave.apiId)
         if (wave.apiId === 'wan-2.7') fd.append('wan_edit_tier', wave.tier)

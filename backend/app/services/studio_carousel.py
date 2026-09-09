@@ -194,8 +194,14 @@ _CAROUSEL_IDENTITY_REINFORCE = (
 )
 
 _CAROUSEL_FIRST_SHOT_REINFORCE = (
-    "\n\n[FIRST_FRAME_MANDATE] Carousel frame #1: apply SHOT_VARIATION with a modest camera/pose/crop "
+    "\n\n[FIRST_FRAME_MANDATE] Carousel frame #1: apply SHOT_VARIATION with a visible mood/crop/pose "
     "change — same capture grammar as master (selfie stays selfie). Do not return a pixel-identical copy."
+)
+
+_CAROUSEL_FOLLOWUP_SHOT_REINFORCE = (
+    "\n\n[POSE_MANDATE] This carousel frame must look like a **different photo from the same shoot**: "
+    "execute POSE_DELTA and STORY_BEAT fully — new body pose, new expression, and/or new camera distance. "
+    "Do NOT return a near-duplicate of the master frame."
 )
 
 
@@ -205,11 +211,11 @@ def carousel_first_shot_reinforce() -> str:
 
 
 _CAROUSEL_VARIATION_APPLY = (
-    "\n\n[APPLY_SHOT] Execute STORY_BEAT, camera, gaze, and expression from SHOT_VARIATION. "
+    "\n\n[APPLY_SHOT] Execute STORY_BEAT, POSE_DELTA, camera, gaze, and expression from SHOT_VARIATION. "
     "If SHOT_VARIATION includes LIMBS — match left/right arms, phone hand, and leg positions exactly; "
     "no extra limbs or anatomically impossible poses. Preserve capture grammar (selfie stays selfie, "
     "mirror stays mirror). Same room and same garment pieces as master unless NSFW WARDROBE_DELTA "
-    "explicitly removes/opens an existing piece."
+    "explicitly removes/opens an existing piece. Visible pose/framing change is mandatory."
 )
 
 _CAROUSEL_SFW_STORY_HINT = (
@@ -224,10 +230,12 @@ _CAROUSEL_NSFW_STORY_HINT = (
 
 
 def append_carousel_shot_reinforce(body: str, *, shot_index: int) -> str:
-    """Усиливает промпт для кадра 0 — anti-clone."""
+    """Anti-clone: первый кадр — лёгкий сдвиг; остальные — явная смена позы/кадра."""
     text = (body or "").strip()
     if shot_index == 0:
         text += carousel_first_shot_reinforce()
+    else:
+        text += _CAROUSEL_FOLLOWUP_SHOT_REINFORCE
     return text
 
 
@@ -317,11 +325,12 @@ async def grok_compose_carousel_prompts(
     system = load_grok_carousel_compose_system()
     n = max(2, min(8, int(count)))
     direction = (user_direction or "").strip() or (
-        "Plan a SFW mini-story carousel from THIS master photo. "
-        "Connected narrative beats across frames — flirt, confidence, prop interaction, expression arc. "
-        "Same room, same outfit pieces, no undressing. "
-        "Respect capture grammar (selfie/mirror/candid). "
-        "In every frame specify LIMBS: which hand holds phone, left/right arms and legs."
+        "Analyze THIS master photo like an Instagram creative director. "
+        "Plan a SFW mini-story carousel where each swipe shows a clearly different photo from the same shoot: "
+        "new poses (sit/stand/lean/walk), new moods/expressions, new camera distances — not subtle clones. "
+        "Use furniture/props visible in the room (bed, wall, mirror, window). "
+        "Same room, same outfit pieces, no undressing. Respect capture grammar (selfie/mirror/candid/tripod). "
+        "Every frame: POSE_DELTA + LIMBS with left/right arms and legs."
     )
     scene = (master_scene_text or "").strip()
 
@@ -334,9 +343,9 @@ async def grok_compose_carousel_prompts(
         {
             "type": "text",
             "text": (
-                "Task: (1) read MASTER_IMAGE — capture grammar, limbs inventory, environment; "
-                "(2) design a SFW mini-story arc across FRAME_COUNT frames; "
-                "(3) write exactly FRAME_COUNT img2img briefs with STORY_BEAT, CAPTURE, LIMBS, "
+                "Task: (1) read MASTER_IMAGE — capture grammar, limbs inventory, scene affordances; "
+                "(2) design a SFW Instagram carousel arc across FRAME_COUNT frames with scroll-stopping variety; "
+                "(3) write exactly FRAME_COUNT img2img briefs with STORY_BEAT, POSE_DELTA, CAPTURE, LIMBS, "
                 "CAMERA, GAZE/EXPR, WARDROBE (unchanged).\n\n"
                 f"FRAME_COUNT: {n}\n\n"
                 f"USER_DIRECTION:\n{direction}\n\n"
@@ -353,7 +362,8 @@ async def grok_compose_carousel_prompts(
     model = _carousel_grok_vision_model()
     # Carousel planning needs more creative latitude than deterministic scene compose.
     temp = float(settings.grok_scene_compose_temperature)
-    temp = min(0.62, max(temp, 0.45))
+    # Карусель — больше креатива в планировании поз/настроений, чем у scene compose.
+    temp = min(0.78, max(temp, 0.55))
     raw_out = await chat_completion_openai_compatible_text(
         model=model,
         messages=[

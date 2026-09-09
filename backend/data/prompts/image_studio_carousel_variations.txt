@@ -1,15 +1,15 @@
-STORY_BEAT: Hook — playful eye contact, she notices herself in mirror/phone. CAPTURE: same as master. LIMBS: keep phone hand and arm positions from master; micro head tilt only. CAMERA: slightly closer crop. GAZE/EXPR: soft smile at lens. WARDROBE: unchanged — same outfit as master.
+STORY_BEAT: Hook — she steps one foot closer to camera, playful energy. POSE_DELTA: shift weight to front leg, left hand on hip, right arm relaxed down (not same as master). CAPTURE: same grammar as master. LIMBS: explicit L/R arms; stable feet. CAMERA: medium full-body, slightly closer than master. GAZE/EXPR: bright smile at lens. WARDROBE: unchanged.
 ---
-STORY_BEAT: Beat — adjusts hair or strap without undressing. CAPTURE: same grammar as master. LIMBS: free hand touches hair near ear; phone hand unchanged; weight same leg. CAMERA: mild three-quarter shift ~20°. GAZE/EXPR: confident. WARDROBE: unchanged.
+STORY_BEAT: Beat — sits on bed edge, casual intimate moment. POSE_DELTA: sitting, torso leaning forward, knees apart, hands resting on thighs — clearly not standing like master. CAPTURE: same grammar. LIMBS: both hands visible on thighs; feet on floor. CAMERA: medium shot from slightly lower angle. GAZE/EXPR: soft confident look up at lens. WARDROBE: unchanged.
 ---
-STORY_BEAT: Reaction — laughs at something off-camera, still in same spot. CAPTURE: same grammar. LIMBS: both arms plausible; no extra limbs. CAMERA: medium waist-up. GAZE/EXPR: eyes crinkle, smile. WARDROBE: unchanged.
+STORY_BEAT: Reaction — laughs at something off-camera. POSE_DELTA: standing but torso turned 3/4 left, one shoulder forward, hand touching hair. CAPTURE: same grammar. LIMBS: free hand in hair; other arm relaxed. CAMERA: waist-up three-quarter. GAZE/EXPR: eyes crinkle, mid-laugh, not looking at lens. WARDROBE: unchanged.
 ---
-STORY_BEAT: Interaction — leans on visible prop in same room. CAPTURE: same grammar. LIMBS: elbow on prop, other arm relaxed; feet stance stable. CAMERA: modest angle shift. GAZE/EXPR: calm. WARDROBE: unchanged.
+STORY_BEAT: Interaction — leans shoulder against wall/doorframe in same room. POSE_DELTA: weight on back shoulder, arms crossed loosely or one knee bent. CAPTURE: same grammar. LIMBS: crossed arms plausible; feet staggered. CAMERA: full-body environmental framing. GAZE/EXPR: calm confident, direct gaze. WARDROBE: unchanged.
 ---
-STORY_BEAT: Escalation (SFW) — closer emotional moment, still dressed. CAPTURE: same grammar. LIMBS: explicit left/right arms documented; phone hand if selfie. CAMERA: punch-in close. GAZE/EXPR: intense soft gaze. WARDROBE: unchanged.
+STORY_BEAT: Escalation — closer emotional portrait. POSE_DELTA: upper body only, slight forward lean toward camera, hands out of frame or one hand on collar. CAPTURE: same grammar. LIMBS: minimal visible limbs, stable. CAMERA: close portrait crop, face fills more of frame. GAZE/EXPR: intense soft gaze, parted lips. WARDROBE: unchanged.
 ---
-STORY_BEAT: Mid-arc — changes expression, same session energy. CAPTURE: same grammar. LIMBS: mirror/selfie limb rules preserved. CAMERA: eye-level medium. GAZE/EXPR: playful smirk. WARDROBE: unchanged.
+STORY_BEAT: Mid-arc — playful smirk, different body line. POSE_DELTA: hip popped to one side, hand on hip, opposite arm behind back or on bed rail. CAPTURE: same grammar. LIMBS: clear contrapposto stance. CAMERA: medium three-quarter from the right. GAZE/EXPR: playful smirk, eyes to lens. WARDROBE: unchanged.
 ---
-STORY_BEAT: Payoff — confident closing frame of mini-story. CAPTURE: same grammar. LIMBS: stable anatomy, no floating hands. CAMERA: hero framing. GAZE/EXPR: direct to lens. WARDROBE: unchanged.
+STORY_BEAT: Payoff — hero closing frame. POSE_DELTA: wide stance facing camera square, both hands adjusting shirt hem or hair — new gesture. CAPTURE: same grammar. LIMBS: both arms active in different positions. CAMERA: full-body hero framing, eye level. GAZE/EXPR: bold direct eye contact. WARDROBE: unchanged.
 ---
-STORY_BEAT: Coda — subtle variation, story resolves. CAPTURE: same grammar. LIMBS: match master inventory. CAMERA: slight crop change. GAZE/EXPR: relaxed. WARDROBE: unchanged.
+STORY_BEAT: Coda — relaxed resolution. POSE_DELTA: seated sideways on bed, legs angled, looking back over shoulder toward camera. CAPTURE: same grammar. LIMBS: seated legs bent; one arm supporting on bed. CAMERA: medium over-shoulder composition. GAZE/EXPR: relaxed warm smile. WARDROBE: unchanged.
