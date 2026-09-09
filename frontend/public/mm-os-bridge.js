@@ -851,14 +851,48 @@
     return (item.image_url || '').trim()
   }
 
+  function archiveLightboxPayload(item) {
+    if (!item || item.id == null) return null
+    const id = Number(item.id)
+    if (!Number.isFinite(id)) return null
+    return { id, item: Object.assign({}, item) }
+  }
+
   function resolveLightboxId(s) {
     const lb = s?.lightbox
     if (typeof lb === 'number' && !Number.isNaN(lb)) return lb
-    if (lb && typeof lb === 'object' && lb.id != null) {
-      const n = Number(lb.id)
-      return Number.isNaN(n) ? null : n
+    if (lb && typeof lb === 'object') {
+      if (lb.id != null) {
+        const n = Number(lb.id)
+        return Number.isNaN(n) ? null : n
+      }
+      if (lb.item && lb.item.id != null) {
+        const n = Number(lb.item.id)
+        return Number.isNaN(n) ? null : n
+      }
     }
     return null
+  }
+
+  /** Snapshot + live merge: poll архива не закрывает lightbox, если кадр временно не в списке. */
+  function resolveLightboxItem(s) {
+    const lb = s?.lightbox
+    if (lb == null) return null
+    if (typeof lb === 'object' && lb.item) {
+      const snap = lb.item
+      const id = Number(lb.id != null ? lb.id : snap.id)
+      const live =
+        store.archiveImages.find((x) => Number(x.id) === id) ||
+        store.archiveVideos.find((x) => Number(x.id) === id)
+      return live ? Object.assign({}, snap, live) : snap
+    }
+    const id = resolveLightboxId(s)
+    if (id == null) return null
+    return (
+      store.archiveImages.find((x) => Number(x.id) === id) ||
+      store.archiveVideos.find((x) => Number(x.id) === id) ||
+      null
+    )
   }
 
   function aspectCss(ratio) {
@@ -1206,7 +1240,7 @@
       open: pending
         ? () => {}
         : () => {
-            logic.setState({ lightbox: item.id })
+            logic.setState({ lightbox: archiveLightboxPayload(item) })
           },
     }
   }
@@ -1227,12 +1261,9 @@
   }
 
   function buildLightboxData(s, lang) {
-    const id = resolveLightboxId(s)
-    if (id == null) return null
-    const item =
-      store.archiveImages.find((x) => x.id === id) ||
-      store.archiveVideos.find((x) => x.id === id)
+    const item = resolveLightboxItem(s)
     if (!item) return null
+    const id = Number(item.id)
     const url = archiveThumbUrl(item)
     const failed = (item.status || '').trim() === 'failed'
     const errRaw = (item.error_message || '').trim() || (failed ? 'Ошибка генерации' : '')
@@ -4240,7 +4271,7 @@
           label: (item.model_name || '—') + ' · ' + (item.output_aspect || '9:16'),
           tileStyle,
           thumbStyle: tileStyle,
-          open: () => logic.setState({ page: 'images', lightbox: item.id }),
+          open: () => logic.setState({ page: 'images', lightbox: archiveLightboxPayload(item) }),
         }
       })
     const vaBase = 'aspect-ratio:9/16;display:flex;align-items:center;justify-content:center;position:relative;background:'
@@ -4267,7 +4298,7 @@
           : null,
         open: pending || failed || !videoUrl
           ? () => {}
-          : () => logic.setState({ lightbox: item.id }),
+          : () => logic.setState({ lightbox: archiveLightboxPayload(item) }),
       }
     })
 

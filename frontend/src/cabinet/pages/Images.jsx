@@ -13,6 +13,7 @@ import { archiveThumbUrl, archiveDownloadUrl, isArchivePending } from '../api/ac
 import { formatArchiveErrorMessage } from '../api/helpers';
 import { formatArchivePipelineLabel } from '../api/archivePipelineLabel';
 import { downloadArchiveBlob } from '../api/archiveDownload';
+import { archiveLightboxPayload, resolveArchiveLightboxItem } from '../api/archiveLightbox';
 import {
   validateStudioForm, syncRefArchivePicks, clearSlotArchivePick, resolveActiveSlotSource,
   resolveCarouselMasterSource,
@@ -86,10 +87,11 @@ export function Lightbox() {
   const { t, lang, lightbox, s, setS, go, cabinet } = useApp();
   if (lightbox == null) return null;
 
-  const item = typeof lightbox === 'object'
-    ? lightbox
-    : (cabinet.archiveImages || []).find((x) => x.id === lightbox)
-      ?? (cabinet.archiveImages || [])[lightbox];
+  const item = resolveArchiveLightboxItem(
+    lightbox,
+    cabinet.archiveImages,
+    cabinet.archiveVideos,
+  );
   const close = () => setS({ lightbox: null });
   const model = item ? cabinet.models.find((m) => m.id === item.studio_model_id) : null;
   const thumb = item ? archiveThumbUrl(item) : '';
@@ -789,7 +791,7 @@ export default function Images() {
                 hover={pending || failed ? {} : { borderColor: borderHoverOff }}
                 onClick={() => {
                   if (pending || failed) return;
-                  setS({ lightbox: item.id ?? i });
+                  setS({ lightbox: archiveLightboxPayload(item) });
                 }}
               >
                 <div

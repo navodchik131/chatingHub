@@ -127,9 +127,10 @@ function Shell() {
           <div style={contentPad}>
             <Page />
           </div>
-          <Lightbox />
           <MediaModal />
         </main>
+        {/* Вне main key={page}: poll архива не должен размонтировать lightbox. */}
+        <Lightbox />
 
         {isMobile && <MobileNav />}
         {moreOpen && <MoreSheet />}

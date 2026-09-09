@@ -1699,18 +1699,18 @@ export function CabinetDataProvider({ children }) {
     window.location.assign('/')
   }, [])
 
+  const pendingArchiveActive =
+    archiveImages.some(actions.isArchivePending)
+    || archiveVideos.some(actions.isArchivePending)
+    || archiveSeedanceVideos.some(actions.isArchivePending)
+
   useEffect(() => {
-    if (!ready) return
-    const pending =
-      archiveImages.some(actions.isArchivePending)
-      || archiveVideos.some(actions.isArchivePending)
-      || archiveSeedanceVideos.some(actions.isArchivePending)
-    if (!pending) return
+    if (!ready || !pendingArchiveActive) return
     const timer = window.setInterval(() => {
       void refreshArchivePending()
     }, 3_000)
     return () => window.clearInterval(timer)
-  }, [ready, archiveImages, archiveVideos, archiveSeedanceVideos, refreshArchivePending])
+  }, [ready, pendingArchiveActive, refreshArchivePending])
 
   const refreshDonationOverview = useCallback(async (opts = {}) => {
     if (!me?.is_workspace_owner) return
