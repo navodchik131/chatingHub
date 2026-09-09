@@ -157,6 +157,24 @@ async def reserve_carousel_shot_placeholders(
     return rows
 
 
+async def mark_carousel_shot_placeholder_failed(
+    session: AsyncSession,
+    placeholder_id: int,
+    *,
+    message: str,
+) -> bool:
+    """Помечает один кадр карусели failed — остальные кадры job продолжают генерироваться."""
+    row = await session.get(StudioGeneration, int(placeholder_id))
+    if row is None:
+        return False
+    st = (row.status or "").strip()
+    if st in (StudioGenerationStatus.READY, StudioGenerationStatus.FAILED):
+        return False
+    msg = (message or "").strip() or "Кадр карусели не сгенерирован"
+    await mark_studio_generation_failed(session, row, message=msg, step="carousel")
+    return True
+
+
 async def mark_carousel_placeholders_failed_from(
     session: AsyncSession,
     placeholder_ids: list[int],

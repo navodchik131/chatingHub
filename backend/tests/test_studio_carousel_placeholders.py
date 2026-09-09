@@ -51,6 +51,22 @@ def test_carousel_placeholder_ids_from_params():
     assert carousel_placeholder_ids_from_params({}) == []
 
 
+def test_mark_carousel_shot_placeholder_failed_skips_ready():
+    from app.services.studio_generation_placeholders import mark_carousel_shot_placeholder_failed
+    from app.services import studio_generation_placeholders as mod
+
+    row = SimpleNamespace(id=10, status="ready")
+    session = MagicMock()
+    session.get = AsyncMock(return_value=row)
+    mod.mark_studio_generation_failed = AsyncMock()
+
+    async def _run():
+        return await mark_carousel_shot_placeholder_failed(session, 10, message="err")
+
+    assert asyncio.run(_run()) is False
+    mod.mark_studio_generation_failed.assert_not_called()
+
+
 def test_mark_carousel_placeholders_failed_from():
     from app.services.studio_generation_placeholders import mark_carousel_placeholders_failed_from
     from app.services import studio_generation_placeholders as mod

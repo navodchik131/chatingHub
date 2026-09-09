@@ -139,6 +139,7 @@ from app.services.studio_generation_placeholders import (
     reserve_carousel_shot_placeholders,
     carousel_placeholder_ids_from_params,
     mark_carousel_placeholders_failed_from,
+    mark_carousel_shot_placeholder_failed,
 )
 from app.services.studio_outfit_anchor import exclude_hidden_outfit_anchors_from_archive
 from app.services.studio_generation_pipeline import resolve_generation_pipeline
@@ -3670,7 +3671,8 @@ async def _studio_job_execute_carousel(
     )
 
     placeholder_ids = carousel_placeholder_ids_from_params(params)
-    shots_done = 0
+    shots_ok = 0
+    shots_failed = 0
 
     for shot_i in range(count):
         billing = await ensure_can_consume_credits(session, user, cost_one)
@@ -3757,6 +3759,7 @@ async def _studio_job_execute_carousel(
                 raw_url = ws_car.url
         except RuntimeError as e:
             last_msg = str(e)
+            shots_failed += 1
             log.warning(
                 "studio carousel shot failed owner=%s gen=%s shot=%s: %s",
                 oid,
@@ -3764,14 +3767,14 @@ async def _studio_job_execute_carousel(
                 shot_i,
                 last_msg,
             )
-            await mark_carousel_placeholders_failed_from(
-                session,
-                placeholder_ids,
-                start_index=shot_i,
-                message=last_msg,
-            )
+            if shot_i < len(placeholder_ids):
+                await mark_carousel_shot_placeholder_failed(
+                    session,
+                    int(placeholder_ids[shot_i]),
+                    message=last_msg,
+                )
             await session.commit()
-            break
+            continue
 
         source_label = f"gen {gen_id}" if gen_id is not None else "upload"
         parent_gen_id = gen_id if gen_id is not None else None
@@ -3796,16 +3799,17 @@ async def _studio_job_execute_carousel(
         )
         if gen is None:
             last_msg = "Не удалось сохранить кадр карусели — повторите позже."
-            await mark_carousel_placeholders_failed_from(
-                session,
-                placeholder_ids,
-                start_index=shot_i,
-                message=last_msg,
-            )
+            shots_failed += 1
+            if shot_i < len(placeholder_ids):
+                await mark_carousel_shot_placeholder_failed(
+                    session,
+                    int(placeholder_ids[shot_i]),
+                    message=last_msg,
+                )
             await session.commit()
-            break
+            continue
 
-        shots_done = shot_i + 1
+        shots_ok += 1
 
         await record_usage(
             session,
@@ -3831,16 +3835,29 @@ async def _studio_job_execute_carousel(
             out_u = raw_url
         items.append(StudioCarouselItemOut(generation_id=gen.id, image_url=out_u))
 
-    if placeholder_ids and shots_done < len(placeholder_ids):
+    if placeholder_ids:
         await mark_carousel_placeholders_failed_from(
             session,
             placeholder_ids,
-            start_index=shots_done,
+            start_index=0,
             message=last_msg or "Кадр карусели не сгенерирован",
         )
         await session.commit()
 
-    return StudioCarouselOut(items=items, message=last_msg).model_dump()
+    if shots_ok == 0 and last_msg:
+        raise RuntimeError(last_msg)
+
+    out_msg = last_msg
+    if shots_failed and shots_ok:
+        out_msg = (
+            f"Готово {shots_ok} из {count}. "
+            f"{shots_failed} кадр(ов) не сгенерирован(ы)."
+            + (f" Последняя ошибка: {last_msg}" if last_msg else "")
+        )
+    elif shots_failed and not shots_ok and last_msg:
+        out_msg = last_msg
+
+    return StudioCarouselOut(items=items, message=out_msg).model_dump()
 
 
 @router.get("/studio/models", response_model=list[UserStudioModelOut])
