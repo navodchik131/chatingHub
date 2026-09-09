@@ -106,8 +106,10 @@ export function AppProvider({ children, forceMobile = false }) {
   const location = useLocation();
   const page = pageFromPathname(location.pathname);
   const cabinet = useCabinetData();
+  const { clearBusy, resetVideoSubmitting, refreshAll, saveUiLocale } = cabinet;
   const [state, setState] = useState(initial);
-  const pathnameResetSkipRef = useRef(true);
+  /** Предыдущий pathname — сброс overlay только при реальной смене URL, не при poll архива. */
+  const prevPathnameRef = useRef(null);
   const { isMobile, isNarrow } = useViewport(forceMobile);
 
   const lang = state.lang === 'en' ? 'en' : 'ru';
@@ -117,10 +119,10 @@ export function AppProvider({ children, forceMobile = false }) {
     writeStoredLocale(normalized);
     markLocaleUserSet();
     setState((prev) => (prev.lang === normalized ? prev : { ...prev, lang: normalized }));
-    void cabinet.saveUiLocale(normalized)
+    void saveUiLocale(normalized)
       .then(() => clearLocaleUserSet())
       .catch(() => {});
-  }, [cabinet]);
+  }, [saveUiLocale]);
 
   useEffect(() => {
     if (!cabinet.me) return;
@@ -128,7 +130,7 @@ export function AppProvider({ children, forceMobile = false }) {
     if (!fromMe) return;
     const stored = readStoredLocale();
     if (isLocaleUserSet() && stored !== fromMe) {
-      void cabinet.saveUiLocale(stored)
+      void saveUiLocale(stored)
         .then(() => clearLocaleUserSet())
         .catch(() => {});
       return;
@@ -136,7 +138,7 @@ export function AppProvider({ children, forceMobile = false }) {
     writeStoredLocale(fromMe);
     setState((prev) => (prev.lang === fromMe ? prev : { ...prev, lang: fromMe }));
     if (fromMe === stored) clearLocaleUserSet();
-  }, [cabinet.me?.id, cabinet.me?.ui_locale, cabinet]);
+  }, [cabinet.me?.id, cabinet.me?.ui_locale, saveUiLocale]);
 
   const setS = useCallback((patch) => {
     setState((prev) => {
@@ -174,11 +176,11 @@ export function AppProvider({ children, forceMobile = false }) {
   }, [navigate, setS])
 
   // Browser back/forward и прямой ввод URL — сбрасываем overlay, иначе «URL сменился, экран застыл».
+  // Не зависим от всего `cabinet`: каждый poll архива менял ссылку контекста и закрывал lightbox.
   useEffect(() => {
-    if (pathnameResetSkipRef.current) {
-      pathnameResetSkipRef.current = false;
-      return;
-    }
+    const prev = prevPathnameRef.current;
+    prevPathnameRef.current = location.pathname;
+    if (prev == null || prev === location.pathname) return;
     setS({
       connDetail: null,
       charDetail: null,
@@ -192,9 +194,9 @@ export function AppProvider({ children, forceMobile = false }) {
       emojiOpen: false,
       photoMenu: null,
     });
-    cabinet.clearBusy();
-    cabinet.resetVideoSubmitting?.();
-  }, [location.pathname, setS, cabinet]);
+    clearBusy();
+    resetVideoSubmitting?.();
+  }, [location.pathname, setS, clearBusy, resetVideoSubmitting]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -219,12 +221,12 @@ export function AppProvider({ children, forceMobile = false }) {
       });
       params.delete('instagram');
     }
-    cabinet.clearBusy();
-    void cabinet.refreshAll();
+    clearBusy();
+    void refreshAll();
     params.delete('reason');
     const rest = params.toString();
     navigate({ pathname: location.pathname, search: rest ? `?${rest}` : '' }, { replace: true });
-  }, [page, location.pathname, location.search, navigate, cabinet, setS]);
+  }, [page, location.pathname, location.search, navigate, setS, clearBusy, refreshAll]);
 
   const t = dict[lang];
 
