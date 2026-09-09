@@ -12,6 +12,7 @@ _WAVE_MODEL_LABELS: dict[str, str] = {
     "nano-banana-2": "Nano Banana",
     "nano-banana-pro": "Nano Banana Pro",
     "gpt-image-2": "GPT Image 2",
+    "gpt-image-2.5-sunburst": "GPT Image 2.5 Sunburst",
     "seedream-v5.0-pro": "Seedream 5 Pro",
     "wan-2.7": "Wan 2.7",
     "wan-2.7-pro": "Wan 2.7 Pro",

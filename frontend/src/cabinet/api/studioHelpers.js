@@ -127,13 +127,20 @@ export const FALLBACK_GEN_MODELS = [
   { id: 'nano-banana-2', label: 'Nano Banana', nsfw: false, note: '' },
   { id: 'nano-banana-pro', label: 'Nano Banana Pro', nsfw: false, note: '' },
   { id: 'gpt-image-2', label: 'GPT Image 2', nsfw: false, note: '' },
+  { id: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst', nsfw: false, note: 'детализация' },
   { id: 'seedream-v5.0-pro', label: 'Seedream 5 Pro', nsfw: false, note: '' },
   { id: 'wan-2.7', label: 'Wan 2.7', nsfw: true, note: '' },
   { id: 'wan-2.7-pro', label: 'Wan 2.7 Pro', nsfw: true, note: '' },
 ]
 
 /** Как backend WORKFLOW_REGULAR_MODELS — все обычные движки WaveSpeed. */
-export const REGULAR_ENGINE_IDS = ['nano-banana-2', 'nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
+export const REGULAR_ENGINE_IDS = [
+  'nano-banana-2',
+  'nano-banana-pro',
+  'gpt-image-2',
+  'gpt-image-2.5-sunburst',
+  'seedream-v5.0-pro',
+]
 /** NSFW + Seedream (cross-profile), как в workflow и mm-os-bridge. */
 export const NSFW_ENGINE_IDS = ['seedream-v5.0-pro', 'wan-2.7', 'wan-2.7-pro']
 

@@ -12,6 +12,7 @@ WaveModelId = Literal[
     "nano-banana-2",
     "nano-banana-pro",
     "gpt-image-2",
+    "gpt-image-2.5-sunburst",
     "wan-2.7",
     "seedream-v5.0-pro",
 ]
@@ -19,7 +20,14 @@ WanEditTier = Literal["standard", "pro"]
 GrokPipelineKind = Literal["none", "light", "standard", "heavy", "workflow"]
 
 _WAVE_MODELS = frozenset(
-    {"nano-banana-2", "nano-banana-pro", "gpt-image-2", "wan-2.7", "seedream-v5.0-pro"}
+    {
+        "nano-banana-2",
+        "nano-banana-pro",
+        "gpt-image-2",
+        "gpt-image-2.5-sunburst",
+        "wan-2.7",
+        "seedream-v5.0-pro",
+    }
 )
 
 
@@ -118,7 +126,15 @@ def demo_request_eligible_for_free_slot(
     if tier == "pro":
         return False
 
-    regular_models = frozenset({"nano-banana-2", "nano-banana-pro", "gpt-image-2", "seedream-v5.0-pro"})
+    regular_models = frozenset(
+        {
+            "nano-banana-2",
+            "nano-banana-pro",
+            "gpt-image-2",
+            "gpt-image-2.5-sunburst",
+            "seedream-v5.0-pro",
+        }
+    )
     nsfw_models = frozenset({"wan-2.7", "seedream-v5.0-pro"})
 
     if profile == "regular" and model in regular_models:

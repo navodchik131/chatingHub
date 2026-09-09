@@ -30,6 +30,34 @@ SEEDREAM_V45_EDIT_PATH = "/api/v3/bytedance/seedream-v4.5/edit"
 SEEDREAM_V50_PRO_EDIT_PATH = "/api/v3/bytedance/seedream-v5.0-pro/edit"
 GPT_IMAGE_2_EDIT_PATH = "/api/v3/openai/gpt-image-2/edit"
 GPT_IMAGE_2_T2I_PATH = "/api/v3/openai/gpt-image-2/text-to-image"
+GPT_IMAGE_25_SUNBURST_EDIT_PATH = "/api/v3/openai/gpt-image-2.5-sunburst/edit"
+GPT_IMAGE_25_SUNBURST_T2I_PATH = "/api/v3/openai/gpt-image-2.5-sunburst/text-to-image"
+
+# Семейство OpenAI GPT Image на WaveSpeed — одинаковые параметры API (images, prompt, quality, resolution).
+_GPT_IMAGE_WAVE_MODELS = frozenset(
+    {
+        "gpt-image-2",
+        "gpt-image-2.5-sunburst",
+    }
+)
+
+
+def gpt_image_edit_path(wave_model_id: str) -> str:
+    """REST path edit для GPT Image / GPT Image 2.5 Sunburst."""
+    model = (wave_model_id or "gpt-image-2").strip().lower()
+    return {
+        "gpt-image-2": GPT_IMAGE_2_EDIT_PATH,
+        "gpt-image-2.5-sunburst": GPT_IMAGE_25_SUNBURST_EDIT_PATH,
+    }.get(model, GPT_IMAGE_2_EDIT_PATH)
+
+
+def gpt_image_t2i_path(wave_model_id: str) -> str:
+    """REST path text-to-image для GPT Image / GPT Image 2.5."""
+    model = (wave_model_id or "gpt-image-2").strip().lower()
+    return {
+        "gpt-image-2": GPT_IMAGE_2_T2I_PATH,
+        "gpt-image-2.5-sunburst": GPT_IMAGE_25_SUNBURST_T2I_PATH,
+    }.get(model, GPT_IMAGE_2_T2I_PATH)
 NANO_BANANA_PRO_T2I_PATH = "/api/v3/google/nano-banana-pro/text-to-image"
 NANO_BANANA_2_T2I_PATH = "/api/v3/google/nano-banana-2/text-to-image"
 SEEDREAM_V50_PRO_T2I_PATH = "/api/v3/bytedance/seedream-v5.0-pro"
@@ -823,12 +851,13 @@ async def gpt_image_2_edit_image_url(
     resolution: str = "1k",
     quality: str = "medium",
     output_format: str = "png",
+    wave_model_id: str = "gpt-image-2",
     timeout_submit: float = 300.0,
     poll_interval: float = 2.0,
     max_polls: int = 120,
     on_task_submitted: Callable[[str], Awaitable[None]] | None = None,
 ) -> WaveSpeedImageResult:
-    """Развёртка модели — OpenAI GPT Image 2 Edit на WaveSpeed."""
+    """OpenAI GPT Image / GPT Image 2.5 Sunburst edit на WaveSpeed."""
     if not image_urls:
         raise RuntimeError("no image URLs")
     if not (prompt or "").strip():
@@ -841,9 +870,10 @@ async def gpt_image_2_edit_image_url(
         fmt = "jpeg"
     if fmt not in ("jpeg", "png", "webp"):
         fmt = "png"
-    post_path = GPT_IMAGE_2_EDIT_PATH
+    model = (wave_model_id or "gpt-image-2").strip().lower()
+    post_path = gpt_image_edit_path(model)
     body: dict[str, Any] = {
-        "images": image_urls[:10],
+        "images": image_urls[:16],
         "prompt": prompt.strip(),
         "aspect_ratio": ar,
         "resolution": res,
@@ -1200,7 +1230,7 @@ async def workflow_text_to_image_url(
     model = (wave_model_id or "wan-2.7").strip().lower()
     res = normalize_workflow_image_resolution(model, resolution)
     ar = (aspect_ratio or "3:4").strip()
-    if model == "gpt-image-2":
+    if model in _GPT_IMAGE_WAVE_MODELS:
         body: dict[str, Any] = {
             "prompt": prompt.strip(),
             "aspect_ratio": ar,
@@ -1210,7 +1240,7 @@ async def workflow_text_to_image_url(
             "enable_sync_mode": False,
             "enable_base64_output": False,
         }
-        post_path = GPT_IMAGE_2_T2I_PATH
+        post_path = gpt_image_t2i_path(model)
     elif model == "nano-banana-pro":
         from app.services.studio_prompt_bundle import compact_studio_prompt_for_nano_banana
 
@@ -1342,13 +1372,14 @@ async def workflow_edit_image_url(
             resolution=res,
             on_task_submitted=on_task_submitted,
         )
-    if model == "gpt-image-2":
+    if model in _GPT_IMAGE_WAVE_MODELS:
         return await gpt_image_2_edit_image_url(
             api_key=api_key,
             image_urls=image_urls,
             prompt=prompt,
             aspect_ratio=aspect_ratio,
             resolution=res,
+            wave_model_id=model,
             on_task_submitted=on_task_submitted,
         )
     if model == "wan-2.7":
@@ -1371,7 +1402,8 @@ async def workflow_edit_image_url(
         )
     raise RuntimeError(
         f"Неизвестная модель workflow: {wave_model_id}. "
-        "Доступны: gpt-image-2, nano-banana-2, nano-banana-pro, seedream-v5.0-pro, wan-2.7"
+        "Доступны: gpt-image-2, gpt-image-2.5-sunburst, "
+        "nano-banana-2, nano-banana-pro, seedream-v5.0-pro, wan-2.7"
     )
 
 

@@ -8,6 +8,8 @@ from app.services.studio_workflow_image_resolution import (
 def test_normalize_workflow_image_resolution_per_model():
     assert normalize_workflow_image_resolution("gpt-image-2", "4k") == "4k"
     assert normalize_workflow_image_resolution("gpt-image-2", "8k") == "1k"
+    assert normalize_workflow_image_resolution("gpt-image-2.5-sunburst", "2k") == "2k"
+    assert normalize_workflow_image_resolution("gpt-image-2.5-sunburst", "4k") == "4k"
     assert normalize_workflow_image_resolution("seedream-v5.0-pro", "4k") == "1k"
     assert normalize_workflow_image_resolution("wan-2.7-pro", "2k") == "2k"
 

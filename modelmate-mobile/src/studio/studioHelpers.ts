@@ -61,7 +61,14 @@ export function normalizeWaveModel(id: string, nsfw: boolean) {
   const mapped = AI_MODEL_MAP[x] || x;
   if (mapped === 'wan-2.7-pro') return { apiId: 'wan-2.7', tier: 'pro' };
   if (mapped === 'wan-2.7') return { apiId: 'wan-2.7', tier: 'standard' };
-  if (['nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro'].includes(mapped)) {
+  if (
+    [
+      'nano-banana-pro',
+      'gpt-image-2',
+      'gpt-image-2.5-sunburst',
+      'seedream-v5.0-pro',
+    ].includes(mapped)
+  ) {
     return { apiId: mapped, tier: 'standard' };
   }
   return { apiId: nsfw ? 'seedream-v5.0-pro' : 'nano-banana-pro', tier: 'standard' };

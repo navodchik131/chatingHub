@@ -310,6 +310,7 @@ export function resolveDonationBalances(
 export const AI_ENGINE_LABELS: Record<string, string> = {
   'nano-banana-pro': 'Nano Banana Pro',
   'gpt-image-2': 'GPT Image',
+  'gpt-image-2.5-sunburst': 'GPT Image 2.5 Sunburst',
   'seedream-v5.0-pro': 'Seedream 5 Pro',
   'wan-2.7-pro': 'Wan 2.7 Pro',
   'wan-2.7': 'Wan 2.7',

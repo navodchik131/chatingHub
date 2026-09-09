@@ -765,12 +765,19 @@
     }
   }
 
-  const REGULAR_ENGINE_IDS = ['nano-banana-2', 'nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro']
+  const REGULAR_ENGINE_IDS = [
+    'nano-banana-2',
+    'nano-banana-pro',
+    'gpt-image-2',
+    'gpt-image-2.5-sunburst',
+    'seedream-v5.0-pro',
+  ]
   const NSFW_ENGINE_IDS = ['wan-2.7', 'wan-2.7-pro', 'seedream-v5.0-pro']
   const FALLBACK_GEN_MODELS = [
     { id: 'nano-banana-2', label: 'Nano Banana', nsfwOnly: false },
     { id: 'nano-banana-pro', label: 'Nano Banana Pro', nsfwOnly: false },
     { id: 'gpt-image-2', label: 'GPT Image 2', nsfwOnly: false },
+    { id: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst', nsfwOnly: false },
     { id: 'seedream-v5.0-pro', label: 'Seedream 5 Pro', nsfwOnly: false },
     { id: 'wan-2.7', label: 'Wan 2.7', nsfwOnly: true },
     { id: 'wan-2.7-pro', label: 'Wan 2.7 Pro', nsfwOnly: true },

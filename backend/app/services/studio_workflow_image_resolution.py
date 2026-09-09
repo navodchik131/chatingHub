@@ -8,6 +8,7 @@ WORKFLOW_MODEL_RESOLUTION_OPTIONS: dict[str, tuple[str, ...]] = {
     "nano-banana-2": ("1k", "2k", "4k"),
     "nano-banana-pro": ("1k", "2k", "4k"),
     "gpt-image-2": ("1k", "2k", "4k"),
+    "gpt-image-2.5-sunburst": ("1k", "2k", "4k"),
     "seedream-v5.0-pro": ("1k", "2k"),
     "wan-2.7": ("1k", "2k", "4k"),
 }
@@ -16,6 +17,7 @@ WORKFLOW_MODEL_RESOLUTION_DEFAULT: dict[str, str] = {
     "nano-banana-2": "1k",
     "nano-banana-pro": "2k",
     "gpt-image-2": "1k",
+    "gpt-image-2.5-sunburst": "1k",
     "seedream-v5.0-pro": "1k",
     "wan-2.7": "2k",
 }

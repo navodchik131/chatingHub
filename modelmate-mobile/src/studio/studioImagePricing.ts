@@ -8,6 +8,7 @@ const WS_BASE_CREDITS: Record<string, number> = {
   'nano-banana-2': 2,
   'nano-banana-pro': 3,
   'gpt-image-2': 3,
+  'gpt-image-2.5-sunburst': 2,
   'wan-2.7': 2,
   'seedream-v5.0-pro': 3,
 }
@@ -102,7 +103,13 @@ export function studioGenerationUsesDemo(params: {
     (params.wanEditTier || 'standard').toString().toLowerCase() === 'pro' ? 'pro' : 'standard'
   if (tier === 'pro') return false
 
-  const regularModels = new Set(['nano-banana-2', 'nano-banana-pro', 'gpt-image-2', 'seedream-v5.0-pro'])
+  const regularModels = new Set([
+    'nano-banana-2',
+    'nano-banana-pro',
+    'gpt-image-2',
+    'gpt-image-2.5-sunburst',
+    'seedream-v5.0-pro',
+  ])
   const nsfwModels = new Set(['wan-2.7', 'seedream-v5.0-pro'])
 
   if (profile === 'regular') return regularModels.has(model)

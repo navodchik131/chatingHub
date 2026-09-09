@@ -77,6 +77,11 @@ _MODEL_UI: dict[str, dict[str, Any]] = {
         "nsfw_only": False,
         "aspect_keys": sorted(_GPT_IMAGE_ASPECTS),
     },
+    "gpt-image-2.5-sunburst": {
+        "label": "GPT Image 2.5 Sunburst",
+        "nsfw_only": False,
+        "aspect_keys": sorted(_GPT_IMAGE_ASPECTS),
+    },
     "wan-2.7": {
         "label": "Wan 2.7",
         "nsfw_only": True,

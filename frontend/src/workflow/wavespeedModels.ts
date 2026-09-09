@@ -26,6 +26,7 @@ export const REGULAR_IMAGE_MODEL_IDS = [
   'nano-banana-2',
   'nano-banana-pro',
   'gpt-image-2',
+  'gpt-image-2.5-sunburst',
   'seedream-v5.0-pro',
 ] as const
 
@@ -95,6 +96,7 @@ function defaultResolutionsForModel(modelId: string): GenerationResolutionOption
     'nano-banana-2': ['1k', '2k', '4k'],
     'nano-banana-pro': ['1k', '2k', '4k'],
     'gpt-image-2': ['1k', '2k', '4k'],
+    'gpt-image-2.5-sunburst': ['1k', '2k', '4k'],
     'seedream-v5.0-pro': ['1k', '2k'],
     'wan-2.7': ['1k', '2k', '4k'],
   }
@@ -108,6 +110,7 @@ function defaultResolutionForModel(modelId: string): string {
     'nano-banana-2': '1k',
     'nano-banana-pro': '2k',
     'gpt-image-2': '1k',
+    'gpt-image-2.5-sunburst': '1k',
     'seedream-v5.0-pro': '1k',
     'wan-2.7': '2k',
   }
@@ -127,6 +130,7 @@ function fallbackGenerationModels(): GenerationModelDefinition[] {
     withRes('nano-banana-2', 'Nano Banana', false),
     withRes('nano-banana-pro', 'Nano Banana Pro', false),
     withRes('gpt-image-2', 'GPT Image', false),
+    withRes('gpt-image-2.5-sunburst', 'GPT Image 2.5 Sunburst', false),
     withRes('seedream-v5.0-pro', 'Seedream V5 Pro', false),
     withRes('wan-2.7', 'Wan 2.7', true),
     withRes('wan-2.7-pro', 'Wan 2.7 Pro', true),

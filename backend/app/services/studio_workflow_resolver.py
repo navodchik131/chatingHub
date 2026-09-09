@@ -24,6 +24,7 @@ WORKFLOW_WAVE_MODELS = frozenset(
         "nano-banana-2",
         "nano-banana-pro",
         "gpt-image-2",
+        "gpt-image-2.5-sunburst",
         "wan-2.7",
         "wan-2.7-pro",
         "seedream-v5.0-pro",
@@ -33,7 +34,13 @@ WORKFLOW_WAVE_MODELS = frozenset(
 WORKFLOW_CROSS_PROFILE_MODELS = frozenset({"seedream-v5.0-pro"})
 WORKFLOW_NSFW_ONLY_MODELS = frozenset({"wan-2.7", "wan-2.7-pro"})
 WORKFLOW_REGULAR_MODELS = frozenset(
-    {"nano-banana-2", "nano-banana-pro", "gpt-image-2", "seedream-v5.0-pro"}
+    {
+        "nano-banana-2",
+        "nano-banana-pro",
+        "gpt-image-2",
+        "gpt-image-2.5-sunburst",
+        "seedream-v5.0-pro",
+    }
 )
 
 _PRIMARY_REF_ROLE_HINTS = (
