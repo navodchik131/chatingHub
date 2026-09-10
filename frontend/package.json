@@ -11,7 +11,7 @@
     "build:site": "vite build --config vite.site.config.js && node scripts/check-prod-build.mjs",
     "build:workflow": "vite build --config vite.workflow.config.js",
     "preview": "vite preview --config vite.site.config.js --port 5173 --strictPort",
-    "sync-design": "node scripts/sync-design.mjs"
+    "sync-design:legacy": "node legacy/design-code/sync-design.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.1",

@@ -68,7 +68,7 @@ python -m uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port
 ```bash
 cd frontend
 npm install
-npm run sync-design   # при первом запуске или после правок макета
+npm run sync-design:legacy   # только для DesignCode-макета (не prod)
 npm run dev
 ```
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.auth_session import bump_auth_token_version
 from app.auth.cookie_auth import clear_auth_cookie, set_auth_cookie
 from app.auth.deps import get_current_user
 from app.auth.jwt_utils import create_access_token
@@ -113,7 +114,7 @@ async def register(
         device_signal=device_signal_from_request(request),
     )
     await session.commit()
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.id, token_version=int(user.auth_token_version or 0))
     set_auth_cookie(response, token)
     return TokenOut(access_token=token)
 
@@ -156,7 +157,7 @@ async def login(
         raise HTTPException(status_code=401, detail="invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="account disabled")
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.id, token_version=int(user.auth_token_version or 0))
     set_auth_cookie(response, token)
     return TokenOut(access_token=token)
 
@@ -190,7 +191,7 @@ async def telegram_login_or_register(
         )
         await record_funnel_event_once(session, user=user, event="signup_telegram")
     await session.commit()
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.id, token_version=int(user.auth_token_version or 0))
     set_auth_cookie(response, token)
     return TokenOut(access_token=token)
 
@@ -305,7 +306,13 @@ async def telegram_mobile_link_poll(
 
 
 @router.post("/logout")
-async def logout(response: Response) -> dict:
+async def logout(
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+) -> dict:
+    await bump_auth_token_version(session, user)
+    await session.commit()
     clear_auth_cookie(response)
     return {"ok": True}
 
@@ -328,7 +335,7 @@ async def complete_email(
         password=body.password,
     )
     await session.commit()
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.id, token_version=int(user.auth_token_version or 0))
     set_auth_cookie(response, token)
     return TokenOut(access_token=token)
 
@@ -364,6 +371,7 @@ async def change_password(
     if not verify_password(body.current_password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Неверный текущий пароль")
     user.hashed_password = hash_password(body.new_password)
+    await bump_auth_token_version(session, user)
     await session.commit()
     return {"ok": True}
 

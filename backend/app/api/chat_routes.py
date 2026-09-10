@@ -22,6 +22,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
+from app.auth.auth_session import user_from_access_token
 from app.auth.jwt_utils import decode_token
 from app.config import BACKEND_DIR, settings
 from app.connectors.telegram.bot_for_user import open_telegram_bot_for_owner
@@ -509,13 +510,7 @@ async def api_conversation_avatar(
     else:
         if creds is None or creds.scheme.lower() != "bearer":
             raise HTTPException(status_code=401, detail="not authenticated")
-        try:
-            user_id = int(decode_token(creds.credentials))
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=401, detail="invalid token") from None
-        user = await session.get(User, user_id)
-        if not user or not user.is_active:
-            raise HTTPException(status_code=401, detail="user not found")
+        user = await user_from_access_token(session, creds.credentials)
         assert_permission(user, PERM_CHAT)
         await _require_chat_plan(session, user)
         oid = workspace_owner_id(user)
@@ -1613,14 +1608,10 @@ async def websocket_updates(
     if not token:
         await ws.close(code=4401)
         return
-    try:
-        uid = int(decode_token(token))
-    except ValueError:
-        await ws.close(code=4401)
-        return
     async with SessionLocal() as s:
-        u = await s.get(User, uid)
-        if not u or not u.is_active:
+        try:
+            u = await user_from_access_token(s, token)
+        except HTTPException:
             await ws.close(code=4401)
             return
         wid = workspace_owner_id(u)

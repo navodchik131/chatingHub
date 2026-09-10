@@ -29,8 +29,9 @@ sudo nginx -t && sudo systemctl reload nginx
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend studio-worker
 ```
 
-На prod API работает с `APP_ROLE=api`, генерации студии, companion-очередь и retry архива — в `studio-worker` (`APP_ROLE=worker`).
-Prod SPA — только React (`dist-site`); legacy `mm-os-bridge.js` в `frontend/legacy/mm-os/` (не в prod build).
+На prod API (`APP_ROLE=api`) — только HTTP/WebSocket. В `studio-worker` (`APP_ROLE=worker`): studio jobs, companion queue, archive retry, retention/cleanup, fanvue poll.
+Prod SPA — React `dist-site`. Legacy DesignCode: `frontend/legacy/design-code/` (не в prod build).
+Logout/смена пароля инвалидируют JWT (`auth_token_version`). Rate limit auth — Postgres на prod.
 В `backend/.env` обязательны `JWT_SECRET`, `JWT_MEDIA_SECRET`, `YOOKASSA_WEBHOOK_SECRET` (если ЮKassa включена).
 
 ## Обновление после правок
@@ -109,7 +110,7 @@ docker compose exec frontend wc -c /usr/share/nginx/html/index.html
 ```bash
 docker compose up -d --build
 # кабинет http://127.0.0.1:5180/  ·  workflow http://127.0.0.1:5180/workflow/
-cd frontend && npm install && npm run sync-design && npm run dev        # кабинет :5174
+cd frontend && npm install && npm run dev:site        # React SPA :5173
 cd frontend && npm run dev:site                                          # лендинг :5173
 cd frontend && npm run dev:workflow                                     # workflow :5175
 ```

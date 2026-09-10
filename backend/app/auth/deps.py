@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
-from app.auth.cookie_auth import read_auth_cookie
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.jwt_utils import decode_token
+from app.auth.auth_session import user_from_access_token
+from app.auth.cookie_auth import read_auth_cookie
 from app.db.models import User
 from app.db.session import get_session
 
@@ -27,24 +26,20 @@ async def get_current_user(
         raw_token = read_auth_cookie(request)
     if not raw_token:
         raise HTTPException(status_code=401, detail="not authenticated")
-    try:
-        sub = decode_token(raw_token)
-        user_id = int(sub)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=401, detail="invalid token") from None
+    user = await user_from_access_token(session, raw_token)
     stmt = (
         select(User)
-        .where(User.id == user_id, User.is_active.is_(True))
+        .where(User.id == user.id)
         .options(
             selectinload(User.subscription),
             selectinload(User.credit_account),
         )
     )
     r = await session.execute(stmt)
-    user = r.scalar_one_or_none()
-    if not user:
+    loaded = r.scalar_one_or_none()
+    if loaded is None:
         raise HTTPException(status_code=401, detail="user not found")
-    return user
+    return loaded
 
 
 async def get_platform_admin(

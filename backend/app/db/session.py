@@ -462,6 +462,8 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_companion_media_library)
         await conn.run_sync(_migrate_creator_references)
         await conn.run_sync(_migrate_platform_news)
+        await conn.run_sync(_migrate_auth_token_version)
+        await conn.run_sync(_migrate_http_rate_limit_buckets)
     await refresh_companion_goal_columns_ready()
     from app.db.alembic_runner import run_alembic_upgrade_head
 
@@ -2294,6 +2296,27 @@ def _migrate_trialing_to_credits_demo(sync_conn) -> None:
             "INSERT INTO app_meta (key, value) VALUES ('trialing_to_credits_demo_v1', 'done')"
         )
     )
+
+
+def _migrate_auth_token_version(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+    if not insp.has_table("users"):
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "auth_token_version" not in cols:
+        sync_conn.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN auth_token_version INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+
+
+def _migrate_http_rate_limit_buckets(sync_conn) -> None:
+    from app.db.models import HttpRateLimitBucket
+
+    HttpRateLimitBucket.__table__.create(sync_conn, checkfirst=True)
 
 
 def _migrate_workflow_workspaces_table(sync_conn) -> None:

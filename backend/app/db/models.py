@@ -139,6 +139,8 @@ class User(Base):
     telegram_linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     """false — вход через TG без подтверждённого email (нужно дозаполнить)."""
     auth_email_verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    """Инкремент при logout/смене пароля — инвалидирует старые JWT (claim tv)."""
+    auth_token_version: Mapped[int] = mapped_column(Integer, default=0)
     """Упрощённый UI студии: скрыть SFW/NSFW и выбор модели; всегда NSFW + Seedream."""
     ui_simplified: Mapped[bool] = mapped_column(Boolean, default=True)
     """Язык интерфейса кабинета: ru | en."""
@@ -295,6 +297,16 @@ class DemoDeviceQuota(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class HttpRateLimitBucket(Base):
+    """Sliding-window rate limit (Postgres) — общий для нескольких API-процессов."""
+
+    __tablename__ = "http_rate_limit_buckets"
+
+    bucket_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    hit_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class UsageEvent(Base):

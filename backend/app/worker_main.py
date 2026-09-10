@@ -10,28 +10,17 @@ import asyncio
 import logging
 import signal
 
+from app.background_loops import worker_process_coroutines
 from app.config import settings
 from app.db.session import init_db
 from app.services.startup_security import assert_startup_security
-from app.services.studio_generation_storage import retry_pending_studio_archives
-from app.services.studio_jobs import recover_studio_jobs_on_startup, studio_jobs_worker_loop
+from app.services.studio_jobs import recover_studio_jobs_on_startup
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger(__name__)
-
-
-async def _studio_archive_retry_loop() -> None:
-    await asyncio.sleep(90)
-    interval = max(60, int(settings.studio_archive_retry_interval_seconds))
-    while True:
-        try:
-            await retry_pending_studio_archives()
-        except Exception:
-            log.exception("Studio archive retry loop failed")
-        await asyncio.sleep(interval)
 
 
 async def _run_worker() -> None:
@@ -59,15 +48,8 @@ async def _run_worker() -> None:
         await recover_studio_jobs_on_startup()
     except Exception:
         log.exception("studio jobs startup recovery failed")
-    worker_coros = [
-        studio_jobs_worker_loop(),
-        _studio_archive_retry_loop(),
-    ]
     if settings.companion_jobs_worker_loop_enabled:
-        from app.services.companion_bot.job_queue import (
-            companion_job_worker_loop,
-            recover_stale_companion_jobs_on_startup,
-        )
+        from app.services.companion_bot.job_queue import recover_stale_companion_jobs_on_startup
 
         try:
             recovered = await recover_stale_companion_jobs_on_startup()
@@ -75,10 +57,15 @@ async def _run_worker() -> None:
                 log.info("Companion jobs recovered on worker startup: %s", recovered)
         except Exception:
             log.exception("Companion job recovery on worker startup failed")
-        worker_coros.append(companion_job_worker_loop())
-        log.info("Companion job worker loop enabled in studio-worker")
-    log.info("Studio worker started (database=%s)", settings.database_url)
-    await asyncio.gather(*worker_coros)
+    coros = worker_process_coroutines()
+    if not coros:
+        raise RuntimeError("worker: no background loops configured")
+    log.info(
+        "Studio worker started (database=%s, loops=%s)",
+        settings.database_url,
+        len(coros),
+    )
+    await asyncio.gather(*coros)
 
 
 def main() -> None:
@@ -93,7 +80,6 @@ def main() -> None:
         try:
             loop.add_signal_handler(sig, _stop)
         except NotImplementedError:
-            # Windows
             signal.signal(sig, lambda *_: _stop())
 
     try:

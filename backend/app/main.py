@@ -24,13 +24,14 @@ from app.connectors.telegram.state import (
     set_telegram_api_not_configured,
     set_telegram_api_ok,
 )
+from app.background_loops import (
+    spawn_companion_maintenance_tasks,
+    spawn_fanvue_poll_task,
+    spawn_studio_maintenance_tasks,
+)
 from app.db.session import init_db
-from app.services.startup_security import assert_startup_security
-from app.services.studio_generation_storage import retry_pending_studio_archives
-from app.services.studio_generations_retention import purge_studio_generations_expired
-from app.services.studio_runtime_cleanup import purge_studio_runtime_artifacts
 from app.services.email_campaigns import email_campaign_worker_loop
-from app.services.fanvue_inbox_poll import fanvue_inbox_poll_loop
+from app.services.startup_security import assert_startup_security
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,38 +74,6 @@ def _create_legacy_telegram_bot() -> Bot:
     return Bot(token=token)
 
 
-async def _studio_generations_retention_loop() -> None:
-    """Первый прогон с задержкой, чтобы не конкурировать со стартом."""
-    await asyncio.sleep(120)
-    while True:
-        try:
-            await purge_studio_generations_expired()
-        except Exception:
-            log.exception("Studio generations retention purge failed")
-        await asyncio.sleep(max(3600, settings.studio_generations_retention_interval_hours * 3600))
-
-
-async def _studio_runtime_cleanup_loop() -> None:
-    await asyncio.sleep(180)
-    while True:
-        try:
-            await purge_studio_runtime_artifacts()
-        except Exception:
-            log.exception("Studio runtime cleanup failed")
-        await asyncio.sleep(max(3600, settings.studio_runtime_cleanup_interval_hours * 3600))
-
-
-async def _studio_archive_retry_loop() -> None:
-    await asyncio.sleep(90)
-    interval = max(60, int(settings.studio_archive_retry_interval_seconds))
-    while True:
-        try:
-            await retry_pending_studio_archives()
-        except Exception:
-            log.exception("Studio archive retry loop failed")
-        await asyncio.sleep(interval)
-
-
 async def _deferred_recover_studio_jobs_on_startup() -> None:
     """Recovery после yield: healthcheck/nginx успевают подняться до тяжёлых studio jobs."""
     await asyncio.sleep(12)
@@ -137,13 +106,8 @@ async def lifespan(app: FastAPI):
     log.info("Database URL: %s", settings.database_url)
     bot: Bot | None = None
     polling_task: asyncio.Task[None] | None = None
-    retention_task: asyncio.Task[None] | None = None
-    runtime_cleanup_task: asyncio.Task[None] | None = None
-    archive_retry_task: asyncio.Task[None] | None = None
-    fanvue_poll_task: asyncio.Task[None] | None = None
+    background_tasks: list[asyncio.Task[None]] = []
     email_worker_task: asyncio.Task[None] | None = None
-    companion_feedback_task: asyncio.Task[None] | None = None
-    companion_style_index_task: asyncio.Task[None] | None = None
     companion_job_worker_task: asyncio.Task[None] | None = None
     exif_bot_polling_task: asyncio.Task[None] | None = None
     ig_bot_polling_task: asyncio.Task[None] | None = None
@@ -178,58 +142,11 @@ async def lifespan(app: FastAPI):
         log.info(
             "Telegram legacy polling выключен. Используйте интеграции + webhook (PUBLIC_APP_URL)."
         )
-    if settings.studio_generations_retention_days > 0:
-        retention_task = asyncio.create_task(_studio_generations_retention_loop())
-        log.info(
-            "Studio generations retention enabled: %s day(s), every %s h",
-            settings.studio_generations_retention_days,
-            settings.studio_generations_retention_interval_hours,
-        )
-    if settings.studio_runtime_cleanup_enabled:
-        runtime_cleanup_task = asyncio.create_task(_studio_runtime_cleanup_loop())
-        log.info(
-            "Studio runtime cleanup enabled: outline=%sd pose=%sd motion=%sd "
-            "workflow_refs=%sd jobs=%sd, every %s h",
-            settings.studio_outline_cache_retention_days,
-            settings.studio_pose_refs_retention_days,
-            settings.studio_motion_videos_retention_days,
-            settings.studio_workflow_refs_retention_days,
-            settings.studio_jobs_retention_days,
-            settings.studio_runtime_cleanup_interval_hours,
-        )
-    archive_retry_task: asyncio.Task[None] | None = None
-    if settings.studio_archive_retry_in_api:
-        archive_retry_task = asyncio.create_task(_studio_archive_retry_loop())
-        log.info(
-            "Studio archive retry loop: every %s s",
-            settings.studio_archive_retry_interval_seconds,
-        )
-    else:
-        log.info("Studio archive retry loop disabled in API (APP_ROLE=%s)", settings.app_role_normalized)
-    if settings.fanvue_inbox_poll_interval_seconds > 0:
-        fanvue_poll_task = asyncio.create_task(fanvue_inbox_poll_loop())
-        log.info(
-            "Fanvue inbox poll: every %s s (max %s chats × %s msgs)",
-            settings.fanvue_inbox_poll_interval_seconds,
-            settings.fanvue_inbox_poll_max_chats,
-            settings.fanvue_inbox_poll_max_messages_per_chat,
-        )
-    else:
-        fanvue_poll_task = None
-    from app.services.companion_bot.feedback import companion_feedback_loop
-
-    companion_feedback_task = asyncio.create_task(companion_feedback_loop())
-    log.info(
-        "Companion feedback loop: every %s h",
-        settings.companion_feedback_interval_hours,
-    )
-    from app.services.companion_bot.style_index import companion_style_index_loop
-
-    companion_style_index_task = asyncio.create_task(companion_style_index_loop())
-    log.info(
-        "Companion style index loop: every %s h",
-        settings.companion_style_index_interval_hours,
-    )
+    background_tasks.extend(spawn_studio_maintenance_tasks())
+    fanvue_task = spawn_fanvue_poll_task()
+    if fanvue_task is not None:
+        background_tasks.append(fanvue_task)
+    background_tasks.extend(spawn_companion_maintenance_tasks())
     from app.services.companion_bot.job_queue import (
         companion_job_worker_loop,
         recover_stale_companion_jobs_on_startup,
@@ -307,46 +224,16 @@ async def lifespan(app: FastAPI):
             await polling_task
         except asyncio.CancelledError:
             pass
-    if retention_task:
-        retention_task.cancel()
+    for task in background_tasks:
+        task.cancel()
         try:
-            await retention_task
-        except asyncio.CancelledError:
-            pass
-    if runtime_cleanup_task:
-        runtime_cleanup_task.cancel()
-        try:
-            await runtime_cleanup_task
-        except asyncio.CancelledError:
-            pass
-    if archive_retry_task:
-        archive_retry_task.cancel()
-        try:
-            await archive_retry_task
-        except asyncio.CancelledError:
-            pass
-    if fanvue_poll_task:
-        fanvue_poll_task.cancel()
-        try:
-            await fanvue_poll_task
+            await task
         except asyncio.CancelledError:
             pass
     if email_worker_task:
         email_worker_task.cancel()
         try:
             await email_worker_task
-        except asyncio.CancelledError:
-            pass
-    if companion_feedback_task:
-        companion_feedback_task.cancel()
-        try:
-            await companion_feedback_task
-        except asyncio.CancelledError:
-            pass
-    if companion_style_index_task:
-        companion_style_index_task.cancel()
-        try:
-            await companion_style_index_task
         except asyncio.CancelledError:
             pass
     if companion_job_worker_task:

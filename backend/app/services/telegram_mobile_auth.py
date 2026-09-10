@@ -261,7 +261,7 @@ async def complete_mobile_auth_session(
         )
         await record_funnel_event_once(session, user=user, event="signup_telegram")
 
-    token = create_access_token(str(user.id))
+    token = create_access_token(user.id, token_version=int(user.auth_token_version or 0))
     row.status = "done"
     row.access_token = token
     row.telegram_id = int(telegram_id)

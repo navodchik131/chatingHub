@@ -1018,9 +1018,18 @@ class Settings(BaseSettings):
         return self.app_role_normalized == "worker"
 
     @property
+    def background_maintenance_in_process(self) -> bool:
+        """Retention/cleanup/fanvue/companion index — worker на prod, all в dev."""
+        return self.app_role_normalized in ("all", "worker")
+
+    @property
     def studio_archive_retry_in_api(self) -> bool:
-        """Retry архивации studio — только monolith; на prod в studio-worker."""
-        return self.app_role_normalized == "all"
+        """Deprecated alias — используйте background_maintenance_in_process."""
+        return self.background_maintenance_in_process
+
+    @property
+    def studio_archive_retry_in_process(self) -> bool:
+        return self.background_maintenance_in_process
 
     @property
     def companion_jobs_worker_in_api(self) -> bool:

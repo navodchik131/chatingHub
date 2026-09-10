@@ -6,28 +6,28 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const repo = path.resolve(here, '../..')
+const frontendRoot = path.resolve(here, '../..')
+const repo = path.resolve(frontendRoot, '..')
 const srcDir = path.join(repo, 'Доработка дизайна')
-const osRoot = path.resolve(here, '..')
+const osRoot = here
 const BUILD_STAMP = process.env.BUILD_STAMP || Date.now().toString(36)
 
 const files = [
-  ['ModelMate OS.dc.html', 'index.html'],
-  ['ModelMate OS.dc.html', path.join('design', 'ModelMate OS.dc.html')],
-  ['support.js', path.join('public', 'support.js')],
-  ['support.js', path.join('design', 'support.js')],
+  ['ModelMate OS.dc.html', path.join(osRoot, 'index.html')],
+  ['ModelMate OS.dc.html', path.join(osRoot, 'design', 'ModelMate OS.dc.html')],
+  ['support.js', path.join(frontendRoot, 'public', 'support.js')],
+  ['support.js', path.join(osRoot, 'design', 'support.js')],
 ]
 
-for (const [fromName, toRel] of files) {
+for (const [fromName, to] of files) {
   const from = path.join(srcDir, fromName)
-  const to = path.join(osRoot, toRel)
   if (!fs.existsSync(from)) {
     console.error('missing', from)
     process.exit(1)
   }
   fs.mkdirSync(path.dirname(to), { recursive: true })
   fs.copyFileSync(from, to)
-  console.log('synced', fromName, '→', toRel)
+  console.log('synced', fromName, '→', path.relative(repo, to))
 }
 
 const AUTH_OVERLAY = `

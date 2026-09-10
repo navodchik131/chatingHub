@@ -40,15 +40,14 @@ npm run dev                   # http://127.0.0.1:5174/, proxy → :8080
 
 ```bash
 cd frontend
-npm run sync-design
+npm run sync-design:legacy
 docker compose up -d --build frontend
 ```
 
 ## Как устроено
 
 - **Prod:** React SPA (`src/cabinet`, `npm run build:site` → `dist-site`).
-- **Legacy (не prod):** `legacy/mm-os/mm-os-bridge.js` — DesignCode-макет + `frontend/index.html` + `sync-design`.
-- `scripts/sync-design.mjs` — копия макета + патчи API.
+- **Legacy (не prod):** `legacy/design-code/` + `legacy/mm-os/` — DesignCode-макет, `npm run sync-design:legacy`.
 - `Dockerfile` + `nginx.conf` — статика и proxy `/api` → `api:8080`.
 
 ## Production
