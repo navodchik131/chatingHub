@@ -15,6 +15,13 @@ if (!fs.existsSync(indexPath)) {
   process.exit(1)
 }
 
+for (const name of ['favicon.ico', 'favicon.svg']) {
+  if (!fs.existsSync(path.join(distSite, name))) {
+    console.error(`check-prod-build: missing dist-site/${name}`)
+    process.exit(1)
+  }
+}
+
 const html = fs.readFileSync(indexPath, 'utf8')
 const forbidden = ['mm-os-bridge', 'mm-os-api-full.js', 'MMOS_BRIDGE']
 const hits = forbidden.filter((token) => html.includes(token))

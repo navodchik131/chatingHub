@@ -40,6 +40,25 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+# Расширения статики: для них нельзя отдавать index.html — иначе /favicon.ico кэшируется как HTML
+_STATIC_ASSET_SUFFIXES = (
+    ".ico",
+    ".svg",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".webmanifest",
+    ".json",
+    ".js",
+    ".css",
+    ".woff",
+    ".woff2",
+    ".map",
+)
+
+
 class SPAStaticFiles(StaticFiles):
     """
     Starlette StaticFiles(html=True) не подставляет index.html для путей вроде /workspace
@@ -54,6 +73,7 @@ class SPAStaticFiles(StaticFiles):
                 exc.status_code != 404
                 or not self.html
                 or scope["method"] not in ("GET", "HEAD")
+                or any(path.endswith(suffix) for suffix in _STATIC_ASSET_SUFFIXES)
             ):
                 raise
             full_path, stat_result = await anyio.to_thread.run_sync(
