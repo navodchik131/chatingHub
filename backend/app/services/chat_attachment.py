@@ -9,6 +9,7 @@ from pathlib import Path
 from jose import JWTError, jwt
 
 from app.config import BACKEND_DIR, settings
+from app.services.media_jwt import media_jwt_secret
 
 CHAT_MEDIA_ROOT = (BACKEND_DIR / "data" / "chat_media").resolve()
 _ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4"}
@@ -80,14 +81,14 @@ def create_chat_attachment_access_token(
         "aid": attachment_id,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_chat_attachment_access_token(token: str) -> tuple[int, int]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:
@@ -111,14 +112,14 @@ def create_chat_media_public_token(
         "rel": relative_path,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_chat_media_public_token(token: str) -> tuple[int, str]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:
@@ -133,8 +134,6 @@ def decode_chat_media_public_token(token: str) -> tuple[int, str]:
 
 
 def chat_media_public_absolute_url(*, owner_id: int, relative_path: str) -> str:
-    from app.config import settings
-
     tok = create_chat_media_public_token(owner_id=owner_id, relative_path=relative_path)
     base = (settings.public_app_url or "").strip().rstrip("/")
     return f"{base}/api/chat/media-public?t={tok}"
@@ -150,14 +149,14 @@ def create_conversation_avatar_access_token(
         "cid": conversation_id,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_conversation_avatar_access_token(token: str) -> tuple[int, int]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:

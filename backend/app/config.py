@@ -20,6 +20,17 @@ class Settings(BaseSettings):
     )
 
     database_url: str = Field(default_factory=_default_sqlite_url)
+    # Пул SQLAlchemy (только для не-sqlite; см. db/session.py)
+    db_pool_size: int = Field(default=5, ge=1)
+    db_max_overflow: int = Field(default=10, ge=0)
+    db_pool_pre_ping: bool = Field(default=True)
+    # Одновременные фоновые studio jobs на процесс API
+    studio_max_concurrent_jobs: int = Field(default=4, ge=1, le=32)
+    # Rate limit auth (на IP, in-memory на процесс)
+    auth_register_rate_limit: int = Field(default=10, ge=1)
+    auth_register_rate_window_seconds: int = Field(default=3600, ge=60)
+    auth_login_rate_limit: int = Field(default=30, ge=1)
+    auth_login_rate_window_seconds: int = Field(default=900, ge=60)
 
     @field_validator("database_url", mode="after")
     @classmethod
@@ -37,6 +48,10 @@ class Settings(BaseSettings):
 
     # --- Auth / SaaS ---
     jwt_secret: str = Field(default="dev-change-me")
+    jwt_media_secret: str = Field(
+        default="",
+        description="Отдельный секрет для публичных медиа-JWT; пусто — fallback на JWT_SECRET.",
+    )
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
     fernet_key: str = Field(default="")

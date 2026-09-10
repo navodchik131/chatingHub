@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 
 from app.config import settings
+from app.services.media_jwt import media_jwt_secret
 
 
 def create_model_image_access_token(
@@ -28,7 +29,7 @@ def create_model_image_access_token(
         "iid": image_id,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def create_generation_image_access_token(
@@ -48,14 +49,14 @@ def create_generation_image_access_token(
         "gid": generation_id,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_generation_image_access_token(token: str) -> tuple[int, int]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:
@@ -80,14 +81,14 @@ def create_pose_reference_access_token(
         "fid": str(file_id)[:80],
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_pose_reference_access_token(token: str) -> tuple[int, str]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:
@@ -112,14 +113,14 @@ def create_motion_video_access_token(
         "fid": str(file_id)[:80],
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_motion_video_access_token(token: str) -> tuple[int, str]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:
@@ -137,7 +138,7 @@ def decode_model_image_access_token(token: str) -> tuple[int, int]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:
@@ -162,14 +163,14 @@ def create_workflow_ref_access_token(
         "rid": str(ref_id)[:80],
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_workflow_ref_access_token(token: str) -> tuple[int, str]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:
@@ -207,14 +208,14 @@ def create_shot_batch_output_access_token(
         payload["bid"] = int(batch_id)
     if frame_name:
         payload["fname"] = str(frame_name)[:80]
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_shot_batch_output_access_token(token: str) -> tuple[int, int, str, int | None, str | None]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:

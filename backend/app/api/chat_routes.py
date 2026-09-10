@@ -211,30 +211,12 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
     except Exception:
         return {"ok": False, "mode": "saas", "database": "down"}
 
-    db_path = ""
-    if settings.database_url.startswith("sqlite+aiosqlite"):
-        rest = settings.database_url.replace("sqlite+aiosqlite:///", "", 1)
-        db_path = rest
-    n_conv, n_msg = await count_rows(session)
-    registered_users = int(
-        await session.scalar(
-            select(func.count(User.id)).where(User.parent_user_id.is_(None))
-        )
-        or 0
-    )
     tg = get_telegram_api_status()
-    from app.services.fx_rate import get_usd_rate
-
-    await get_usd_rate()
     ops = studio_operations_pricing_public()
     credits_pricing = billing_credits_pricing_public()
     return {
         "ok": True,
         "mode": "saas",
-        "database_file": db_path,
-        "backend_dir": str(BACKEND_DIR),
-        "conversations_count": n_conv,
-        "messages_count": n_msg,
         "legacy_telegram_polling": bool(
             (settings.legacy_bot_token or "").strip() and settings.legacy_user_id > 0
         ),
@@ -257,7 +239,7 @@ async def api_health(session: AsyncSession = Depends(get_session)) -> dict:
         "signup_bonus_credits": settings.signup_bonus_credits,
         "demo_generations_grant": settings.demo_generations_grant,
         "studio_image_pricing": image_pricing_public_dict(),
-        "marketing_beta_creators_count": registered_users,
+        "marketing_beta_creators_count": int(settings.marketing_beta_creators_count),
         "billing_catalog": catalog_public_dict(),
         "billing_credit_pack_price_rub": settings.billing_credit_pack_price_rub,
         "billing_credit_pack_credits": settings.billing_credit_pack_credits,

@@ -29,6 +29,7 @@ from app.services.studio_keys import (
     studio_wavespeed_api_key,
 )
 from app.services.studio_aspect import normalize_aspect_key
+from app.services.workspace_model_access import assert_studio_generation_access
 from app.services.studio_generation_storage import (
     attach_studio_generation_wavespeed_task,
     mark_studio_generation_failed,
@@ -409,6 +410,7 @@ async def api_motion_control_turnaround(
     outfit_row = await session.get(StudioGeneration, outfit_gid)
     if not outfit_row or outfit_row.user_id != oid:
         raise HTTPException(status_code=404, detail="Образ (outfit) не найден")
+    await assert_studio_generation_access(session, user, outfit_row.studio_model_id)
     wave_model = (wave_model_id or "gpt-image-2").strip().lower()
     if wave_model == "wan-2.7-pro":
         wave_model = "wan-2.7"

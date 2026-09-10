@@ -25,6 +25,7 @@ from app.connectors.telegram.state import (
     set_telegram_api_ok,
 )
 from app.db.session import init_db
+from app.services.startup_security import assert_startup_security
 from app.services.studio_generation_storage import retry_pending_studio_archives
 from app.services.studio_generations_retention import purge_studio_generations_expired
 from app.services.studio_runtime_cleanup import purge_studio_runtime_artifacts
@@ -117,6 +118,7 @@ async def _deferred_recover_studio_jobs_on_startup() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    assert_startup_security()
     await init_db()
     try:
         from app.services.motion_video_outline import assert_ffmpeg_tools_available

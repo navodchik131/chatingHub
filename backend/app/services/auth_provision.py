@@ -8,7 +8,7 @@ from app.config import settings
 from app.db.models import CreditAccount, Subscription, SubscriptionStatus, User
 from app.services.billing_plan import BILLING_PLAN_CREDITS, BILLING_PLAN_STANDARD
 from app.services.funnel_analytics import record_funnel_event_once
-from app.services.demo_device_limit import demo_grant_for_device
+from app.services.demo_device_limit import demo_grant_for_device, try_consume_device_demo_slot
 from app.services.device_signal import DeviceSignal
 from app.services.partner import apply_partner_referral_on_signup, ensure_partner_slug
 from app.services.referral import apply_referral_on_signup, ensure_owner_referral_code
@@ -58,6 +58,15 @@ async def provision_workspace_owner(
             device_signal,
             default_grant=demo_grant,
         )
+        # Списываем слот устройства — без этого demo_used_count не растёт и лимит не работает.
+        if demo_grant > 0 and device_signal is not None:
+            consumed = await try_consume_device_demo_slot(
+                session,
+                device_signal,
+                user_id=user.id,
+            )
+            if not consumed:
+                demo_grant = 0
 
     session.add(
         Subscription(

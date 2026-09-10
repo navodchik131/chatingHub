@@ -10,6 +10,7 @@ from pathlib import Path
 from jose import JWTError, jwt
 
 from app.config import BACKEND_DIR, settings
+from app.services.media_jwt import media_jwt_secret
 
 MEDIA_ROOT = (BACKEND_DIR / "data" / "companion_media").resolve()
 _STORAGE_PREFIX = "data/companion_media/"
@@ -141,14 +142,14 @@ def create_companion_media_access_token(
         "aid": asset_id,
         "exp": expire,
     }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, media_jwt_secret(), algorithm=settings.jwt_algorithm)
 
 
 def decode_companion_media_access_token(token: str) -> tuple[int, int]:
     try:
         data = jwt.decode(
             token,
-            settings.jwt_secret,
+            media_jwt_secret(),
             algorithms=[settings.jwt_algorithm],
         )
     except JWTError as e:

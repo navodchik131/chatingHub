@@ -1,10 +1,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.cookie_auth import clear_auth_cookie, set_auth_cookie
 from app.auth.deps import get_current_user
 from app.auth.jwt_utils import create_access_token
 from app.auth.passwords import hash_password, verify_password
@@ -31,6 +32,7 @@ from app.schemas import (
 )
 from app.services.admin_access import user_is_platform_admin
 from app.services.device_signal import device_signal_from_request
+from app.services.rate_limit import enforce_rate_limit
 from app.services.auth_provision import provision_workspace_owner
 from app.services.billing_plan import normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
@@ -87,8 +89,15 @@ def _verify_telegram_body(body: TelegramLoginIn) -> TelegramLoginPayload:
 async def register(
     body: RegisterIn,
     request: Request,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> TokenOut:
+    await enforce_rate_limit(
+        request,
+        scope="auth_register",
+        max_calls=settings.auth_register_rate_limit,
+        window_seconds=float(settings.auth_register_rate_window_seconds),
+    )
     stmt = select(User).where(User.email == body.email.lower().strip())
     if (await session.execute(stmt)).scalar_one_or_none():
         raise HTTPException(status_code=400, detail="email already registered")
@@ -105,11 +114,23 @@ async def register(
     )
     await session.commit()
     token = create_access_token(str(user.id))
+    set_auth_cookie(response, token)
     return TokenOut(access_token=token)
 
 
 @router.post("/login", response_model=TokenOut)
-async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> TokenOut:
+async def login(
+    body: LoginIn,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> TokenOut:
+    await enforce_rate_limit(
+        request,
+        scope="auth_login",
+        max_calls=settings.auth_login_rate_limit,
+        window_seconds=float(settings.auth_login_rate_window_seconds),
+    )
     email = body.email.lower().strip()
     ml = (body.member_login or "").strip().lower()
     if ml:
@@ -136,6 +157,7 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="account disabled")
     token = create_access_token(str(user.id))
+    set_auth_cookie(response, token)
     return TokenOut(access_token=token)
 
 
@@ -143,6 +165,7 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)) -> 
 async def telegram_login_or_register(
     body: TelegramLoginIn,
     request: Request,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> TokenOut:
     if not settings.telegram_login_configured:
@@ -167,7 +190,9 @@ async def telegram_login_or_register(
         )
         await record_funnel_event_once(session, user=user, event="signup_telegram")
     await session.commit()
-    return TokenOut(access_token=create_access_token(str(user.id)))
+    token = create_access_token(str(user.id))
+    set_auth_cookie(response, token)
+    return TokenOut(access_token=token)
 
 
 @router.post("/telegram/mobile/start", response_model=TelegramMobileAuthStartOut)
@@ -196,9 +221,11 @@ async def telegram_mobile_auth_start(
 @router.get("/telegram/mobile/poll", response_model=TelegramMobileAuthPollOut)
 async def telegram_mobile_auth_poll(
     session_id: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> TelegramMobileAuthPollOut:
-    data = await poll_mobile_auth_session(session, session_id)
+    device_key = device_signal_from_request(request).device_key
+    data = await poll_mobile_auth_session(session, session_id, device_key=device_key)
     return TelegramMobileAuthPollOut(**data)
 
 
@@ -277,9 +304,16 @@ async def telegram_mobile_link_poll(
     return TelegramMobileAuthPollOut(**data)
 
 
+@router.post("/logout")
+async def logout(response: Response) -> dict:
+    clear_auth_cookie(response)
+    return {"ok": True}
+
+
 @router.post("/email/complete", response_model=TokenOut)
 async def complete_email(
     body: CompleteOwnerEmailIn,
+    response: Response,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
 ) -> TokenOut:
@@ -294,7 +328,9 @@ async def complete_email(
         password=body.password,
     )
     await session.commit()
-    return TokenOut(access_token=create_access_token(str(user.id)))
+    token = create_access_token(str(user.id))
+    set_auth_cookie(response, token)
+    return TokenOut(access_token=token)
 
 
 @router.patch("/profile", response_model=UserMeOut)

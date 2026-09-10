@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.auth.cookie_auth import read_auth_cookie
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,13 +16,19 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     session: AsyncSession = Depends(get_session),
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> User:
-    if creds is None or creds.scheme.lower() != "bearer":
+    raw_token: str | None = None
+    if creds is not None and creds.scheme.lower() == "bearer":
+        raw_token = creds.credentials
+    if not raw_token:
+        raw_token = read_auth_cookie(request)
+    if not raw_token:
         raise HTTPException(status_code=401, detail="not authenticated")
     try:
-        sub = decode_token(creds.credentials)
+        sub = decode_token(raw_token)
         user_id = int(sub)
     except (ValueError, TypeError):
         raise HTTPException(status_code=401, detail="invalid token") from None

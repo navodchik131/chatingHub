@@ -191,6 +191,8 @@ async def mark_studio_generation_provider_ready(
 
 async def _download_bytes_from_url(url: str) -> tuple[bytes | None, str | None]:
     """Скачивает по HTTPS; возвращает (bytes, content_type_header)."""
+    from app.services.safe_url import safe_https_download_bytes
+
     u = (url or "").strip()
     if not u:
         return None, None
@@ -198,17 +200,12 @@ async def _download_bytes_from_url(url: str) -> tuple[bytes | None, str | None]:
     timeout = float(settings.studio_archive_download_timeout_seconds)
     wait_s = 0.0
     last_err: Exception | None = None
-    r: httpx.Response | None = None
     for attempt in range(attempts):
         if wait_s > 0:
             await asyncio.sleep(wait_s)
         try:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-                r = await client.get(u)
-                r.raise_for_status()
-                data = r.content
-                ct = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
-                return data, ct or None
+            data, ct = await safe_https_download_bytes(u, timeout=timeout)
+            return data, ct
         except Exception as e:
             last_err = e
             log.warning(

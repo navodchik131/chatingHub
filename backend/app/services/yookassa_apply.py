@@ -34,6 +34,7 @@ from app.services.partner import (
     partner_first_payment_discount_rub,
 )
 from app.services.studio_workflow_defaults import provision_full_workflow_workspaces
+from app.services.yookassa_client import fetch_payment
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,22 @@ def _payment_amount_rub(payment_object: dict[str, Any]) -> Decimal:
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
     return Decimal(0)
+
+
+def subscription_allowed_amounts_rub(
+    expected: Decimal,
+    *,
+    meta_partner_discount_rub: int | None = None,
+) -> set[Decimal]:
+    """Допустимые суммы оплаты подписки (полная цена и партнёрская скидка)."""
+    q = Decimal("0.01")
+    full = expected.quantize(q, rounding=ROUND_HALF_UP)
+    allowed = {full}
+    if meta_partner_discount_rub is not None and meta_partner_discount_rub > 0:
+        allowed.add(
+            (full - Decimal(int(meta_partner_discount_rub))).quantize(q, rounding=ROUND_HALF_UP)
+        )
+    return allowed
 
 
 def credits_pack_allowed_amounts_rub(
@@ -75,6 +92,22 @@ async def apply_yookassa_payment_succeeded(
     pid = str(payment_object.get("id") or "").strip()
     if not pid:
         return {"ok": False, "error": "no payment id"}
+
+    # В prod доверяем только данным из API ЮKassa, а не телу webhook.
+    if settings.yookassa_configured:
+        try:
+            verified = await fetch_payment(pid)
+        except RuntimeError as e:
+            log.warning("yookassa: cannot verify payment %s: %s", pid, e)
+            return {"ok": False, "error": "verify_failed", "payment_id": pid}
+        if (verified.get("status") or "").strip() != "succeeded":
+            return {
+                "ok": False,
+                "error": "not_succeeded",
+                "payment_id": pid,
+                "status": verified.get("status"),
+            }
+        payment_object = verified
 
     existing = await session.get(YookassaProcessedPayment, pid)
     if existing:
@@ -121,7 +154,31 @@ async def apply_yookassa_payment_succeeded(
     resolved = resolve_product_id(product)
     spec = get_plan_spec(resolved)
     if spec is not None:
-        amount_rub = int(paid_rub) if paid_rub > 0 else spec.price_rub
+        meta_disc: int | None = None
+        meta_disc_raw = (meta.get("partner_discount_rub") or "").strip()
+        if meta_disc_raw:
+            try:
+                meta_disc = int(meta_disc_raw)
+            except ValueError:
+                meta_disc = None
+        expected = Decimal(int(spec.price_rub)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        allowed_sub = subscription_allowed_amounts_rub(
+            expected,
+            meta_partner_discount_rub=meta_disc,
+        )
+        paid_q = paid_rub.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if paid_q <= 0 or paid_q not in allowed_sub:
+            log.error(
+                "yookassa: subscription amount mismatch payment %s paid=%s expected=%s allowed=%s product=%s",
+                pid,
+                paid_q,
+                expected,
+                sorted(allowed_sub),
+                resolved,
+            )
+            await session.rollback()
+            return {"ok": False, "error": "amount_mismatch", "payment_id": pid}
+        amount_rub = int(paid_q)
         result = await activate_subscription_product(
             session,
             billing_uid,

@@ -323,15 +323,14 @@ MAX_MODEL_IMAGES = 8
 
 
 async def _download_image_bytes_best_effort(url: str) -> tuple[bytes | None, str | None]:
+    from app.services.safe_url import safe_https_download_bytes
+
     u = (url or "").strip()
     if not u:
         return None, "Пустая ссылка на изображение"
     timeout = float(settings.studio_archive_download_timeout_seconds)
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.get(u)
-            resp.raise_for_status()
-            content = resp.content
+        content, _ct = await safe_https_download_bytes(u, timeout=timeout)
     except Exception as e:
         log.warning("studio: download bytes failed (%s): %s", u[:260], e)
         return None, str(e)
@@ -3433,6 +3432,7 @@ async def api_studio_carousel_from_upload(
         row = await session.get(StudioGeneration, gen_id)
         if not row or row.user_id != oid:
             raise HTTPException(status_code=404, detail="Кадр архива не найден")
+        await assert_studio_generation_access(session, user, row.studio_model_id)
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -3516,6 +3516,7 @@ async def _studio_job_execute_carousel(
         row = await session.get(StudioGeneration, gen_id)
         if not row or row.user_id != oid:
             raise RuntimeError("Генерация не найдена")
+        await assert_studio_generation_access(session, user, row.studio_model_id)
 
     pub = (settings.public_app_url or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -4338,11 +4339,9 @@ async def api_import_studio_archive_image(
     assert_permission(user, PERM_STUDIO_GENERATE)
     oid = workspace_owner_id(user)
     raw_u = (payload.source_url or "").strip()
-    if not raw_u.startswith("https://"):
-        raise HTTPException(
-            status_code=400,
-            detail="Нужна ссылка вида https://… (временный URL результата у провайдера).",
-        )
+    from app.services.safe_url import assert_safe_https_url
+
+    assert_safe_https_url(raw_u, field="source_url")
     arch_base = _public_app_base(request)
     pub = (arch_base or "").strip().rstrip("/")
     if not pub.lower().startswith("https://"):
@@ -4375,6 +4374,7 @@ async def api_import_studio_archive_image(
             )
         ):
             raise HTTPException(status_code=404, detail="Запись генерации не найдена")
+        await assert_studio_generation_access(session, user, existing_row.studio_model_id)
         if not (existing_row.source_url or "").strip():
             existing_row.source_url = raw_u[:2000]
 
@@ -8115,6 +8115,7 @@ async def api_studio_motion_render_video(
         ff_row = await session.get(StudioGeneration, ff_gid)
         if not ff_row or ff_row.user_id != oid:
             raise HTTPException(status_code=404, detail="Первый кадр (архив) не найден")
+        await assert_studio_generation_access(session, user, ff_row.studio_model_id)
         if not generation_has_archive_file(ff_row):
             raise HTTPException(
                 status_code=400,
@@ -8141,6 +8142,7 @@ async def api_studio_motion_render_video(
             ta_row = await session.get(StudioGeneration, turn_gid)
             if not ta_row or ta_row.user_id != oid:
                 raise HTTPException(status_code=404, detail="Развёртка не найдена. Загрузите или сгенерируйте заново.")
+            await assert_studio_generation_access(session, user, ta_row.studio_model_id)
             if not generation_has_archive_file(ta_row):
                 raise HTTPException(
                     status_code=400,
@@ -9553,6 +9555,7 @@ async def api_model_bootstrap_body_compose(
         gen_face = await session.get(StudioGeneration, face_gen_id)
         if gen_face is None or gen_face.user_id != oid:
             raise HTTPException(status_code=404, detail="Генерация лица не найдена")
+        await assert_studio_generation_access(session, user, gen_face.studio_model_id)
         if mid is not None and gen_face.studio_model_id not in (None, mid):
             await require_studio_model_access(session, user, mid)
 

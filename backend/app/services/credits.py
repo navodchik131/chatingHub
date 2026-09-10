@@ -5,12 +5,32 @@ import logging
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import CreditAccount, UsageEvent, User
 from app.services.workspace import resolve_billing_user
 
 log = logging.getLogger(__name__)
+
+
+async def _lock_credit_account(
+    session: AsyncSession, billing_user_id: int
+) -> CreditAccount:
+    """Строка credit_accounts с FOR UPDATE — защита от race при списании."""
+    stmt = (
+        select(CreditAccount)
+        .where(CreditAccount.user_id == billing_user_id)
+        .with_for_update()
+    )
+    acc = (await session.execute(stmt)).scalar_one_or_none()
+    if acc is not None:
+        return acc
+    acc = CreditAccount(user_id=billing_user_id, balance=0)
+    session.add(acc)
+    await session.flush()
+    acc = (await session.execute(stmt)).scalar_one()
+    return acc
 
 
 async def ensure_can_consume_credits(
@@ -20,8 +40,8 @@ async def ensure_can_consume_credits(
     if cost <= 0:
         return await resolve_billing_user(session, actor)
     billing = await resolve_billing_user(session, actor)
-    bal = billing.credit_account.balance if billing.credit_account else 0
-    if bal < cost:
+    acc = await _lock_credit_account(session, billing.id)
+    if acc.balance < cost:
         raise HTTPException(
             status_code=402,
             detail=(
@@ -46,11 +66,7 @@ async def record_usage(
     if actor.id != billing.id:
         meta_full["actor_user_id"] = actor.id
     if credits > 0:
-        acc = await session.get(CreditAccount, billing.id)
-        if acc is None:
-            acc = CreditAccount(user_id=billing.id, balance=0)
-            session.add(acc)
-            await session.flush()
+        acc = await _lock_credit_account(session, billing.id)
         if acc.balance < credits:
             raise HTTPException(status_code=402, detail="Недостаточно кредитов")
         acc.balance -= credits
@@ -85,11 +101,7 @@ async def admin_adjust_credits(
     """Ручное изменение баланса владельца пространства. delta может быть отрицательным."""
     if delta == 0:
         raise ValueError("delta must be non-zero")
-    acc = await session.get(CreditAccount, billing_user_id)
-    if acc is None:
-        acc = CreditAccount(user_id=billing_user_id, balance=0)
-        session.add(acc)
-        await session.flush()
+    acc = await _lock_credit_account(session, billing_user_id)
     new_bal = acc.balance + delta
     if new_bal < 0:
         raise ValueError("balance would be negative")

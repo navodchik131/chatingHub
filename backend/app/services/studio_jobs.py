@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import BACKEND_DIR
+from app.config import BACKEND_DIR, settings
 from app.db.models import StudioJob, StudioJobStatus, User
 from app.db.session import SessionLocal
 from app.services.realtime import hub
@@ -44,6 +44,15 @@ STUDIO_JOB_TYPES = frozenset(
 )
 
 _JOBS_ROOT = BACKEND_DIR / "data" / "studio_jobs"
+_job_semaphore: asyncio.Semaphore | None = None
+_running_job_tasks: set[asyncio.Task[None]] = set()
+
+
+def _studio_job_semaphore() -> asyncio.Semaphore:
+    global _job_semaphore
+    if _job_semaphore is None:
+        _job_semaphore = asyncio.Semaphore(int(settings.studio_max_concurrent_jobs))
+    return _job_semaphore
 
 
 def studio_job_dir(job_id: int) -> Path:
@@ -231,7 +240,9 @@ async def guard_and_mark_studio_job_provider_submit(
 
 
 def schedule_studio_job(job_id: int) -> None:
-    asyncio.create_task(_run_studio_job(job_id))
+    task = asyncio.create_task(_run_studio_job(job_id))
+    _running_job_tasks.add(task)
+    task.add_done_callback(_running_job_tasks.discard)
 
 
 STARTUP_INTERRUPTED_JOB_MESSAGE = (
@@ -359,6 +370,11 @@ async def _maybe_release_demo_slot_after_failure(
 async def _run_studio_job(job_id: int) -> None:
     from app.services.studio_job_runner import execute_studio_job
 
+    async with _studio_job_semaphore():
+        await _run_studio_job_inner(job_id, execute_studio_job)
+
+
+async def _run_studio_job_inner(job_id: int, execute_studio_job) -> None:
     try:
         async with SessionLocal() as session:
             job = await session.get(StudioJob, job_id)

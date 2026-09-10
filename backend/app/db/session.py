@@ -6,10 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.config import settings
 from app.db.models import Base
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,
-)
+# Пул только для Postgres — sqlite+aiosqlite использует свой pool по умолчанию.
+_engine_kwargs: dict = {"echo": False}
+if not settings.database_url.startswith("sqlite"):
+    _engine_kwargs.update(
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_pre_ping=settings.db_pool_pre_ping,
+    )
+
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 SessionLocal = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -2216,7 +2222,7 @@ def _migrate_billing_plans_rename(sync_conn) -> None:
 
 
 def _migrate_trialing_to_credits_demo(sync_conn) -> None:
-    """Пробные без оплат → Credits, 3 демо, баланс 0."""
+    """Пробные без оплат → Credits, 3 демо, баланс 0 (однократно через app_meta)."""
     from sqlalchemy import inspect, text
 
     insp = inspect(sync_conn)
@@ -2225,6 +2231,26 @@ def _migrate_trialing_to_credits_demo(sync_conn) -> None:
     cols = {c["name"] for c in insp.get_columns("credit_accounts")}
     if "demo_generations_remaining" not in cols:
         return
+
+    if not insp.has_table("app_meta"):
+        sync_conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key VARCHAR(64) PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+
+    done = sync_conn.execute(
+        text("SELECT value FROM app_meta WHERE key = 'trialing_to_credits_demo_v1'")
+    ).fetchone()
+    if done and str(done[0]).startswith("done"):
+        return
+
     paid_kinds = (
         "yookassa_credits_pack",
         "managed_subscription_bonus",
@@ -2257,6 +2283,12 @@ def _migrate_trialing_to_credits_demo(sync_conn) -> None:
                 SELECT DISTINCT user_id FROM usage_events WHERE kind IN ({ph})
               )
             """
+        )
+    )
+
+    sync_conn.execute(
+        text(
+            "INSERT INTO app_meta (key, value) VALUES ('trialing_to_credits_demo_v1', 'done')"
         )
     )
 

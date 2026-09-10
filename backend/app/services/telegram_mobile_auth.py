@@ -133,10 +133,16 @@ async def get_mobile_auth_session(
 async def poll_mobile_auth_session(
     session: AsyncSession,
     session_id: str,
+    *,
+    device_key: str | None = None,
 ) -> dict:
     row = await get_mobile_auth_session(session, session_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Сессия входа не найдена")
+    expected_key = (row.device_key or "").strip()
+    got_key = (device_key or "").strip()
+    if expected_key and got_key != expected_key:
+        raise HTTPException(status_code=403, detail="Сессия входа привязана к другому устройству")
     if row.status == "done":
         if row.link_owner_user_id:
             owner = await session.get(User, row.link_owner_user_id)
@@ -166,7 +172,7 @@ async def poll_mobile_link_session(
         raise HTTPException(status_code=404, detail="Сессия привязки не найдена")
     if row.link_owner_user_id != int(owner_user_id):
         raise HTTPException(status_code=403, detail="Сессия привязки принадлежит другому пользователю")
-    return await poll_mobile_auth_session(session, session_id)
+    return await poll_mobile_auth_session(session, session_id, device_key=None)
 
 
 async def complete_mobile_link_session(

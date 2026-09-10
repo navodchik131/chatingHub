@@ -363,7 +363,15 @@ async def yookassa_webhook(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     wh_secret = (settings.yookassa_webhook_secret or "").strip()
-    if wh_secret:
+    if settings.yookassa_configured:
+        if not wh_secret:
+            raise HTTPException(status_code=503, detail="webhook secret not configured")
+        got = (request.query_params.get("secret") or "").strip() or (
+            request.headers.get("X-YooKassa-Webhook-Secret") or ""
+        ).strip()
+        if got != wh_secret:
+            raise HTTPException(status_code=403, detail="webhook secret")
+    elif wh_secret:
         got = (request.query_params.get("secret") or "").strip() or (
             request.headers.get("X-YooKassa-Webhook-Secret") or ""
         ).strip()

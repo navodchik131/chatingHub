@@ -8,12 +8,8 @@ function readCookieToken(): string | null {
   return m ? decodeURIComponent(m[1]) : null
 }
 
-function writeCookieToken(token: string | null): void {
-  if (token) {
-    document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`
-  } else {
-    document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`
-  }
+function writeCookieToken(_token: string | null): void {
+  // JWT-сессия выставляется сервером HttpOnly cookie при login/register.
 }
 
 export function getToken(): string | null {
@@ -34,6 +30,7 @@ export function setToken(token: string | null): void {
   } else {
     localStorage.removeItem(TOKEN_KEY)
     writeCookieToken(null)
+    void apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
   }
 }
 
@@ -59,6 +56,7 @@ export async function apiFetch(
     return await fetch(path, {
       ...restInit,
       headers,
+      credentials: 'include',
       signal: ctl?.signal ?? restInit.signal,
     })
   } finally {

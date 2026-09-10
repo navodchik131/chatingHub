@@ -56,6 +56,28 @@ async def create_payment(
     return data
 
 
+async def fetch_payment(payment_id: str) -> dict[str, Any]:
+    """Получить платёж из API ЮKassa — верификация webhook."""
+    pid = (payment_id or "").strip()
+    if not pid:
+        raise RuntimeError("empty payment id")
+    if not settings.yookassa_configured:
+        raise RuntimeError("yookassa not configured")
+    headers = {
+        "Authorization": _auth_header(),
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get(f"{YOOKASSA_API}/payments/{pid}", headers=headers)
+    if r.status_code >= 400:
+        log.warning("yookassa fetch payment failed: %s %s", r.status_code, (r.text or "")[:800])
+        raise RuntimeError(f"YooKassa HTTP {r.status_code}")
+    data = r.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("YooKassa: invalid payment response")
+    return data
+
+
 def parse_notification_body(body: bytes) -> dict[str, Any] | None:
     try:
         data = json.loads(body.decode("utf-8"))
