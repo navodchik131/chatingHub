@@ -301,3 +301,9 @@ if _frontend_dist:
         SPAStaticFiles(directory=_frontend_dist, html=True),
         name="spa",
     )
+else:
+    # Без dist-site в образе api nginx на / отдаёт FastAPI 404 JSON вместо маркетинг-SPA
+    log.warning(
+        "frontend dist-site not found (%s) — rebuild api image with npm run build:site",
+        _candidate,
+    )

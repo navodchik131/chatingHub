@@ -40,7 +40,8 @@ COPY backend/ ./
 COPY backend/data/prompts/ ./_bundled_prompts/
 COPY backend/data/workflow_templates/ ./_bundled_workflow_templates/
 COPY backend/data/studio_camera_presets.json ./_bundled_studio_camera_presets.json
-COPY --from=site-build /app/frontend/dist-site ../frontend/dist
+# main.py монтирует frontend/dist-site (не dist — legacy mm-os)
+COPY --from=site-build /app/frontend/dist-site ../frontend/dist-site
 
 EXPOSE 8080
 
