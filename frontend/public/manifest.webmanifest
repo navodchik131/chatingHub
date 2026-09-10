@@ -11,27 +11,15 @@
   "lang": "ru",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/brand-icon.svg",
+      "src": "/favicon.ico",
       "sizes": "48x48",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
+      "type": "image/x-icon",
+      "purpose": "any"
     },
     {
       "src": "/assets/logo-m.jpeg",
       "sizes": "512x512",
       "type": "image/jpeg",
-      "purpose": "any"
-    },
-    {
-      "src": "/favicon.ico",
-      "sizes": "48x48",
-      "type": "image/x-icon",
       "purpose": "any"
     }
   ]

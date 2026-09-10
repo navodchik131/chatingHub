@@ -15,11 +15,9 @@ if (!fs.existsSync(indexPath)) {
   process.exit(1)
 }
 
-for (const name of ['favicon.ico', 'favicon.svg']) {
-  if (!fs.existsSync(path.join(distSite, name))) {
-    console.error(`check-prod-build: missing dist-site/${name}`)
-    process.exit(1)
-  }
+if (!fs.existsSync(path.join(distSite, 'favicon.ico'))) {
+  console.error('check-prod-build: missing dist-site/favicon.ico')
+  process.exit(1)
 }
 
 const html = fs.readFileSync(indexPath, 'utf8')
