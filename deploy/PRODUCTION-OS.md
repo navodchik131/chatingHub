@@ -26,8 +26,11 @@ sudo ln -sf /etc/nginx/sites-available/model-mate.online /etc/nginx/sites-enable
 sudo nginx -t && sudo systemctl reload nginx
 
 # API + кабинет (base /workspace/)
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend studio-worker
 ```
+
+На prod API работает с `APP_ROLE=api`, генерации студии — в контейнере `studio-worker` (`APP_ROLE=worker`).
+В `backend/.env` обязательны `JWT_SECRET`, `JWT_MEDIA_SECRET`, `YOOKASSA_WEBHOOK_SECRET` (если ЮKassa включена).
 
 ## Обновление после правок
 
@@ -42,7 +45,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build fr
 
 ```bash
 git pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api studio-worker
 ```
 
 ## Проверка

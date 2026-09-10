@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     db_pool_pre_ping: bool = Field(default=True)
     # Одновременные фоновые studio jobs на процесс API
     studio_max_concurrent_jobs: int = Field(default=4, ge=1, le=32)
+    studio_jobs_poll_interval_seconds: float = Field(default=1.5, ge=0.5, le=30.0)
+    # Роль процесса: all (dev), api (только HTTP), worker (фоновые studio jobs)
+    app_role: str = Field(
+        default="all",
+        validation_alias=AliasChoices("APP_ROLE"),
+        description="all | api | worker",
+    )
     # Rate limit auth (на IP, in-memory на процесс)
     auth_register_rate_limit: int = Field(default=10, ge=1)
     auth_register_rate_window_seconds: int = Field(default=3600, ge=60)
@@ -988,6 +995,32 @@ class Settings(BaseSettings):
     @property
     def smtp_configured(self) -> bool:
         return bool((self.smtp_host or "").strip() and (self.smtp_from_email or "").strip())
+
+    @property
+    def app_role_normalized(self) -> str:
+        role = (self.app_role or "all").strip().lower()
+        if role in ("api", "worker", "all"):
+            return role
+        return "all"
+
+    @property
+    def runs_http_api(self) -> bool:
+        return self.app_role_normalized in ("api", "all")
+
+    @property
+    def studio_jobs_execute_in_api(self) -> bool:
+        """create_task при accept job — только в monolith (all)."""
+        return self.app_role_normalized == "all"
+
+    @property
+    def studio_jobs_worker_loop_enabled(self) -> bool:
+        """Poll pending jobs из БД — отдельный worker-контейнер."""
+        return self.app_role_normalized == "worker"
+
+    @property
+    def runs_telegram_user_worker(self) -> bool:
+        """MTProto worker только в api/all; в worker-контейнере не дублируем."""
+        return self.app_role_normalized in ("api", "all")
 
 
 settings = Settings()

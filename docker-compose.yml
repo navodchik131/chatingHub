@@ -30,6 +30,8 @@ services:
     environment:
       # Всегда БД в Docker — перекрываем sqlite из backend/.env
       DATABASE_URL: postgresql+asyncpg://chating:chating@db:5432/chating
+      # Локально all = jobs в том же контейнере; prod overlay ставит api + studio-worker
+      APP_ROLE: all
     depends_on:
       db:
         condition: service_healthy

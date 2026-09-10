@@ -14,8 +14,11 @@ from app.connectors.telegram_user.client import build_telegram_client, require_m
 from app.connectors.telegram_user.ingest import ingest_telegram_user_dm
 from app.db.models import TelegramUserSession, TelegramUserSessionStatus
 from app.db.session import SessionLocal
+from app.services.process_lease import try_acquire_process_lease
 
 log = logging.getLogger(__name__)
+
+_TELEGRAM_USER_LEASE_KEY = "telegram_user_worker"
 
 _worker_refresh = asyncio.Event()
 _running_clients: dict[int, object] = {}
@@ -185,7 +188,16 @@ async def telegram_user_worker_loop() -> None:
     await asyncio.sleep(3)
     while True:
         try:
-            await _sync_clients()
+            async with SessionLocal() as session:
+                has_lease = await try_acquire_process_lease(
+                    session,
+                    _TELEGRAM_USER_LEASE_KEY,
+                    ttl_seconds=45,
+                )
+            if not has_lease:
+                log.debug("telegram_user worker: another process holds lease, skip sync")
+            else:
+                await _sync_clients()
         except Exception:
             log.exception("telegram_user worker sync failed")
         try:

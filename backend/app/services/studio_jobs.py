@@ -240,9 +240,47 @@ async def guard_and_mark_studio_job_provider_submit(
 
 
 def schedule_studio_job(job_id: int) -> None:
+    if not settings.studio_jobs_execute_in_api:
+        # worker-контейнер подберёт pending job из БД
+        return
     task = asyncio.create_task(_run_studio_job(job_id))
     _running_job_tasks.add(task)
     task.add_done_callback(_running_job_tasks.discard)
+
+
+async def _next_pending_studio_job_id() -> int | None:
+    async with SessionLocal() as session:
+        stmt = (
+            select(StudioJob.id)
+            .where(StudioJob.status == StudioJobStatus.pending.value)
+            .order_by(StudioJob.created_at.asc())
+            .limit(1)
+        )
+        return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def studio_jobs_worker_loop() -> None:
+    """Фоновый poll pending studio jobs (APP_ROLE=worker)."""
+    if not settings.studio_jobs_worker_loop_enabled:
+        return
+    log.info(
+        "Studio jobs worker loop started (poll=%ss, concurrent=%s)",
+        settings.studio_jobs_poll_interval_seconds,
+        settings.studio_max_concurrent_jobs,
+    )
+    await asyncio.sleep(2)
+    while True:
+        try:
+            job_id = await _next_pending_studio_job_id()
+            if job_id is not None:
+                await _run_studio_job(job_id)
+            else:
+                await asyncio.sleep(settings.studio_jobs_poll_interval_seconds)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("studio jobs worker loop iteration failed")
+            await asyncio.sleep(settings.studio_jobs_poll_interval_seconds)
 
 
 STARTUP_INTERRUPTED_JOB_MESSAGE = (
@@ -329,13 +367,19 @@ async def recover_studio_jobs_on_startup() -> None:
         )
     if not to_run:
         return
-    for job in to_run:
-        schedule_studio_job(job.id)
-    log.info(
-        "studio jobs: re-queued %s job(s) after startup (skipped %s stale pending)",
-        len(to_run),
-        len(rows) - len(to_run),
-    )
+    if settings.studio_jobs_execute_in_api:
+        for job in to_run:
+            schedule_studio_job(job.id)
+        log.info(
+            "studio jobs: re-queued %s job(s) after startup (skipped %s stale pending)",
+            len(to_run),
+            len(rows) - len(to_run),
+        )
+    else:
+        log.info(
+            "studio jobs: %s pending job(s) left for worker after startup",
+            len(to_run),
+        )
 
 
 async def _maybe_release_demo_slot_after_failure(
@@ -377,7 +421,8 @@ async def _run_studio_job(job_id: int) -> None:
 async def _run_studio_job_inner(job_id: int, execute_studio_job) -> None:
     try:
         async with SessionLocal() as session:
-            job = await session.get(StudioJob, job_id)
+            stmt = select(StudioJob).where(StudioJob.id == job_id).with_for_update()
+            job = (await session.execute(stmt)).scalar_one_or_none()
             if not job or job.status != StudioJobStatus.pending.value:
                 return
             job.status = StudioJobStatus.running.value

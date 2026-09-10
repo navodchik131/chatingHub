@@ -263,7 +263,11 @@ async def lifespan(app: FastAPI):
     else:
         login_bot_polling_task = None
         log.info("Telegram login bot disabled (set TELEGRAM_LOGIN_BOT_TOKEN to enable)")
-    if settings.telegram_user_worker_enabled and settings.telegram_mtproto_configured:
+    if (
+        settings.runs_telegram_user_worker
+        and settings.telegram_user_worker_enabled
+        and settings.telegram_mtproto_configured
+    ):
         from app.connectors.telegram_user.worker import telegram_user_worker_loop
 
         telegram_user_worker_task = asyncio.create_task(telegram_user_worker_loop())
@@ -283,7 +287,8 @@ async def lifespan(app: FastAPI):
         await refresh_registered_telegram_webhooks()
     except Exception:
         log.exception("Telegram webhook refresh on startup failed")
-    asyncio.create_task(_deferred_recover_studio_jobs_on_startup())
+    if settings.app_role_normalized in ("api", "all"):
+        asyncio.create_task(_deferred_recover_studio_jobs_on_startup())
     yield
     if polling_task:
         polling_task.cancel()
