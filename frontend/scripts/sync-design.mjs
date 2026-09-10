@@ -78,12 +78,12 @@ const TEMPLATE_PATCHES = [
   ],
   [
     /<script src="\.\/support\.js"><\/script>/,
-    `<link rel="stylesheet" href="./mm-os-auth.css">
-<script src="./mm-os-api.js?v=${BUILD_STAMP}"></script>
-<script src="./mm-os-telegram-login.js?v=${BUILD_STAMP}"></script>
-<script src="./mm-os-studio-scenarios.js?v=${BUILD_STAMP}"></script>
-<script src="./mm-os-bridge.js?v=${BUILD_STAMP}"></script>
-<script src="./mm-os-api-full.js?v=${BUILD_STAMP}"></script>
+    `<link rel="stylesheet" href="./legacy/mm-os/mm-os-auth.css">
+<script src="./legacy/mm-os/mm-os-api.js?v=${BUILD_STAMP}"></script>
+<script src="./legacy/mm-os/mm-os-telegram-login.js?v=${BUILD_STAMP}"></script>
+<script src="./legacy/mm-os/mm-os-studio-scenarios.js?v=${BUILD_STAMP}"></script>
+<script src="./legacy/mm-os/mm-os-bridge.js?v=${BUILD_STAMP}"></script>
+<script src="./legacy/mm-os/mm-os-api-full.js?v=${BUILD_STAMP}"></script>
 <script src="./support.js?v=${BUILD_STAMP}"></script>`,
   ],
   [

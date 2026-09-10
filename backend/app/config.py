@@ -1018,6 +1018,20 @@ class Settings(BaseSettings):
         return self.app_role_normalized == "worker"
 
     @property
+    def studio_archive_retry_in_api(self) -> bool:
+        """Retry архивации studio — только monolith; на prod в studio-worker."""
+        return self.app_role_normalized == "all"
+
+    @property
+    def companion_jobs_worker_in_api(self) -> bool:
+        """Companion reply/followup queue — monolith dev."""
+        return self.app_role_normalized == "all"
+
+    @property
+    def companion_jobs_worker_loop_enabled(self) -> bool:
+        return self.app_role_normalized == "worker"
+
+    @property
     def runs_telegram_user_worker(self) -> bool:
         """MTProto worker только в api/all; в worker-контейнере не дублируем."""
         return self.app_role_normalized in ("api", "all")

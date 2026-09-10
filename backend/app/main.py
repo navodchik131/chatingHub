@@ -197,11 +197,15 @@ async def lifespan(app: FastAPI):
             settings.studio_jobs_retention_days,
             settings.studio_runtime_cleanup_interval_hours,
         )
-    archive_retry_task = asyncio.create_task(_studio_archive_retry_loop())
-    log.info(
-        "Studio archive retry loop: every %s s",
-        settings.studio_archive_retry_interval_seconds,
-    )
+    archive_retry_task: asyncio.Task[None] | None = None
+    if settings.studio_archive_retry_in_api:
+        archive_retry_task = asyncio.create_task(_studio_archive_retry_loop())
+        log.info(
+            "Studio archive retry loop: every %s s",
+            settings.studio_archive_retry_interval_seconds,
+        )
+    else:
+        log.info("Studio archive retry loop disabled in API (APP_ROLE=%s)", settings.app_role_normalized)
     if settings.fanvue_inbox_poll_interval_seconds > 0:
         fanvue_poll_task = asyncio.create_task(fanvue_inbox_poll_loop())
         log.info(
@@ -231,14 +235,21 @@ async def lifespan(app: FastAPI):
         recover_stale_companion_jobs_on_startup,
     )
 
-    try:
-        recovered = await recover_stale_companion_jobs_on_startup()
-        if recovered:
-            log.info("Companion jobs recovered on startup: %s", recovered)
-    except Exception:
-        log.exception("Companion job recovery on startup failed")
-    companion_job_worker_task = asyncio.create_task(companion_job_worker_loop())
-    log.info("Companion job worker started")
+    if settings.companion_jobs_worker_in_api:
+        try:
+            recovered = await recover_stale_companion_jobs_on_startup()
+            if recovered:
+                log.info("Companion jobs recovered on startup: %s", recovered)
+        except Exception:
+            log.exception("Companion job recovery on startup failed")
+        companion_job_worker_task = asyncio.create_task(companion_job_worker_loop())
+        log.info("Companion job worker started")
+    else:
+        companion_job_worker_task = None
+        log.info(
+            "Companion job worker disabled in API (APP_ROLE=%s)",
+            settings.app_role_normalized,
+        )
     if settings.exif_bot_token.strip():
         from app.connectors.telegram.exif_bot.bot import run_exif_bot_polling
 
@@ -391,11 +402,12 @@ _frontend_root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
 )
 _frontend_dist = None
-for _spa_dir in ("dist-site", "dist"):
-    _candidate = os.path.join(_frontend_root, _spa_dir)
-    if os.path.isfile(os.path.join(_candidate, "index.html")):
-        _frontend_dist = _candidate
-        break
+# Только React SPA (dist-site). Legacy dist/index.html с mm-os-bridge не используем.
+_candidate = os.path.join(_frontend_root, "dist-site")
+if os.path.isfile(os.path.join(_candidate, "index.html")):
+    _frontend_dist = _candidate
+else:
+    _frontend_dist = None
 if _frontend_dist:
     app.mount(
         "/",

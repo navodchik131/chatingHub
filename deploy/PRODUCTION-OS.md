@@ -29,7 +29,8 @@ sudo nginx -t && sudo systemctl reload nginx
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend studio-worker
 ```
 
-На prod API работает с `APP_ROLE=api`, генерации студии — в контейнере `studio-worker` (`APP_ROLE=worker`).
+На prod API работает с `APP_ROLE=api`, генерации студии, companion-очередь и retry архива — в `studio-worker` (`APP_ROLE=worker`).
+Prod SPA — только React (`dist-site`); legacy `mm-os-bridge.js` в `frontend/legacy/mm-os/` (не в prod build).
 В `backend/.env` обязательны `JWT_SECRET`, `JWT_MEDIA_SECRET`, `YOOKASSA_WEBHOOK_SECRET` (если ЮKassa включена).
 
 ## Обновление после правок

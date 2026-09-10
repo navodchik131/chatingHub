@@ -59,11 +59,26 @@ async def _run_worker() -> None:
         await recover_studio_jobs_on_startup()
     except Exception:
         log.exception("studio jobs startup recovery failed")
-    log.info("Studio worker started (database=%s)", settings.database_url)
-    await asyncio.gather(
+    worker_coros = [
         studio_jobs_worker_loop(),
         _studio_archive_retry_loop(),
-    )
+    ]
+    if settings.companion_jobs_worker_loop_enabled:
+        from app.services.companion_bot.job_queue import (
+            companion_job_worker_loop,
+            recover_stale_companion_jobs_on_startup,
+        )
+
+        try:
+            recovered = await recover_stale_companion_jobs_on_startup()
+            if recovered:
+                log.info("Companion jobs recovered on worker startup: %s", recovered)
+        except Exception:
+            log.exception("Companion job recovery on worker startup failed")
+        worker_coros.append(companion_job_worker_loop())
+        log.info("Companion job worker loop enabled in studio-worker")
+    log.info("Studio worker started (database=%s)", settings.database_url)
+    await asyncio.gather(*worker_coros)
 
 
 def main() -> None:

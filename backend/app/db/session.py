@@ -463,6 +463,9 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_creator_references)
         await conn.run_sync(_migrate_platform_news)
     await refresh_companion_goal_columns_ready()
+    from app.db.alembic_runner import run_alembic_upgrade_head
+
+    run_alembic_upgrade_head()
 
 
 _CONNECTION_TABLES = (

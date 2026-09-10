@@ -46,8 +46,8 @@ docker compose up -d --build frontend
 
 ## Как устроено
 
-- `public/mm-os-api.js` — JWT, fetch, студийные job'ы.
-- `public/mm-os-bridge.js` — подмена mock-данных, WebSocket, действия UI.
+- **Prod:** React SPA (`src/cabinet`, `npm run build:site` → `dist-site`).
+- **Legacy (не prod):** `legacy/mm-os/mm-os-bridge.js` — DesignCode-макет + `frontend/index.html` + `sync-design`.
 - `scripts/sync-design.mjs` — копия макета + патчи API.
 - `Dockerfile` + `nginx.conf` — статика и proxy `/api` → `api:8080`.
 
