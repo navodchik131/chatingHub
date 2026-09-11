@@ -3757,6 +3757,7 @@ async def _studio_job_execute_carousel(
                     prompt=wavespeed_prompt,
                     size=size_for_ws,
                     wan_edit_tier=wan_tier_n,
+                    wave_model_id=billing_wave_model or "wan-2.7",
                 )
                 raw_url = ws_car.url
         except RuntimeError as e:
@@ -5866,6 +5867,9 @@ async def _studio_job_execute_refine_prompt(
                             prompt=ws_mask_prompt,
                             size=size_for_wm,
                             wan_edit_tier=wan_tier_n,
+                            wave_model_id=(
+                                workflow_wave_model or billing_wave_model or "wan-2.7"
+                            ),
                         )
                     generated_image_url = ws_res.url
                     wavespeed_task_id = ws_res.task_id or wavespeed_task_id

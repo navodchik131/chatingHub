@@ -64,11 +64,26 @@ SEEDREAM_V50_PRO_T2I_PATH = "/api/v3/bytedance/seedream-v5.0-pro"
 WAVESPEED_MEDIA_UPLOAD_PATH = "/api/v3/media/upload/binary"
 
 
-def resolve_studio_image_edit_post_path(*, wan_edit_tier: str | None) -> str:
+def resolve_studio_image_edit_post_path(
+    *,
+    wan_edit_tier: str | None = None,
+    wave_model_id: str | None = None,
+) -> str:
     """
-    Если в настройках указан WAN 2.7 image-edit — подменяем путь по запросу UI (standard | pro).
-    Для Seedream и любых не-WAN путей возвращаем путь из .env без изменений.
+    Endpoint WaveSpeed image-edit по выбору модели в UI.
+    wan-2.7 / wan-2.7-pro — всегда Alibaba WAN (не .env Seedream).
+    seedream-v5.0-pro — фиксированный Seedream V5.
+    Без wave_model_id — legacy: путь из WAVESPEED_SEEDREAM_EDIT_PATH (+ tier, если там WAN).
     """
+    model = (wave_model_id or "").strip().lower()
+    if model == "seedream-v5.0-pro":
+        return SEEDREAM_V50_PRO_EDIT_PATH
+    if model in ("wan-2.7", "wan-2.7-pro"):
+        tier = (wan_edit_tier or "standard").strip().lower()
+        if model == "wan-2.7-pro" or tier == "pro":
+            return WAN_27_IMAGE_EDIT_PRO_PATH
+        return WAN_27_IMAGE_EDIT_STANDARD_PATH
+
     cfg = (settings.wavespeed_seedream_edit_path or "").strip() or SEEDREAM_V50_PRO_EDIT_PATH
     configured = cfg if cfg.startswith("/") else f"/{cfg}"
     if not _is_wan_27_image_edit_path(configured):
@@ -613,6 +628,7 @@ async def seedream_v45_edit_image_url(
     prompt: str,
     size: str | None = None,
     wan_edit_tier: str | None = None,
+    wave_model_id: str | None = None,
     timeout_submit: float = 300.0,
     poll_interval: float | None = None,
     max_polls: int | None = None,
@@ -628,7 +644,10 @@ async def seedream_v45_edit_image_url(
         raise RuntimeError("empty prompt")
 
     base = _wavespeed_base()
-    post_path = resolve_studio_image_edit_post_path(wan_edit_tier=wan_edit_tier)
+    post_path = resolve_studio_image_edit_post_path(
+        wan_edit_tier=wan_edit_tier,
+        wave_model_id=wave_model_id,
+    )
     url = f"{base}{post_path}"
     is_wan = _is_wan_27_image_edit_path(post_path)
     if is_wan:
@@ -1389,6 +1408,7 @@ async def workflow_edit_image_url(
             prompt=prompt,
             size=size_use,
             wan_edit_tier=wan_edit_tier,
+            wave_model_id="wan-2.7",
             on_task_submitted=on_task_submitted,
         )
     if model == "seedream-v5.0-pro":
