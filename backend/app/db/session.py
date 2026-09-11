@@ -467,7 +467,10 @@ async def init_db() -> None:
     await refresh_companion_goal_columns_ready()
     from app.db.alembic_runner import run_alembic_upgrade_head
 
-    run_alembic_upgrade_head()
+    # Alembic env.py вызывает asyncio.run — нельзя из уже запущенного worker/API loop
+    import asyncio
+
+    await asyncio.to_thread(run_alembic_upgrade_head)
 
 
 _CONNECTION_TABLES = (
