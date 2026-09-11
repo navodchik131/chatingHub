@@ -107,17 +107,19 @@ export function MobileNav() {
       {navItems.map((mn) => {
         const active = mn.more ? moreOpen : mn.pages.includes(page);
         const tint = active ? color.lime : color.navMobileIdle;
+        const itemStyle = {
+          flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: 2, padding: '4px 1px', cursor: 'pointer', borderRadius: 10,
+          minWidth: 0, maxWidth: '20%',
+          ...(mn.externalHref && !mn.more ? { textDecoration: 'none', color: 'inherit' } : {}),
+        };
         return (
           <Hoverable
             key={mn.label}
-            style={{
-              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-              gap: 2, padding: '4px 1px', cursor: 'pointer', borderRadius: 10,
-              minWidth: 0, maxWidth: '20%',
-            }}
+            style={itemStyle}
             hover={{ background: 'rgba(255,255,255,.04)' }}
             {...(mn.externalHref && !mn.more
-              ? { as: 'a', href: mn.externalHref, onClick: undefined, style: { textDecoration: 'none', color: 'inherit' } }
+              ? { as: 'a', href: mn.externalHref, onClick: undefined }
               : {
                 onClick: mn.more
                   ? () => setS({ moreOpen: true })
