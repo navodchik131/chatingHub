@@ -7,8 +7,10 @@
     "dev": "vite --config vite.site.config.js",
     "dev:site": "vite --config vite.site.config.js",
     "dev:workflow": "vite --config vite.site.config.js",
-    "build": "npm run build:site && vite build --config vite.workflow.config.js",
+    "dev:chat": "vite --config vite.chat.config.js",
+    "build": "npm run build:site && npm run build:chat && vite build --config vite.workflow.config.js",
     "build:site": "vite build --config vite.site.config.js && node scripts/check-prod-build.mjs",
+    "build:chat": "vite build --config vite.chat.config.js",
     "build:workflow": "vite build --config vite.workflow.config.js",
     "preview": "vite preview --config vite.site.config.js --port 5173 --strictPort",
     "sync-design:legacy": "node legacy/design-code/sync-design.mjs"

@@ -7,6 +7,7 @@
 | **Лендинг** | https://model-mate.online/ |
 | **Вход** | https://model-mate.online/login → `/workspace/` |
 | **Кабинет** | https://model-mate.online/workspace/ |
+| **Unibox (чаты)** | https://model-mate.online/chat/ |
 | **Workflow** | https://model-mate.online/workspace/workflow/ |
 | **Админка** | https://model-mate.online/admin |
 | API | https://model-mate.online/api/ |

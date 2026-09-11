@@ -116,7 +116,13 @@ export function MobileNav() {
               minWidth: 0, maxWidth: '20%',
             }}
             hover={{ background: 'rgba(255,255,255,.04)' }}
-            onClick={mn.more ? () => setS({ moreOpen: true }) : go(mn.go)}
+            onClick={
+              mn.more
+                ? () => setS({ moreOpen: true })
+                : mn.externalHref
+                  ? () => { window.location.href = mn.externalHref }
+                  : go(mn.go)
+            }
           >
             <span style={{ display: 'flex', width: 19, height: 19, color: tint, flex: 'none' }}>
               <mn.Icon />

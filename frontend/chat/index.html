@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="icon" href="/favicon.ico">
+  <title>Unibox — Model Mate</title>
+  <link rel="stylesheet" href="/src/styles/unibox.css">
+</head>
+<body data-theme="light">
+  <div class="app" id="app">
+    <section class="side">
+      <div class="sb-head">
+        <button class="ic" id="burger" aria-label="Меню">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6.8h16M4 12h16M4 17.2h16"/></svg>
+        </button>
+        <label class="searchbox">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.9"/><path d="m20.4 20.4-4.8-4.8"/></svg>
+          <input id="q" placeholder="Поиск по людям и сообщениям" autocomplete="off">
+        </label>
+      </div>
+      <div class="tabs-wrap" id="wrapF">
+        <button class="ic edge l" data-strip="wrapF:-1" aria-label="Левее"></button>
+        <nav class="tabs" id="folders"></nav>
+        <button class="ic edge r" data-strip="wrapF:1" aria-label="Правее"></button>
+        <button class="ic tab-add" id="addFolder" title="Новая папка"></button>
+      </div>
+      <div class="tabs-wrap srcs-wrap" id="wrapS">
+        <button class="ic edge l" data-strip="wrapS:-1" aria-label="Левее"></button>
+        <nav class="tabs srcs" id="sources"></nav>
+        <button class="ic edge r" data-strip="wrapS:1" aria-label="Правее"></button>
+      </div>
+      <div class="list" id="list"></div>
+    </section>
+    <section class="chat" id="chatPane"></section>
+    <aside class="pane" id="pane"></aside>
+  </div>
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer"></aside>
+  <div class="pop" id="ctx"></div>
+  <div class="pop emoji-pop" id="emojiPop"></div>
+  <div class="pop" id="attachPop"></div>
+  <div class="toasts" id="toasts"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

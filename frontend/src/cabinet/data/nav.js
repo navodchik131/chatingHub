@@ -8,7 +8,8 @@ export const navGroups = (t, badges = {}, { isPartner = false, evolinkEnabled = 
     label: t.grpWork,
     items: [
       { id: 'overview', label: t.navOverview, Icon: IcoGrid },
-      { id: 'dialogs', label: t.navDialogs, Icon: IcoChat, badge: badges.dialogs },
+      /* Unibox — отдельное SPA на /chat/ */
+      { id: 'dialogs', label: t.navDialogs, Icon: IcoChat, badge: badges.dialogs, externalHref: '/chat/' },
     ],
   },
   {
@@ -57,7 +58,7 @@ export const pageTitles = (t) => ({
 /** Bottom bar on mobile — each entry can light up for several pages. */
 export const mobileNavDefs = (t, lang) => [
   { label: t.navOverview, Icon: IcoGrid, pages: ['overview'], go: 'overview' },
-  { label: t.navDialogs, Icon: IcoChat, pages: ['dialogs'], go: 'dialogs' },
+  { label: t.navDialogs, Icon: IcoChat, pages: ['dialogs'], go: 'dialogs', externalHref: '/chat/' },
   { label: lang === 'ru' ? 'Студия' : 'Studio', Icon: IcoSpark, pages: ['images', 'video', 'seedance-sale', 'characters'], go: 'images' },
   { label: lang === 'ru' ? 'Финансы' : 'Money', Icon: IcoHeart, pages: ['donations', 'billing'], go: 'donations' },
   { label: lang === 'ru' ? 'Ещё' : 'More', Icon: IcoLayers, pages: [], more: true },

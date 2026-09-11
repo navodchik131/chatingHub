@@ -121,7 +121,12 @@ export default function Sidebar() {
               {grp.label}
             </div>
             {grp.items.map((it) => (
-              <NavItem key={it.id} item={it} active={page === it.id} onClick={go(it.id)} />
+              <NavItem
+                key={it.id}
+                item={it}
+                active={page === it.id}
+                onClick={it.externalHref ? () => { window.location.href = it.externalHref } : go(it.id)}
+              />
             ))}
           </div>
         ))}
