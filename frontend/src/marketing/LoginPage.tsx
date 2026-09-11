@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
 import { useAuthSessionGate } from '../auth/useAuthSessionGate'
@@ -18,6 +18,20 @@ function safeNext(raw: string | null): string {
   }
 }
 
+/** Unibox и другие SPA вне marketing/cabinet — только полная перезагрузка, не React Router. */
+function isExternalAppPath(path: string): boolean {
+  return path === '/chat' || path.startsWith('/chat/')
+}
+
+function goAfterLogin(next: string, navigate: NavigateFunction) {
+  if (isExternalAppPath(next)) {
+    const target = next.endsWith('/') ? next : `${next}/`
+    window.location.assign(target)
+    return
+  }
+  navigate(next, { replace: true })
+}
+
 /** /login — форма входа в едином SPA, после успеха → /workspace или ?next= */
 export function LoginPage() {
   const { t } = useTranslation('auth')
@@ -32,12 +46,12 @@ export function LoginPage() {
 
   useEffect(() => {
     if (session === 'authenticated') {
-      navigate(next, { replace: true })
+      goAfterLogin(next, navigate)
     }
   }, [session, navigate, next])
 
   const onSuccess = useCallback(() => {
-    navigate(next, { replace: true })
+    goAfterLogin(next, navigate)
   }, [navigate, next])
 
   if (session === 'checking' || session === 'authenticated') {

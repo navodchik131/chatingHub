@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { FaqPage } from './marketing/FaqPage'
 
@@ -82,6 +82,25 @@ function AdminGate() {
 
 
 
+/** Если React Router оказался на /chat/ (после login navigate) — полный reload на Unibox SPA. */
+function ChatExternalReload() {
+
+  useEffect(() => {
+
+    window.location.replace(
+
+      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+
+    )
+
+  }, [])
+
+  return null
+
+}
+
+
+
 export default function Root() {
 
   return (
@@ -109,6 +128,8 @@ export default function Root() {
 
 
         <Route path="/admin" element={<AdminGate />} />
+
+        <Route path="/chat/*" element={<ChatExternalReload />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
 

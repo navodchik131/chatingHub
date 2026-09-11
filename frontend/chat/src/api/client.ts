@@ -23,6 +23,17 @@ export function redirectToLogin(): void {
   window.location.href = `/login?next=${next}`
 }
 
+/** Сессия может жить только в HttpOnly cookie — проверяем через /api/auth/me. */
+export async function hasActiveSession(): Promise<boolean> {
+  if (getToken()) return true
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'include' })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers)
   const token = getToken()

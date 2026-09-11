@@ -1,9 +1,9 @@
-import { getToken, redirectToLogin } from './api/client'
+import { hasActiveSession, redirectToLogin } from './api/client'
 import { ChatController } from './store/ChatController'
 import { UniboxApp } from './ui/App'
 
 async function boot(): Promise<void> {
-  if (!getToken()) {
+  if (!(await hasActiveSession())) {
     redirectToLogin()
     return
   }
