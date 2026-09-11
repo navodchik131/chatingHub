@@ -7,7 +7,9 @@ import type { UiChat, UiMessage } from '../types'
 import { esc, initials, avatarGradient, plural } from '../lib/format'
 import { platformMeta, platformIconImg, SOURCE_TABS } from '../lib/platforms'
 import { previewText, chatSubTitle } from '../lib/mapMessage'
+import { REACTION_EMOJIS } from '../lib/reactions'
 import { loadUiSettings, saveUiSettings } from '../cache/threadCache'
+import { pushPermission, pushSupported, registerChatPush, unregisterChatPush } from '../api/push'
 import { I } from './icons'
 import { ThreadScroll } from './scroll'
 
@@ -23,6 +25,21 @@ const SYS_FOLDERS = [
 
 const ACCENTS = ['#3390ec', '#8774e1', '#4fae4e', '#e17076', '#f0a30a', '#00b0d0']
 
+/** Режимы AI-компаньона — как в кабинете Dialogs. */
+const COMPANION_MODES = [
+  { id: 'off', label: 'Выкл' },
+  { id: 'semi_auto', label: 'Полуавто' },
+  { id: 'auto', label: 'Авто' },
+] as const
+
+/** Быстрые эмодзи для вставки в поле ввода. */
+const EMOJI_QUICK = [
+  '😀', '😃', '😄', '😁', '😂', '🙂', '😉', '😊', '🥰', '😍',
+  '😘', '😎', '🤔', '😢', '😭', '🙏', '👍', '👎', '👏', '🔥', '❤️', '✨', '🎉',
+]
+
+type FindState = { q: string; hits: number[]; i: number }
+
 export class UniboxApp {
   folder = 'all'
   src = 'all'
@@ -34,10 +51,14 @@ export class UniboxApp {
   ptab: 'info' | 'notes' = 'info'
   lastRenderedMsgId: number | null = null
   flashMsgId: number | null = null
+  /** Поиск по тексту в открытом треде. */
+  find: FindState | null = null
 
   private scroll = new ThreadScroll()
   private unbindScroll: (() => void) | null = null
   private fileInput: HTMLInputElement | null = null
+  /** Блокируем повторную подгрузку истории при скролле. */
+  private olderLoadLock = false
 
   constructor(private ctrl: ChatController) {}
 
@@ -80,10 +101,58 @@ export class UniboxApp {
 
     document.addEventListener('click', (e) => {
       const t = e.target as HTMLElement
-      if (!t.closest('.pop')) $$('.pop').forEach((p) => p.classList.remove('on'))
+      const pop = t.closest('.pop') as HTMLElement | null
+
+      const qr = t.closest('[data-qr]') as HTMLElement | null
+      if (qr && pop?.id === 'ctx') {
+        void this.toggleReaction(Number(pop.dataset.msg), qr.dataset.qr || '')
+        this.closePops()
+        return
+      }
+      const act = t.closest('[data-act]') as HTMLElement | null
+      if (act && pop?.id === 'ctx') {
+        this.msgAct(act.dataset.act || '')
+        this.closePops()
+        return
+      }
+      const ca = t.closest('[data-chatact]') as HTMLElement | null
+      if (ca) {
+        this.chatAct(ca.dataset.chatact || '')
+        this.closePops()
+        return
+      }
+      const fp = t.closest('[data-folder-pick]') as HTMLElement | null
+      if (fp) {
+        void this.pickFolderForChat(Number(fp.dataset.folderPick), Number(fp.dataset.conv))
+        return
+      }
+      const fa = t.closest('[data-folder-act]') as HTMLElement | null
+      if (fa && pop?.id === 'ctx') {
+        this.folderAct(fa.dataset.folderAct || '', Number(pop.dataset.folderId))
+        this.closePops()
+        return
+      }
+      const em = t.closest('[data-em]') as HTMLElement | null
+      if (em) {
+        const inp = $('#inp') as HTMLTextAreaElement | null
+        if (inp) {
+          inp.value += em.dataset.em || ''
+          inp.dispatchEvent(new Event('input'))
+          inp.focus()
+        }
+        this.closePops()
+        return
+      }
+
+      if (!pop) this.closePops()
+
+      if (t.closest('#addFolder')) {
+        this.openFolderCreate()
+        return
+      }
 
       const chatEl = t.closest('[data-chat]')
-      if (chatEl && !t.closest('.pop')) {
+      if (chatEl && !pop) {
         const id = Number((chatEl as HTMLElement).dataset.chat)
         void this.openChat(id)
         return
@@ -132,6 +201,42 @@ export class UniboxApp {
       if (file && chat) void this.ctrl.sendImage(chat.id, '', file)
       if (this.fileInput) this.fileInput.value = ''
     })
+
+    $('#list')?.addEventListener('contextmenu', (e) => {
+      const row = (e.target as HTMLElement).closest('[data-chat]') as HTMLElement | null
+      if (!row) return
+      e.preventDefault()
+      const c = this.ctrl.chats.find((x) => x.id === Number(row.dataset.chat))
+      if (c) this.chatMenu(c, e.clientX, e.clientY)
+    })
+
+    // ПКМ по пользовательской вкладке папки — переименовать / удалить
+    $('#folders')?.addEventListener('contextmenu', (e) => {
+      const tab = (e.target as HTMLElement).closest('[data-f]') as HTMLElement | null
+      if (!tab) return
+      const id = tab.dataset.f || ''
+      if (!/^\d+$/.test(id)) return
+      e.preventDefault()
+      this.folderTabMenu(Number(id), e.clientX, e.clientY)
+    })
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.closePops()
+        this.drawer(false)
+      }
+    })
+  }
+
+  private closePops(): void {
+    $$('.pop').forEach((p) => p.classList.remove('on'))
+  }
+
+  private showPop(el: HTMLElement, x: number, y: number): void {
+    el.classList.add('on')
+    const r = el.getBoundingClientRect()
+    el.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`
+    el.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`
   }
 
   private inFolder(c: UiChat): boolean {
@@ -208,7 +313,12 @@ export class UniboxApp {
   private renderList(): void {
     const q = this.query.trim().toLowerCase()
     let list = this.ctrl.chats.filter((c) => this.inFolder(c) && this.inSrc(c))
-    if (q) list = list.filter((c) => c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q))
+    if (q) {
+      list = list.filter((c) => {
+        const last = previewText(c.msgs[c.msgs.length - 1] || null).toLowerCase()
+        return c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q) || last.includes(q)
+      })
+    }
     list = [...list].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
 
     const activeId = this.ctrl.activeChatId
@@ -233,6 +343,7 @@ export class UniboxApp {
 
   async openChat(convId: number): Promise<void> {
     this.reply = null
+    this.find = null
     this.scroll.onThreadOpen()
     $('#app')?.classList.add('open')
     await this.ctrl.openChat(convId)
@@ -251,24 +362,36 @@ export class UniboxApp {
 
     const sub = chatSubTitle(c)
     const trOn = c.tr.in || c.tr.out
-    pane.innerHTML = `
-      <header class="head">
-        <button class="ic back" id="backBtn">${I.back}</button>
-        <span id="headAva" style="cursor:pointer">${this.avaHtml(c, true)}</span>
-        <div class="t" id="openPane">
-          <div class="h-nm">${esc(c.name)}</div>
-          <div class="h-sub">${esc(sub.t)} ${trOn ? `<span class="tr-chip">${esc(c.tr.lang.toUpperCase())} ⇄ RU</span>` : ''}</div>
-        </div>
-        <button class="ic" id="notesBtn" title="Заметки">${I.note}</button>
-        <button class="ic" id="trBtn" title="Перевод">${I.globe}</button>
-        <a class="ic" href="/workspace/connections" title="Подключения">${I.link}</a>
-      </header>
+    const head = this.find
+      ? `<header class="head">
+          <button class="ic" id="findClose" title="Закрыть поиск">${I.close}</button>
+          <label class="searchbox">${I.search}
+            <input id="findInp" placeholder="Поиск в этом чате" value="${esc(this.find.q)}" autocomplete="off">
+          </label>
+          <span class="find-n" id="findN"></span>
+          <button class="ic" id="findUp" title="Выше">${I.up}</button>
+          <button class="ic" id="findDown" title="Ниже">${I.down}</button>
+        </header>`
+      : `<header class="head">
+          <button class="ic back" id="backBtn">${I.back}</button>
+          <span id="headAva" style="cursor:pointer">${this.avaHtml(c, true)}</span>
+          <div class="t" id="openPane">
+            <div class="h-nm">${esc(c.name)}</div>
+            <div class="h-sub">${esc(sub.t)} ${trOn ? `<span class="tr-chip">${esc(c.tr.lang.toUpperCase())} ⇄ RU</span>` : ''}</div>
+          </div>
+          <button class="ic" id="notesBtn" title="Заметки">${I.note}</button>
+          <button class="ic" id="trBtn" title="Перевод">${I.globe}</button>
+          <button class="ic" id="searchInChat" title="Поиск в чате">${I.search}</button>
+          <button class="ic" id="chatMenuBtn" title="Ещё">${I.dots}</button>
+        </header>`
+    pane.innerHTML = `${head}
       <div class="msgs" id="msgs"></div>
       <button class="scroll-down" id="scrollDown">${I.down}</button>
       <div class="comp">
         ${this.reply ? this.replyBar(c) : ''}
         <div class="crow">
           <button class="ic" id="attachBtn" title="Фото">${I.clip}</button>
+          <button class="ic" id="emojiBtn" title="Эмодзи">${I.smile}</button>
           <textarea class="inp" id="inp" rows="1" placeholder="Сообщение…">${esc(c.draft || '')}</textarea>
           <button class="send" id="sendBtn" title="Отправить">${I.send}</button>
         </div>
@@ -304,12 +427,13 @@ export class UniboxApp {
       }
       const next = c.msgs[i + 1]
       const sameTail = next && next.out === m.out && next.day === m.day
-      html += this.msgHtml(m, c, !sameTail)
+      html += this.msgHtml(m, c, !sameTail, i)
     })
 
     box.innerHTML = html
     this.hydrateMedia(c)
     this.scroll.afterMessagesRender(box, { keepPosition: keepPosition })
+    if (this.find) this.updateFindN()
 
     const last = c.msgs[c.msgs.length - 1]
     if (last && last.id !== this.lastRenderedMsgId && last.id > 0) {
@@ -327,8 +451,9 @@ export class UniboxApp {
     }
   }
 
-  private msgHtml(m: UiMessage, c: UiChat, tail: boolean): string {
-    const cls = ['mrow', m.out ? 'out' : '', tail ? '' : '', m.pending ? 'pending' : ''].filter(Boolean).join(' ')
+  private msgHtml(m: UiMessage, c: UiChat, tail: boolean, idx = -1): string {
+    const findHit = this.find && idx >= 0 && this.find.hits[this.find.i] === m.id
+    const cls = ['mrow', m.out ? 'out' : '', tail ? '' : '', m.pending ? 'pending' : '', findHit ? 'find-hit' : ''].filter(Boolean).join(' ')
     const showTr = c.tr.in && m.ru && !m.out
     const meta = `<span class="meta">${esc(m.time)}${m.pending ? ' …' : ''}</span>`
     let inner = ''
@@ -340,9 +465,13 @@ export class UniboxApp {
 
     if (m.kind === 'photo' || m.kind === 'video_note') {
       const mediaSrc = m.mediaKey ? this.ctrl.mediaUrls.get(m.mediaKey) : m.attachmentUrl
-      inner += `<div class="photo" data-msg-media="${m.id}">
-        ${mediaSrc ? `<img src="${mediaSrc}" alt="" loading="lazy">` : '<span style="padding:20px;display:block">…</span>'}
-      </div>`
+      const isVn = m.kind === 'video_note'
+      const mediaTag = mediaSrc
+        ? (isVn
+          ? `<video class="video-note" src="${mediaSrc}" autoplay loop muted playsinline></video>`
+          : `<img src="${mediaSrc}" alt="" loading="lazy">`)
+        : '<span style="padding:20px;display:block">…</span>'
+      inner += `<div class="photo ${isVn ? 'vn' : ''}" data-msg-media="${m.id}" data-vn="${isVn ? '1' : '0'}">${mediaTag}</div>`
       if (m.text) inner += `<div class="txt">${this.fmt(m.text)}</div>${showTr ? `<div class="tr"><span class="lb">RU</span>${this.fmt(m.ru!)}</div>` : ''}${meta}`
       else inner += meta
     } else if (m.kind === 'voice') {
@@ -354,12 +483,24 @@ export class UniboxApp {
       if (showTr) inner += `<div class="tr"><span class="lb">RU</span>${this.fmt(m.ru!)}${meta}</div>`
     }
 
+    const reacts = Object.entries(m.reactions || {}).filter(([, n]) => n > 0)
+    if (reacts.length) {
+      inner += `<div class="reacts">${reacts.map(([em, n]) =>
+        `<button type="button" class="react ${m.mine.includes(em) ? 'mine' : ''}" data-react="${m.id}|${esc(em)}">${em}${n > 1 ? ` ${n}` : ''}</button>`,
+      ).join('')}</div>`
+    }
+
     return `<div class="${cls}" data-msg="${m.id}" id="msg-${m.id}">
       <div class="ava sm" style="${avatarGradient(c.g)}">${esc(initials(c.name))}</div>
       <div class="bub ${tail ? 'tail' : ''}">${inner}</div></div>`
   }
 
   private fmt(t: string): string {
+    const q = this.find?.q.trim()
+    if (q && q.length > 1) {
+      const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+      return esc(t).replace(re, (x) => `<mark>${x}</mark>`)
+    }
     return esc(t).replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
   }
 
@@ -372,7 +513,10 @@ export class UniboxApp {
         if (!url) return
         const el = document.querySelector(`[data-msg-media="${m.id}"]`)
         if (el && !el.querySelector('img,video')) {
-          el.innerHTML = `<img src="${url}" alt="" loading="lazy">`
+          const isVn = el.getAttribute('data-vn') === '1'
+          el.innerHTML = isVn
+            ? `<video class="video-note" src="${url}" autoplay loop muted playsinline></video>`
+            : `<img src="${url}" alt="" loading="lazy">`
           const box = $('#msgs')
           if (box && this.scroll.stickToBottom) this.scroll.afterMessagesRender(box)
         }
@@ -384,12 +528,69 @@ export class UniboxApp {
     this.unbindScroll?.()
     const box = $('#msgs')
     if (box) {
+      const onScroll = () => {
+        if (
+          box.scrollTop < 120 &&
+          !this.olderLoadLock &&
+          this.ctrl.hasMoreMessages[c.id] &&
+          !this.ctrl.loadingOlder[c.id]
+        ) {
+          this.olderLoadLock = true
+          const snap = this.scroll.captureForPrepend(box)
+          void this.ctrl.loadOlderMessages(c.id).then((loaded) => {
+            if (loaded) {
+              this.renderMsgs(true)
+              this.scroll.restoreAfterPrepend(box, snap)
+            }
+          }).finally(() => {
+            window.setTimeout(() => { this.olderLoadLock = false }, 400)
+          })
+        }
+      }
       this.unbindScroll = this.scroll.bindScrollContainer(box, (show) => {
         $('#scrollDown')?.classList.toggle('show', show)
+        onScroll()
       })
     }
 
     $('#backBtn')?.addEventListener('click', () => $('#app')?.classList.remove('open'))
+    $('#headAva')?.addEventListener('click', () => {
+      this.pane = true
+      this.ptab = 'info'
+      $('#app')?.classList.add('side-open')
+      this.renderPane()
+    })
+    $('#searchInChat')?.addEventListener('click', () => {
+      this.find = { q: '', hits: [], i: 0 }
+      this.renderChat()
+      $('#findInp')?.focus()
+    })
+    $('#findClose')?.addEventListener('click', () => {
+      this.find = null
+      this.renderChat()
+    })
+    $('#findInp')?.addEventListener('input', (e) => this.findRun((e.target as HTMLInputElement).value))
+    $('#findInp')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        this.findGo((e as KeyboardEvent).shiftKey ? -1 : 1)
+      }
+    })
+    $('#findUp')?.addEventListener('click', () => this.findGo(-1))
+    $('#findDown')?.addEventListener('click', () => this.findGo(1))
+    $('#chatMenuBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.closePops()
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      this.chatMenu(c, r.right - 230, r.bottom + 6)
+    })
+    $('#emojiBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.closePops()
+      this.renderEmojiPop()
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      this.showPop($('#emojiPop')!, r.left - 280, r.top - 280)
+    })
     $('#openPane')?.addEventListener('click', () => {
       this.pane = true
       this.ptab = 'info'
@@ -443,16 +644,48 @@ export class UniboxApp {
     $('#sendBtn')?.addEventListener('click', () => {
       if (inp) void this.send(c, inp)
     })
+
+    box?.addEventListener('click', (e) => {
+      const react = (e.target as HTMLElement).closest('[data-react]') as HTMLElement | null
+      if (react) {
+        e.preventDefault()
+        const [id, em] = (react.dataset.react || '').split('|')
+        void this.toggleReaction(Number(id), em)
+        return
+      }
+    })
+
+    box?.addEventListener('contextmenu', (e) => {
+      const row = (e.target as HTMLElement).closest('[data-msg]') as HTMLElement | null
+      if (!row) return
+      e.preventDefault()
+      const m = c.msgs.find((x) => x.id === Number(row.dataset.msg))
+      if (m) this.msgMenu(m, e.clientX, e.clientY)
+    })
+
+    let pressTimer: ReturnType<typeof setTimeout> | undefined
+    box?.addEventListener('touchstart', (e) => {
+      const row = (e.target as HTMLElement).closest('[data-msg]') as HTMLElement | null
+      if (!row) return
+      pressTimer = window.setTimeout(() => {
+        const m = c.msgs.find((x) => x.id === Number(row.dataset.msg))
+        const t = e.touches[0]
+        if (m && t) this.msgMenu(m, t.clientX - 100, t.clientY - 60)
+      }, 450)
+    }, { passive: true })
+    box?.addEventListener('touchend', () => clearTimeout(pressTimer))
+    box?.addEventListener('touchmove', () => clearTimeout(pressTimer), { passive: true })
   }
 
   private async send(c: UiChat, inp: HTMLTextAreaElement): Promise<void> {
     const text = inp.value.trim()
     if (!text) return
+    const replyTo = this.reply
     inp.value = ''
     c.draft = ''
     this.reply = null
     try {
-      await this.ctrl.sendText(c.id, text, this.reply)
+      await this.ctrl.sendText(c.id, text, replyTo)
       this.scroll.forceBottomNext = true
       this.renderChat()
     } catch (e) {
@@ -508,15 +741,41 @@ export class UniboxApp {
         const text = ta?.value.trim()
         if (text) void this.ctrl.addNote(c.id, text).then(() => this.renderPane())
       })
+      $('#analyzeNotes')?.addEventListener('click', () => {
+        void this.ctrl.runNotesAnalyze(c.id).then(() => {
+          this.renderPane()
+          this.toast('AI-анализ добавлен в заметки')
+        }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+      })
+    }
+    if (this.ptab === 'info') {
+      pane.querySelectorAll('[data-companion]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const mode = (btn as HTMLElement).dataset.companion || 'off'
+          void this.ctrl.updateSettings(c.id, { companion_mode_override: mode }).then(() => {
+            this.renderPane()
+            this.toast('Режим компаньона обновлён')
+          }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+        })
+      })
     }
   }
 
   private infoPane(c: UiChat): string {
+    const companion = c.raw.companion_mode_override ?? c.raw.effective_companion_mode ?? 'off'
+    const companionBtns = COMPANION_MODES.map((mo) =>
+      `<button type="button" class="tab ${companion === mo.id ? 'on' : ''}" data-companion="${mo.id}">${mo.label}</button>`,
+    ).join('')
     return `<div class="p-top">${this.avaHtml(c)}
       <h3>${esc(c.name)}</h3><p>${esc(platformMeta(c.raw.platform).name)}</p></div>
       <div class="p-list">
         <div class="p-row"><span>${I.link}</span><div><b>ID</b><span>${esc(c.handle || String(c.id))}</span></div></div>
         <div class="p-row"><span>${I.globe}</span><div><b>Язык</b><span>${esc(c.lang)}</span></div></div>
+        <div class="p-row"><span>${I.info}</span><div><b>AI-компаньон</b><div class="tabs" style="margin-top:6px;flex-wrap:wrap">${companionBtns}</div></div></div>
+      </div>
+      <div class="p-list" style="margin-top:12px">
+        <a class="f-row" href="/workspace/connections" style="text-decoration:none;color:inherit">
+          <div class="mid"><b>Подключения</b><span>Telegram, Fanvue, Instagram</span></div></a>
       </div>`
   }
 
@@ -526,18 +785,24 @@ export class UniboxApp {
     ).join('')
     return `<div class="nt-wrap">${entries || '<div class="nt-empty">Заметок пока нет.</div>'}
       <textarea class="f-in" id="noteInp" placeholder="Новая заметка…"></textarea>
-      <div class="nt-foot"><button class="btn-n" id="addNote">Сохранить</button></div></div>`
+      <div class="nt-foot" style="display:flex;gap:8px">
+        <button class="btn-n" id="analyzeNotes" style="flex:1;background:var(--accent-soft);color:var(--accent)">✦ AI-анализ</button>
+        <button class="btn-n" id="addNote" style="flex:1">Сохранить</button>
+      </div></div>`
   }
 
   private renderDrawer(): void {
     const total = this.ctrl.chats.reduce((a, c) => a + c.unread, 0)
     const name = this.ctrl.me?.display_name || this.ctrl.me?.login || 'Оператор'
+    const pushOn = pushSupported() && pushPermission() === 'granted'
     $('#drawer')!.innerHTML = `
       <div class="dr-top"><div class="ava" style="${avatarGradient(4)}">${esc(initials(name))}</div>
         <b>${esc(name)}</b><span>${total} ${plural(total, 'новое', 'новых', 'новых')}</span></div>
       <div class="dr-sep"></div>
       <div class="dr-item" data-act="workspace">${I.folder}<span>Кабинет OS</span></div>
       <div class="dr-item" data-act="connections">${I.link}<span>Подключения</span></div>
+      ${pushSupported() ? `<div class="dr-item" data-act="push">${I.bell}<span>Push-уведомления</span>
+        <div class="sw-t ${pushOn ? 'on' : ''}"></div></div>` : ''}
       <div class="dr-item" data-act="night">${I.moon}<span>Ночной режим</span>
         <div class="sw-t ${this.theme === 'dark' ? 'on' : ''}"></div></div>
       <div class="dr-sep"></div>
@@ -560,8 +825,277 @@ export class UniboxApp {
       this.renderDrawer()
       this.renderChat()
     }
+    if (act === 'push') {
+      void this.togglePush()
+      return
+    }
     if (act === 'workspace') window.location.href = '/workspace/'
     if (act === 'connections') window.location.href = '/workspace/connections'
+  }
+
+  private async togglePush(): Promise<void> {
+    if (!pushSupported()) {
+      this.toast('Push не поддерживается в этом браузере')
+      return
+    }
+    if (pushPermission() === 'granted') {
+      await unregisterChatPush()
+      this.toast('Push отключены')
+    } else {
+      const r = await registerChatPush()
+      if (r === 'granted') this.toast('Push включены')
+      else if (r === 'denied') this.toast('Разрешите уведомления в настройках браузера')
+      else if (r === 'server-off') this.toast('Push не настроены на сервере')
+      else this.toast('Push недоступны')
+    }
+    this.renderDrawer()
+  }
+
+  private msgMenu(m: UiMessage, x: number, y: number): void {
+    const ctx = $('#ctx')!
+    const items = [
+      [I.reply, 'Ответить', 'reply'],
+      (m.text || m.ru) ? [I.copy, 'Копировать', 'copy'] : null,
+      (m.text || m.ru) ? [I.note, 'В заметки', 'tonote'] : null,
+    ].filter(Boolean) as Array<[string, string, string]>
+    ctx.innerHTML =
+      `<div class="quick-r">${REACTION_EMOJIS.map((e) => `<button type="button" data-qr="${e}">${e}</button>`).join('')}</div>` +
+      items.map(([ic, l, a]) => `<button type="button" data-act="${a}">${ic}<span>${l}</span></button>`).join('')
+    ctx.dataset.msg = String(m.id)
+    this.showPop(ctx, x, y)
+  }
+
+  private chatMenu(c: UiChat, x: number, y: number): void {
+    const ctx = $('#ctx')!
+    const items = [
+      [I.folder, 'Добавить в папку', 'folder'],
+      [I.note, 'Заметки', 'notes'],
+      [I.pin, c.pinned ? 'Снять VIP' : 'VIP', 'pin'],
+      [I.link, c.biz ? 'Снять метку «Реклама»' : 'Пометить как рекламу', 'biz'],
+      [I.trash, 'Убрать из списка', 'delete'],
+    ]
+    ctx.innerHTML = items.map(([ic, l, a]) =>
+      `<button type="button" data-chatact="${a}" class="${a === 'delete' ? 'dgr' : ''}">${ic}<span>${l}</span></button>`,
+    ).join('')
+    ctx.dataset.chat = String(c.id)
+    this.showPop(ctx, x, y)
+  }
+
+  private msgAct(a: string): void {
+    const ctx = $('#ctx')!
+    const id = Number(ctx.dataset.msg)
+    const c = this.ctrl.activeChat
+    const m = c?.msgs.find((x) => x.id === id)
+    if (!c || !m) return
+    if (a === 'reply') {
+      this.reply = id
+      this.renderChat()
+      $('#inp')?.focus()
+    }
+    if (a === 'copy') {
+      void navigator.clipboard?.writeText(m.ru || m.text || '').then(() => this.toast('Скопировано'))
+    }
+    if (a === 'tonote') {
+      const snippet = (m.ru || m.text || '').slice(0, 160)
+      void this.ctrl.addNote(c.id, `Из переписки (${m.time}): «${snippet}»`).then(() => {
+        this.pane = true
+        this.ptab = 'notes'
+        $('#app')?.classList.add('side-open')
+        this.renderPane()
+        this.toast('Добавлено в заметки')
+      })
+    }
+  }
+
+  private chatAct(a: string): void {
+    const ctx = $('#ctx')!
+    const convId = Number(ctx.dataset.chat)
+    const c = this.ctrl.chats.find((x) => x.id === convId) || this.ctrl.activeChat
+    if (!c) return
+    if (a === 'folder') this.openFolderPick(c.id)
+    if (a === 'notes') {
+      void this.openChat(c.id).then(() => {
+        this.pane = true
+        this.ptab = 'notes'
+        $('#app')?.classList.add('side-open')
+        this.renderPane()
+      })
+    }
+    if (a === 'pin') {
+      const next = c.pinned ? null : 'vip'
+      void this.ctrl.updateSettings(c.id, { manual_category: next }).then(() => {
+        this.renderTabs()
+        this.renderList()
+        this.toast(next ? 'VIP' : 'VIP снят')
+      }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+    }
+    if (a === 'biz') {
+      const next = c.biz ? null : 'bomzh'
+      void this.ctrl.updateSettings(c.id, { manual_category: next }).then(() => {
+        this.renderTabs()
+        this.renderList()
+        this.toast(next ? 'Помечено как реклама' : 'Метка снята')
+      }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+    }
+    if (a === 'delete') {
+      if (!window.confirm('Убрать диалог из списка? История сохранится на сервере.')) return
+      void this.ctrl.hideConversation(c.id).then(() => {
+        $('#app')?.classList.remove('open')
+        this.pane = false
+        this.renderAll()
+        this.toast('Диалог скрыт')
+      }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+    }
+  }
+
+  private findRun(q: string): void {
+    if (!this.find) return
+    const c = this.ctrl.activeChat
+    if (!c) return
+    this.find.q = q
+    const t = q.trim().toLowerCase()
+    this.find.hits = t.length > 1
+      ? c.msgs.filter((m) => (m.text || m.ru || '').toLowerCase().includes(t)).map((m) => m.id)
+      : []
+    this.find.i = 0
+    this.renderMsgs(true)
+    if (this.find.hits.length) this.gotoMsg(this.find.hits[0])
+  }
+
+  private findGo(dir: number): void {
+    if (!this.find?.hits.length) return
+    this.find.i = (this.find.i + dir + this.find.hits.length) % this.find.hits.length
+    this.updateFindN()
+    this.gotoMsg(this.find.hits[this.find.i])
+  }
+
+  private gotoMsg(msgId: number): void {
+    const row = document.getElementById(`msg-${msgId}`)
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    this.renderMsgs(true)
+  }
+
+  private updateFindN(): void {
+    const el = $('#findN')
+    if (!el || !this.find) return
+    el.textContent = this.find.hits.length
+      ? `${this.find.i + 1} из ${this.find.hits.length}`
+      : (this.find.q.trim().length > 1 ? 'ничего не найдено' : '')
+  }
+
+  private renderEmojiPop(): void {
+    $('#emojiPop')!.innerHTML =
+      `<div class="em-grid">${EMOJI_QUICK.map((e) => `<button type="button" data-em="${e}">${e}</button>`).join('')}</div>`
+  }
+
+  private folderTabMenu(folderId: number, x: number, y: number): void {
+    const folder = this.ctrl.folders.find((f) => f.id === folderId)
+    if (!folder) return
+    const ctx = $('#ctx')!
+    ctx.innerHTML =
+      `<button type="button" data-folder-act="rename">${I.note}<span>Переименовать «${esc(folder.name)}»</span></button>` +
+      `<button type="button" data-folder-act="delete" class="dgr">${I.trash}<span>Удалить папку</span></button>`
+    ctx.dataset.folderId = String(folderId)
+    this.showPop(ctx, x, y)
+  }
+
+  private folderAct(act: string, folderId: number): void {
+    const folder = this.ctrl.folders.find((f) => f.id === folderId)
+    if (!folder) return
+    if (act === 'rename') this.openFolderRename(folderId, folder.name)
+    if (act === 'delete') {
+      if (!window.confirm(`Удалить папку «${folder.name}»? Диалоги останутся.`)) return
+      void this.ctrl.removeUserFolder(folderId).then(() => {
+        if (this.folder === String(folderId)) this.folder = 'all'
+        this.renderTabs()
+        this.toast('Папка удалена')
+      }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+    }
+  }
+
+  private openFolderRename(folderId: number, current: string): void {
+    this.modal('Переименовать папку', `
+      <input class="f-in" id="folderName" value="${esc(current)}" autocomplete="off">
+      <div style="margin-top:12px;display:flex;justify-content:flex-end">
+        <button class="btn-n" id="folderSave">Сохранить</button>
+      </div>`, (el) => {
+      const save = () => {
+        const name = (el.querySelector('#folderName') as HTMLInputElement | null)?.value.trim()
+        if (!name) return
+        void this.ctrl.renameUserFolder(folderId, name).then(() => {
+          this.renderTabs()
+          this.toast('Папка переименована')
+          el.closest('.modal-wrap')?.remove()
+        }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+      }
+      el.querySelector('#folderSave')?.addEventListener('click', save)
+      el.querySelector('#folderName')?.addEventListener('keydown', (e) => {
+        if ((e as KeyboardEvent).key === 'Enter') save()
+      })
+    })
+  }
+
+  private async toggleReaction(messageId: number, emoji: string): Promise<void> {
+    const c = this.ctrl.activeChat
+    if (!c || !messageId || !emoji) return
+    try {
+      await this.ctrl.toggleReaction(c.id, messageId, emoji)
+      this.renderMsgs(true)
+    } catch (e) {
+      this.toast(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  private openFolderCreate(): void {
+    this.modal('Новая папка', `
+      <input class="f-in" id="folderName" placeholder="Название папки" autocomplete="off">
+      <div style="margin-top:12px;display:flex;justify-content:flex-end">
+        <button class="btn-n" id="folderSave">Создать</button>
+      </div>`, (el) => {
+      const save = () => {
+        const name = (el.querySelector('#folderName') as HTMLInputElement | null)?.value.trim()
+        if (!name) return
+        void this.ctrl.createUserFolder(name).then(() => {
+          this.renderTabs()
+          this.toast('Папка создана')
+          el.closest('.modal-wrap')?.remove()
+        }).catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+      }
+      el.querySelector('#folderSave')?.addEventListener('click', save)
+      el.querySelector('#folderName')?.addEventListener('keydown', (e) => {
+        if ((e as KeyboardEvent).key === 'Enter') save()
+      })
+    })
+  }
+
+  private openFolderPick(convId: number): void {
+    const folders = this.ctrl.folders
+    const body = folders.length
+      ? folders.map((f) => {
+          const inFolder = f.conversation_ids.includes(convId)
+          return `<button type="button" class="f-row" data-folder-pick="${f.id}" data-conv="${convId}">
+            <div class="mid"><b>${esc(f.name)}</b><span>${inFolder ? 'Убрать из папки' : 'Добавить'}</span></div></button>`
+        }).join('')
+      : '<div class="empty-s">Сначала создайте папку через «+» над списком.</div>'
+    this.modal('Папки', body)
+  }
+
+  private async pickFolderForChat(folderId: number, convId: number): Promise<void> {
+    const folder = this.ctrl.folders.find((f) => f.id === folderId)
+    if (!folder) return
+    try {
+      if (folder.conversation_ids.includes(convId)) {
+        await this.ctrl.removeChatFromFolder(folderId, convId)
+        this.toast('Убрано из папки')
+      } else {
+        await this.ctrl.addChatToFolder(folderId, convId)
+        this.toast('Добавлено в папку')
+      }
+      this.renderTabs()
+      document.querySelector('.modal-wrap')?.remove()
+    } catch (e) {
+      this.toast(e instanceof Error ? e.message : String(e))
+    }
   }
 
   applyTheme(): void {

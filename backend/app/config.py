@@ -27,11 +27,16 @@ class Settings(BaseSettings):
     # Одновременные фоновые studio jobs на процесс API
     studio_max_concurrent_jobs: int = Field(default=4, ge=1, le=32)
     studio_jobs_poll_interval_seconds: float = Field(default=1.5, ge=0.5, le=30.0)
-    # Роль процесса: all (dev), api (только HTTP), worker (фоновые studio jobs)
+    # Роль процесса: all (dev), api (HTTP/WS), worker (studio), messaging (чат-очереди)
     app_role: str = Field(
         default="all",
         validation_alias=AliasChoices("APP_ROLE"),
-        description="all | api | worker",
+        description="all | api | worker | messaging",
+    )
+    # Redis pub/sub для WS между несколькими API (опционально)
+    redis_url: str = Field(
+        default="",
+        description="redis://host:6379/0 — включает RealtimeHub pub/sub",
     )
     # Rate limit auth (на IP, in-memory на процесс)
     auth_register_rate_limit: int = Field(default=10, ge=1)
@@ -999,9 +1004,13 @@ class Settings(BaseSettings):
     @property
     def app_role_normalized(self) -> str:
         role = (self.app_role or "all").strip().lower()
-        if role in ("api", "worker", "all"):
+        if role in ("api", "worker", "messaging", "all"):
             return role
         return "all"
+
+    @property
+    def redis_realtime_enabled(self) -> bool:
+        return bool((self.redis_url or "").strip())
 
     @property
     def runs_http_api(self) -> bool:
@@ -1019,8 +1028,13 @@ class Settings(BaseSettings):
 
     @property
     def background_maintenance_in_process(self) -> bool:
-        """Retention/cleanup/fanvue/companion index — worker на prod, all в dev."""
+        """Studio retention/cleanup/archive — worker на prod, all в dev."""
         return self.app_role_normalized in ("all", "worker")
+
+    @property
+    def messaging_maintenance_in_process(self) -> bool:
+        """Fanvue poll + companion feedback/style — messaging worker на prod."""
+        return self.app_role_normalized in ("all", "messaging")
 
     @property
     def studio_archive_retry_in_api(self) -> bool:
@@ -1038,7 +1052,8 @@ class Settings(BaseSettings):
 
     @property
     def companion_jobs_worker_loop_enabled(self) -> bool:
-        return self.app_role_normalized == "worker"
+        """Poll companion queue — messaging worker (all использует inline loop в API)."""
+        return self.app_role_normalized == "messaging"
 
     @property
     def runs_telegram_user_worker(self) -> bool:

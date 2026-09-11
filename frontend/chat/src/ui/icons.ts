@@ -29,4 +29,8 @@ export const I = {
   photo: svg('<rect x="3" y="5" width="18" height="14" rx="2.6"/><circle cx="8.8" cy="10.2" r="1.6"/><path d="m4.4 17.6 4.9-4.9 3.5 3.5 2.7-2.3 4.5 3.9"/>'),
   file: svg('<path d="M13.8 3.2H7.4a2.4 2.4 0 0 0-2.4 2.4v12.8a2.4 2.4 0 0 0 2.4 2.4h9.2a2.4 2.4 0 0 0 2.4-2.4V8.4z"/><path d="M13.8 3.2v5.2H19"/>'),
   trash: svg('<path d="M4.6 6.7h14.8"/><path d="M9.6 6.7V4.4h4.8v2.3"/><path d="M6.9 6.7 8.1 20.2h7.8L17.1 6.7"/><path d="M10.4 10.4v6M13.6 10.4v6"/>'),
+  reply: svg('<path d="M9.5 13.5 4 18v-4.5H2.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H13a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1H12l-3.5 3.5z"/>'),
+  copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/>'),
+  bell: svg('<path d="M12 3a5 5 0 0 1 5 5v3.5l1.5 2.5H5.5L7 11.5V8a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/>'),
+  pin: svg('<path d="M14 4.5 9.5 9l-4.5 1 6 6 1-4.5L16.5 7z"/><path d="M6 18l3-3"/>'),
 }

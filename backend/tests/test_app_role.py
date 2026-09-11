@@ -32,5 +32,16 @@ def test_app_role_worker_runs_maintenance(monkeypatch: pytest.MonkeyPatch) -> No
     assert s.studio_jobs_worker_loop_enabled is True
     assert s.background_maintenance_in_process is True
     assert s.companion_jobs_worker_in_api is False
+    assert s.companion_jobs_worker_loop_enabled is False
+    assert s.messaging_maintenance_in_process is False
+    assert s.runs_http_api is False
+
+
+def test_app_role_messaging_runs_chat_loops(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ROLE", "messaging")
+    s = Settings()
+    assert s.studio_jobs_worker_loop_enabled is False
+    assert s.background_maintenance_in_process is False
     assert s.companion_jobs_worker_loop_enabled is True
+    assert s.messaging_maintenance_in_process is True
     assert s.runs_http_api is False

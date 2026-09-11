@@ -237,7 +237,21 @@ async def lifespan(app: FastAPI):
         log.exception("Telegram webhook refresh on startup failed")
     if settings.app_role_normalized in ("api", "all"):
         asyncio.create_task(_deferred_recover_studio_jobs_on_startup())
+    redis_bridge = None
+    if settings.redis_realtime_enabled and settings.runs_http_api:
+        from app.services.realtime import hub
+        from app.services.realtime_redis import RedisRealtimeBridge
+
+        redis_bridge = RedisRealtimeBridge(settings.redis_url.strip())
+        await redis_bridge.start(hub.deliver_local)
+        hub.attach_redis(redis_bridge, redis_only=True)
+        log.info("Redis RealtimeHub bridge enabled")
     yield
+    if redis_bridge:
+        from app.services.realtime import hub
+
+        hub.attach_redis(None, redis_only=False)
+        await redis_bridge.stop()
     if polling_task:
         polling_task.cancel()
         try:

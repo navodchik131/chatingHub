@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ModelMate Unibox",
+  "version": "0.1.0",
+  "identifier": "online.model-mate.unibox",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "https://chat.model-mate.online/",
+    "frontendDist": "../dist-placeholder"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Unibox",
+        "width": 420,
+        "height": 820,
+        "minWidth": 360,
+        "minHeight": 600,
+        "url": "https://chat.model-mate.online/"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

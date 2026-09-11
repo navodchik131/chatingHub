@@ -30,7 +30,11 @@ sudo nginx -t && sudo systemctl reload nginx
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api frontend studio-worker
 ```
 
-На prod API (`APP_ROLE=api`) — только HTTP/WebSocket. В `studio-worker` (`APP_ROLE=worker`): studio jobs, companion queue, archive retry, retention/cleanup, fanvue poll.
+На prod:
+- **api** (`APP_ROLE=api`) — HTTP/WebSocket + Redis pub/sub (`REDIS_URL`)
+- **studio-worker** — studio jobs, archive retry, retention/cleanup
+- **messaging-worker** (`APP_ROLE=messaging`) — companion queue, Fanvue poll, companion index
+- **Unibox subdomain** — `https://chat.model-mate.online/` (отдельный PWA scope `/`)
 Prod SPA — React `dist-site`. Legacy DesignCode: `frontend/legacy/design-code/` (не в prod build).
 Logout/смена пароля инвалидируют JWT (`auth_token_version`). Rate limit auth — Postgres на prod.
 В `backend/.env` обязательны `JWT_SECRET`, `JWT_MEDIA_SECRET`, `YOOKASSA_WEBHOOK_SECRET` (если ЮKassa включена).

@@ -10,8 +10,14 @@ export async function fetchConversations(): Promise<ApiConversation[]> {
   return Array.isArray(rows) ? rows : []
 }
 
-export async function fetchMessages(convId: number, limit = 80): Promise<ApiMessage[]> {
-  const rows = await apiJson<ApiMessage[]>(`/api/conversations/${convId}/messages?limit=${limit}`)
+export async function fetchMessages(
+  convId: number,
+  limit = 80,
+  before?: number,
+): Promise<ApiMessage[]> {
+  let url = `/api/conversations/${convId}/messages?limit=${limit}`
+  if (before != null && before > 0) url += `&before=${before}`
+  const rows = await apiJson<ApiMessage[]>(url)
   return Array.isArray(rows) ? rows : []
 }
 
@@ -64,4 +70,63 @@ export async function createNote(convId: number, content: string): Promise<void>
     method: 'POST',
     body: JSON.stringify({ content }),
   })
+}
+
+export async function setMessageReaction(
+  convId: number,
+  messageId: number,
+  emoji: string,
+): Promise<ApiMessage> {
+  return apiJson<ApiMessage>(`/api/conversations/${convId}/messages/${messageId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  })
+}
+
+export async function createFolder(name: string, conversationIds: number[] = []): Promise<ConversationFolder> {
+  return apiJson<ConversationFolder>('/api/conversation-folders', {
+    method: 'POST',
+    body: JSON.stringify({ name, conversation_ids: conversationIds }),
+  })
+}
+
+export async function updateFolder(
+  folderId: number,
+  patch: { name?: string; conversation_ids?: number[] },
+): Promise<ConversationFolder> {
+  return apiJson<ConversationFolder>(`/api/conversation-folders/${folderId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function deleteFolder(folderId: number): Promise<void> {
+  await apiFetch(`/api/conversation-folders/${folderId}`, { method: 'DELETE' })
+}
+
+export async function addConversationToFolder(folderId: number, convId: number): Promise<ConversationFolder> {
+  return apiJson<ConversationFolder>(`/api/conversation-folders/${folderId}/conversations/${convId}`, {
+    method: 'PUT',
+    body: '{}',
+  })
+}
+
+export async function removeConversationFromFolder(folderId: number, convId: number): Promise<ConversationFolder> {
+  return apiJson<ConversationFolder>(`/api/conversation-folders/${folderId}/conversations/${convId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** AI-анализ переписки → заметки. */
+export async function analyzeNotes(convId: number): Promise<unknown[]> {
+  const rows = await apiJson<unknown[]>(`/api/conversations/${convId}/notes/analyze`, {
+    method: 'POST',
+    body: '{}',
+  })
+  return Array.isArray(rows) ? rows : []
+}
+
+/** Мягкое удаление диалога из списка. */
+export async function deleteConversation(convId: number): Promise<void> {
+  await apiFetch(`/api/conversations/${convId}`, { method: 'DELETE' })
 }

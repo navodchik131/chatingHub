@@ -14,12 +14,14 @@ RUN cd frontend && npm ci --no-audit --no-fund
 
 COPY frontend/ ./frontend/
 
-RUN cd frontend && npm run build:site && npm run build:chat && npm run build:workflow
+RUN cd frontend && npm run build:site && npm run build:chat && npm run build:chat:subdomain && npm run build:workflow
 
 FROM nginx:1.27-alpine
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx-chat-subdomain.conf /etc/nginx/conf.d/chat-subdomain.conf
 COPY --from=build /app/frontend/dist-site /usr/share/nginx/html
 COPY --from=build /app/frontend/dist-chat /usr/share/nginx/html/chat
+COPY --from=build /app/frontend/dist-chat-root /usr/share/nginx/html/chat-root
 COPY --from=build /app/frontend/dist/workflow /usr/share/nginx/html/workspace/workflow
 EXPOSE 80
-
+

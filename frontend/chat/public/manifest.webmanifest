@@ -1,0 +1,27 @@
+{
+  "name": "ModelMate Unibox",
+  "short_name": "Unibox",
+  "description": "Диалоги ModelMate — Telegram, Fanvue, Instagram",
+  "start_url": "/chat/",
+  "scope": "/chat/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#17212b",
+  "theme_color": "#3390ec",
+  "lang": "ru",
+  "categories": ["business", "social"],
+  "icons": [
+    {
+      "src": "/assets/logo-m.jpeg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ]
+}

@@ -19,8 +19,14 @@ export function getToken(): string | null {
 }
 
 export function redirectToLogin(): void {
-  const next = encodeURIComponent(`${window.location.pathname}${window.location.search}`)
-  window.location.href = `/login?next=${next}`
+  // На chat.* логин на основном домене, next — полный URL возврата
+  const onChatSub = window.location.hostname.startsWith('chat.')
+  const nextRaw = onChatSub
+    ? window.location.href
+    : `${window.location.pathname}${window.location.search}`
+  const next = encodeURIComponent(nextRaw)
+  const loginBase = onChatSub ? `${window.location.protocol}//${window.location.hostname.replace(/^chat\./, '')}` : ''
+  window.location.href = `${loginBase}/login?next=${next}`
 }
 
 /** Сессия: всегда проверяем /api/auth/me; stale Bearer не блокирует HttpOnly cookie. */

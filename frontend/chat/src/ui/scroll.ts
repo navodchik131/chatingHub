@@ -54,6 +54,20 @@ export class ThreadScroll {
     this.afterMessagesRender(el)
   }
 
+  /** Сохранить позицию перед prepend старых сообщений. */
+  captureForPrepend(el: HTMLElement): { scrollTop: number; scrollHeight: number } {
+    return { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight }
+  }
+
+  /** Восстановить видимую область после prepend. */
+  restoreAfterPrepend(
+    el: HTMLElement,
+    prev: { scrollTop: number; scrollHeight: number },
+  ): void {
+    const delta = el.scrollHeight - prev.scrollHeight
+    el.scrollTop = prev.scrollTop + delta
+  }
+
   bindScrollContainer(el: HTMLElement, onShowScrollDown: (show: boolean) => void): () => void {
     const onScroll = () => {
       this.updateFromScroll(el)

@@ -1,9 +1,47 @@
 # Production overlay: кабинет на https://model-mate.online/workspace/
 # Использование: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   api:
     environment:
       APP_ROLE: api
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  messaging-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chating:chating@db:5432/chating
+      APP_ROLE: messaging
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      - chating_app_data:/app/backend/data
+      - ./backend/ig-bot:/app/backend/ig-bot:ro
+    command: ["python", "-m", "app.messaging_worker_main"]
+
   studio-worker:
     build:
       context: .

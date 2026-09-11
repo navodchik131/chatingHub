@@ -73,7 +73,7 @@ def spawn_studio_maintenance_tasks() -> list[asyncio.Task[None]]:
 
 
 def spawn_fanvue_poll_task() -> asyncio.Task[None] | None:
-    if not settings.background_maintenance_in_process:
+    if not settings.messaging_maintenance_in_process:
         return None
     if settings.fanvue_inbox_poll_interval_seconds <= 0:
         return None
@@ -101,8 +101,8 @@ def maintenance_loop_coroutines() -> list:
 
 
 def spawn_companion_maintenance_tasks() -> list[asyncio.Task[None]]:
-    """Feedback/style index — тяжёлые циклы companion, на prod в worker."""
-    if not settings.background_maintenance_in_process:
+    """Feedback/style index — на prod в messaging-worker."""
+    if not settings.messaging_maintenance_in_process:
         return []
     from app.services.companion_bot.feedback import companion_feedback_loop
     from app.services.companion_bot.style_index import companion_style_index_loop
@@ -122,21 +122,30 @@ def spawn_companion_maintenance_tasks() -> list[asyncio.Task[None]]:
 
 
 def worker_process_coroutines() -> list:
-    """Все корутины для APP_ROLE=worker."""
+    """Корутины APP_ROLE=worker — только studio jobs + studio maintenance."""
     from app.services.studio_jobs import studio_jobs_worker_loop
 
     coros: list = []
     if settings.studio_jobs_worker_loop_enabled:
         coros.append(studio_jobs_worker_loop())
     coros.extend(maintenance_loop_coroutines())
+    return coros
+
+
+def messaging_process_coroutines() -> list:
+    """Корутины APP_ROLE=messaging — companion queue, Fanvue poll, companion index."""
+    coros: list = []
     if settings.companion_jobs_worker_loop_enabled:
         from app.services.companion_bot.job_queue import companion_job_worker_loop
 
         coros.append(companion_job_worker_loop())
-    if settings.background_maintenance_in_process:
+    if settings.messaging_maintenance_in_process:
         from app.services.companion_bot.feedback import companion_feedback_loop
         from app.services.companion_bot.style_index import companion_style_index_loop
+        from app.services.fanvue_inbox_poll import fanvue_inbox_poll_loop
 
+        if settings.fanvue_inbox_poll_interval_seconds > 0:
+            coros.append(fanvue_inbox_poll_loop())
         coros.append(companion_feedback_loop())
         coros.append(companion_style_index_loop())
     return coros

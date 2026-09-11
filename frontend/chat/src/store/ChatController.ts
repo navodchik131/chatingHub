@@ -14,6 +14,14 @@ import {
   sendTextReply,
   patchConversation,
   fetchMe,
+  setMessageReaction,
+  createFolder,
+  updateFolder,
+  deleteFolder,
+  addConversationToFolder,
+  removeConversationFromFolder,
+  analyzeNotes,
+  deleteConversation,
 } from '../api/chatApi'
 import { connectRealtime, type RealtimeConnection } from '../api/realtime'
 import { apiFetch } from '../api/client'
@@ -45,6 +53,9 @@ import type {
 
 export type ChatListener = () => void
 
+/** Размер страницы при подгрузке истории вверх. */
+const THREAD_PAGE = 50
+
 export class ChatController {
   me: UserMe | null = null
   chats: UiChat[] = []
@@ -65,6 +76,10 @@ export class ChatController {
   private readTimer: ReturnType<typeof setTimeout> | null = null
   private threadLoads = new Map<number, Promise<void>>()
   private apiMessages = new Map<number, ApiMessage[]>()
+  /** Есть ли ещё сообщения старше текущей порции. */
+  hasMoreMessages: Record<number, boolean> = {}
+  /** Идёт подгрузка истории вверх. */
+  loadingOlder: Record<number, boolean> = {}
 
   subscribe(fn: ChatListener): () => void {
     this.listeners.add(fn)
@@ -189,8 +204,9 @@ export class ChatController {
       const chat = this.chats.find((c) => c.id === convId)
       if (!chat) return
       try {
-        const fresh = await fetchMessages(convId, 80)
+        const fresh = await fetchMessages(convId, THREAD_PAGE)
         const merged = mergeApiMessages(this.apiMessages.get(convId) || [], fresh)
+        this.hasMoreMessages[convId] = fresh.length >= THREAD_PAGE
         this.apiMessages.set(convId, merged)
         await saveThreadCache(convId, merged)
         chat.msgs = mapApiMessages(merged, chat)
@@ -206,6 +222,42 @@ export class ChatController {
 
     this.threadLoads.set(convId, job)
     return job
+  }
+
+  /** Подгрузка более старых сообщений при скролле вверх. */
+  async loadOlderMessages(convId: number): Promise<boolean> {
+    if (this.loadingOlder[convId] || !this.hasMoreMessages[convId]) return false
+
+    const chat = this.chats.find((c) => c.id === convId)
+    const merged = this.apiMessages.get(convId) || []
+    const oldest = merged.find((m) => m.id > 0)?.id
+    if (!chat || !oldest) return false
+
+    this.loadingOlder[convId] = true
+    this.emit()
+
+    try {
+      const older = await fetchMessages(convId, THREAD_PAGE, oldest)
+      this.hasMoreMessages[convId] = older.length >= THREAD_PAGE
+      if (!older.length) return false
+
+      const anchor = this.unreadAnchor[convId]
+      if (anchor !== undefined) this.unreadAnchor[convId] = anchor + older.length
+
+      const next = mergeApiMessages(older, merged)
+      this.apiMessages.set(convId, next)
+      await saveThreadCache(convId, next)
+      chat.msgs = mapApiMessages(next, chat)
+      this.emit()
+      return true
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e)
+      this.emit()
+      return false
+    } finally {
+      delete this.loadingOlder[convId]
+      this.emit()
+    }
   }
 
   scheduleMarkRead(convId: number): void {
@@ -284,6 +336,16 @@ export class ChatController {
     }
     if (ev.type === 'conversation_updated') {
       void this.refreshConversations()
+      return
+    }
+    if (ev.type === 'conversation_read') {
+      const readId = Number(ev.conversation_id)
+      const chat = this.chats.find((c) => c.id === readId)
+      if (chat) {
+        chat.unread = 0
+        if (this.activeChatId === readId) delete this.unreadAnchor[readId]
+        this.emit()
+      }
     }
   }
 
@@ -378,24 +440,94 @@ export class ChatController {
     await this.loadNotes(convId)
   }
 
+  async toggleReaction(convId: number, messageId: number, emoji: string): Promise<void> {
+    const chat = this.chats.find((c) => c.id === convId)
+    if (!chat || messageId <= 0) return
+    const updated = await setMessageReaction(convId, messageId, emoji)
+    const merged = mergeApiMessages(this.apiMessages.get(convId) || [], [updated])
+    this.apiMessages.set(convId, merged)
+    chat.msgs = mapApiMessages(merged, chat)
+    await saveThreadCache(convId, merged)
+    this.emit()
+  }
+
+  async createUserFolder(name: string, conversationIds: number[] = []): Promise<ConversationFolder> {
+    const folder = await createFolder(name.trim(), conversationIds)
+    this.folders = [...this.folders, folder]
+    this.emit()
+    return folder
+  }
+
+  async renameUserFolder(folderId: number, name: string): Promise<void> {
+    const folder = await updateFolder(folderId, { name: name.trim() })
+    this.folders = this.folders.map((f) => (f.id === folderId ? folder : f))
+    this.emit()
+  }
+
+  async removeUserFolder(folderId: number): Promise<void> {
+    await deleteFolder(folderId)
+    this.folders = this.folders.filter((f) => f.id !== folderId)
+    this.emit()
+  }
+
+  async addChatToFolder(folderId: number, convId: number): Promise<void> {
+    const folder = await addConversationToFolder(folderId, convId)
+    this.folders = this.folders.map((f) => (f.id === folderId ? folder : f))
+    this.emit()
+  }
+
+  async removeChatFromFolder(folderId: number, convId: number): Promise<void> {
+    const folder = await removeConversationFromFolder(folderId, convId)
+    this.folders = this.folders.map((f) => (f.id === folderId ? folder : f))
+    this.emit()
+  }
+
   async updateTranslation(convId: number, patch: {
     auto_translate_disabled?: boolean
     outbound_lang?: string | null
   }): Promise<void> {
-    await patchConversation(convId, patch)
-    await this.refreshConversations()
+    await this.updateSettings(convId, patch)
+  }
+
+  /** PATCH настроек диалога: перевод, companion, категория. */
+  async updateSettings(convId: number, patch: Record<string, unknown>): Promise<void> {
+    const updated = await patchConversation(convId, patch)
     const chat = this.chats.find((c) => c.id === convId)
     if (chat) {
+      chat.raw = { ...chat.raw, ...updated }
       if ('auto_translate_disabled' in patch) {
         const on = !patch.auto_translate_disabled
         chat.tr.in = on
         chat.tr.out = on
       }
       if ('outbound_lang' in patch) {
-        chat.tr.lang = (patch.outbound_lang || chat.lang || 'en').toLowerCase()
+        chat.tr.lang = ((patch.outbound_lang as string) || chat.lang || 'en').toLowerCase()
       }
-      this.emit()
+      if ('manual_category' in patch) {
+        chat.pinned = updated.manual_category === 'vip'
+        chat.biz = updated.manual_category === 'bomzh'
+      }
+      if ('companion_mode_override' in patch) {
+        chat.raw.companion_mode_override = updated.companion_mode_override
+        chat.raw.effective_companion_mode = updated.effective_companion_mode
+      }
     }
+    await this.refreshConversations()
+    this.emit()
+  }
+
+  async runNotesAnalyze(convId: number): Promise<void> {
+    await analyzeNotes(convId)
+    await this.loadNotes(convId)
+  }
+
+  /** Убрать диалог из списка (soft hide на сервере). */
+  async hideConversation(convId: number): Promise<void> {
+    await deleteConversation(convId)
+    this.chats = this.chats.filter((c) => c.id !== convId)
+    if (this.activeChatId === convId) this.activeChatId = null
+    this.apiMessages.delete(convId)
+    this.emit()
   }
 
   applyLocalMessage(convId: number, uiMsg: ReturnType<typeof mapApiMessage>): void {

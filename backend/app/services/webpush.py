@@ -48,7 +48,8 @@ async def notify_inbound_message(
     text = (body or "")[:2000]
     title_t = (title or "Сообщение")[:200]
     base = settings.public_app_url.rstrip("/")
-    target_url = f"{base}/?conv={conversation_id}"
+    # Относительный URL — SW и notificationclick открывают /chat/ в текущем origin
+    target_url = f"/chat/?conv={conversation_id}"
     payload = json.dumps(
         {"title": title_t, "body": text, "url": target_url},
         ensure_ascii=False,

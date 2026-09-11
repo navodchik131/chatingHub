@@ -1,4 +1,5 @@
 import { hasActiveSession, redirectToLogin } from './api/client'
+import { registerChatServiceWorker } from './pwa/register'
 import { ChatController } from './store/ChatController'
 import { UniboxApp } from './ui/App'
 
@@ -10,6 +11,9 @@ async function boot(): Promise<void> {
 
   const ctrl = new ChatController()
   const app = new UniboxApp(ctrl)
+
+  // SW для офлайн-оболочки и push (scope /chat/)
+  void registerChatServiceWorker()
 
   try {
     await ctrl.init()

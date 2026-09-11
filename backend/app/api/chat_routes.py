@@ -484,6 +484,10 @@ async def api_mark_read(
     await require_conversation_chat_access(session, user, conv_id, oid)
     await mark_conversation_read(session, conv_id, oid)
     await session.commit()
+    await hub.broadcast_user(
+        oid,
+        {"type": "conversation_read", "conversation_id": conv_id},
+    )
     return {"ok": True}
 
 

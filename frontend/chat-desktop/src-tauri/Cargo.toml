@@ -1,0 +1,16 @@
+[package]
+name = "modelmate-unibox-desktop"
+version = "0.1.0"
+description = "ModelMate Unibox desktop shell"
+authors = ["ModelMate"]
+edition = "2021"
+
+[lib]
+name = "modelmate_unibox_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

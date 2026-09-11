@@ -11,6 +11,7 @@
     "build": "npm run build:site && npm run build:chat && vite build --config vite.workflow.config.js",
     "build:site": "vite build --config vite.site.config.js && node scripts/check-prod-build.mjs",
     "build:chat": "vite build --config vite.chat.config.js",
+    "build:chat:subdomain": "vite build --config vite.chat.subdomain.config.js && node scripts/prepare-chat-subdomain.mjs",
     "build:workflow": "vite build --config vite.workflow.config.js",
     "preview": "vite preview --config vite.site.config.js --port 5173 --strictPort",
     "sync-design:legacy": "node legacy/design-code/sync-design.mjs"
