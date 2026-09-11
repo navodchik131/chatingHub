@@ -26,6 +26,7 @@ from app.db.repo import list_messages
 from app.db.session import SessionLocal
 from app.services.companion_bot.config import CompanionConnectionConfig, get_companion_config_for_conversation
 from app.services.companion_bot.generate import generate_companion_reply
+from app.services.companion_bot.llm_errors import CompanionLLMError, is_retryable_llm_error
 from app.services.companion_bot.prompt import PROMPT_VERSION, last_fan_message_text, resolve_target_lang
 from app.services.companion_bot.reply_target import resolve_reply_to_message_id
 from app.services.companion_bot.send import broadcast_companion_message, send_companion_outbound
@@ -295,6 +296,8 @@ async def create_companion_followup_event(
         )
     except Exception as e:
         log.warning("companion followup generate failed conv=%s: %s", conv.id, e)
+        if is_retryable_llm_error(e):
+            raise CompanionLLMError(str(e)) from e
         return None
 
     event = BotResponseEvent(
@@ -390,6 +393,9 @@ async def create_companion_reply_event(
         )
     except Exception as e:
         log.warning("companion generate failed conv=%s: %s", conv.id, e)
+        # Grok/xAI 402/429 — job в очереди повторится после пополнения баланса
+        if is_retryable_llm_error(e):
+            raise CompanionLLMError(str(e)) from e
         fail = BotResponseEvent(
             conversation_id=conv.id,
             trigger_message_id=trigger_message_id,

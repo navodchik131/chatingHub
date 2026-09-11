@@ -548,6 +548,19 @@ def test_state_update_mood():
     assert _infer_mood("just chilling") is None
 
 
+def test_retryable_llm_error_detection() -> None:
+    from app.services.companion_bot.llm_errors import (
+        CompanionLLMError,
+        is_retryable_llm_error,
+        is_retryable_llm_error_text,
+    )
+
+    assert is_retryable_llm_error_text("OpenAI HTTP 402 billing")
+    assert is_retryable_llm_error_text("rate limit exceeded")
+    assert not is_retryable_llm_error_text("invalid json response")
+    assert is_retryable_llm_error(CompanionLLMError("OpenAI HTTP 429"))
+
+
 def test_companion_chat_model_avoids_reasoning():
     from app.config import settings
     from app.services.companion_bot.generate import companion_chat_model

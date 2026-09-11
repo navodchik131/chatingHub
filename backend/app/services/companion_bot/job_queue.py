@@ -14,11 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.models import CompanionJob, CompanionJobKind, CompanionJobStatus
 from app.db.session import SessionLocal
+from app.services.companion_bot.llm_errors import is_retryable_llm_error_text
 
 log = logging.getLogger(__name__)
 
 _POLL_SEC = 2.0
 _MAX_ATTEMPTS = 3
+# Grok 402/429: больше попыток и длиннее пауза — после пополнения баланса job сам доедет
+_LLM_MAX_ATTEMPTS = 12
+_LLM_RETRY_BASE_SEC = 45
+_RECOVER_EVERY_TICKS = 30  # ~60 с при poll=2
 
 
 def _utcnow() -> datetime:
@@ -162,18 +167,43 @@ async def _finish_job(
     row = await session.get(CompanionJob, job.id)
     if not row:
         return
+    err_text = (error or "")[:2000] or None
+    retryable_llm = bool(err_text and is_retryable_llm_error_text(err_text))
+    max_attempts = _LLM_MAX_ATTEMPTS if retryable_llm else _MAX_ATTEMPTS
     if ok:
         row.status = CompanionJobStatus.done
         row.completed_at = _utcnow()
         row.last_error = None
-    elif row.attempts >= _MAX_ATTEMPTS:
+    elif row.attempts >= max_attempts:
         row.status = CompanionJobStatus.failed
         row.completed_at = _utcnow()
-        row.last_error = (error or "")[:2000] or None
+        row.last_error = err_text
+        if retryable_llm:
+            log.error(
+                "companion job exhausted LLM retries id=%s kind=%s conv=%s: %s",
+                row.id,
+                row.kind.value,
+                row.conversation_id,
+                err_text,
+            )
     else:
         row.status = CompanionJobStatus.pending
-        row.run_after = _utcnow() + timedelta(seconds=15 * row.attempts)
-        row.last_error = (error or "")[:2000] or None
+        delay_sec = (
+            _LLM_RETRY_BASE_SEC * row.attempts
+            if retryable_llm
+            else 15 * row.attempts
+        )
+        row.run_after = _utcnow() + timedelta(seconds=max(15, delay_sec))
+        row.last_error = err_text
+        if retryable_llm:
+            log.warning(
+                "companion job LLM retry id=%s attempt=%s/%s in %ss: %s",
+                row.id,
+                row.attempts,
+                max_attempts,
+                int(delay_sec),
+                err_text,
+            )
     await session.commit()
 
 
@@ -238,6 +268,39 @@ async def process_due_companion_jobs() -> int:
     return len(jobs)
 
 
+async def recover_retryable_failed_companion_jobs(*, hours: int = 24) -> int:
+    """После пополнения Grok: вернуть failed jobs с 402/429 в pending."""
+    since = _utcnow() - timedelta(hours=max(1, hours))
+    async with SessionLocal() as session:
+        rows = list(
+            (
+                await session.scalars(
+                    select(CompanionJob).where(
+                        CompanionJob.status == CompanionJobStatus.failed,
+                        CompanionJob.completed_at.isnot(None),
+                        CompanionJob.completed_at >= since,
+                    )
+                )
+            ).all()
+        )
+        n = 0
+        for row in rows:
+            if not is_retryable_llm_error_text(row.last_error or ""):
+                continue
+            row.status = CompanionJobStatus.pending
+            row.completed_at = None
+            row.started_at = None
+            row.run_after = _utcnow()
+            row.attempts = 0
+            n += 1
+        if n:
+            await session.commit()
+            log.warning("Requeued %s failed companion jobs after LLM outage", n)
+        else:
+            await session.commit()
+        return n
+
+
 async def recover_stale_companion_jobs_on_startup(*, stale_minutes: int = 10) -> int:
     """После краша API jobs могут зависнуть в running — возвращаем в очередь."""
     cutoff = _utcnow() - timedelta(minutes=max(1, stale_minutes))
@@ -266,8 +329,12 @@ async def recover_stale_companion_jobs_on_startup(*, stale_minutes: int = 10) ->
 
 async def companion_job_worker_loop() -> None:
     log.info("Companion job worker started (poll=%ss)", _POLL_SEC)
+    tick = 0
     while True:
+        tick += 1
         try:
+            if tick == 1 or tick % _RECOVER_EVERY_TICKS == 0:
+                await recover_stale_companion_jobs_on_startup(stale_minutes=2)
             n = await process_due_companion_jobs()
             if n:
                 log.debug("companion jobs processed=%s", n)

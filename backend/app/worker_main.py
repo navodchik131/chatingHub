@@ -49,12 +49,18 @@ async def _run_worker() -> None:
     except Exception:
         log.exception("studio jobs startup recovery failed")
     if settings.companion_jobs_worker_loop_enabled:
-        from app.services.companion_bot.job_queue import recover_stale_companion_jobs_on_startup
+        from app.services.companion_bot.job_queue import (
+            recover_retryable_failed_companion_jobs,
+            recover_stale_companion_jobs_on_startup,
+        )
 
         try:
-            recovered = await recover_stale_companion_jobs_on_startup()
+            recovered = await recover_stale_companion_jobs_on_startup(stale_minutes=2)
             if recovered:
-                log.info("Companion jobs recovered on worker startup: %s", recovered)
+                log.info("Companion stale jobs recovered on worker startup: %s", recovered)
+            requeued = await recover_retryable_failed_companion_jobs(hours=24)
+            if requeued:
+                log.info("Companion LLM-failed jobs requeued on worker startup: %s", requeued)
         except Exception:
             log.exception("Companion job recovery on worker startup failed")
     coros = worker_process_coroutines()
