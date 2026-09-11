@@ -36,10 +36,20 @@ export async function saveThreadCache(convId: number, messages: ApiMessage[]): P
   await idbSet('threads', `${THREAD_PREFIX}${convId}`, entry)
 }
 
-export async function loadUiSettings(): Promise<{ theme: string; accent: string } | null> {
+export type PersonaFilter = number | 'all' | 'none'
+
+export async function loadUiSettings(): Promise<{
+  theme: string
+  accent: string
+  activePersonaId?: PersonaFilter
+} | null> {
   return idbGet('meta', 'ui')
 }
 
-export async function saveUiSettings(theme: string, accent: string): Promise<void> {
-  await idbSet('meta', 'ui', { theme, accent })
+export async function saveUiSettings(
+  theme: string,
+  accent: string,
+  activePersonaId?: PersonaFilter,
+): Promise<void> {
+  await idbSet('meta', 'ui', { theme, accent, activePersonaId })
 }

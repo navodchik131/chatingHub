@@ -48,6 +48,16 @@ export interface ApiConversation {
   unread_count: number
   is_no_response?: boolean
   is_new?: boolean
+  /** Персонаж студии; NULL — только у владельца, без привязки к модели */
+  studio_model_id?: number | null
+}
+
+/** Персонаж (модель студии) — для переключателя как аккаунты в Telegram. */
+export interface StudioModel {
+  id: number
+  name: string
+  image_count: number
+  images?: Array<{ id: number; url: string; kind?: string }>
 }
 
 export interface ConversationFolder {

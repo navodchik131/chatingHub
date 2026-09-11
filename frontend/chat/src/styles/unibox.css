@@ -307,6 +307,16 @@ body[data-theme="dark"] .mrow.out .tr{color:rgba(255,255,255,.55)}
 .dr-item .sw-t{margin-left:auto}
 .dr-sep{height:1px;background:var(--line);margin:6px 0}
 .dr-lab{font-size:13px;color:var(--txt-2);padding:10px 16px 4px;font-weight:600}
+.dr-personas{padding:8px 8px 4px;max-height:240px;overflow-y:auto}
+.dr-persona{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;cursor:pointer;width:100%;border:0;background:transparent;color:inherit;text-align:left;font:inherit}
+.dr-persona:hover{background:var(--hover)}
+.dr-persona.on{background:var(--accent-soft)}
+.dr-persona .ava{width:44px;height:44px;font-size:16px;flex:0 0 auto}
+.dr-persona .mid{flex:1;min-width:0}
+.dr-persona .mid b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dr-persona .mid span{font-size:13px;color:var(--txt-2)}
+.dr-persona .badge{margin-left:auto;flex:0 0 auto;background:var(--accent);color:#fff;border-radius:10px;padding:2px 7px;font-size:12px;font-weight:700}
+.dr-persona .tick{margin-left:auto;color:var(--accent);flex:0 0 auto}
 .swatches{display:flex;gap:10px;padding:6px 16px 14px;flex-wrap:wrap}
 .sw-c{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:grid;place-items:center}
 .sw-c.on{border-color:var(--txt)}

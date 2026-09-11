@@ -1,8 +1,14 @@
-import type { ApiConversation, ApiMessage, ConversationFolder, UserMe } from '../types'
+import type { ApiConversation, ApiMessage, ConversationFolder, StudioModel, UserMe } from '../types'
 import { apiFetch, apiJson } from './client'
 
 export async function fetchMe(): Promise<UserMe> {
   return apiJson<UserMe>('/api/auth/me')
+}
+
+/** Список персонажей workspace — для переключателя диалогов. */
+export async function fetchStudioModels(): Promise<StudioModel[]> {
+  const rows = await apiJson<StudioModel[]>('/api/studio/models')
+  return Array.isArray(rows) ? rows : []
 }
 
 export async function fetchConversations(): Promise<ApiConversation[]> {

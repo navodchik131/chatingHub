@@ -14,6 +14,7 @@ import {
   sendTextReply,
   patchConversation,
   fetchMe,
+  fetchStudioModels,
   setMessageReaction,
   createFolder,
   updateFolder,
@@ -47,6 +48,7 @@ import type {
   ApiMessage,
   ConversationFolder,
   RealtimeEvent,
+  StudioModel,
   UiChat,
   UserMe,
 } from '../types'
@@ -58,6 +60,8 @@ const THREAD_PAGE = 50
 
 export class ChatController {
   me: UserMe | null = null
+  /** Персонажи workspace — переключатель в drawer. */
+  models: StudioModel[] = []
   chats: UiChat[] = []
   folders: ConversationFolder[] = []
   activeChatId: number | null = null
@@ -108,7 +112,12 @@ export class ChatController {
 
     try {
       this.me = await fetchMe()
-      const [convs, folds] = await Promise.all([fetchConversations(), fetchFolders()])
+      const [convs, folds, models] = await Promise.all([
+        fetchConversations(),
+        fetchFolders(),
+        fetchStudioModels().catch(() => [] as StudioModel[]),
+      ])
+      this.models = models
       this.folders = folds
       this.setConversationsFromApi(convs)
       await saveConversationsCache(convs)

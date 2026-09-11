@@ -3,7 +3,8 @@
  */
 
 import type { ChatController } from '../store/ChatController'
-import type { UiChat, UiMessage } from '../types'
+import type { PersonaFilter } from '../cache/threadCache'
+import type { StudioModel, UiChat, UiMessage } from '../types'
 import { esc, initials, avatarGradient, plural } from '../lib/format'
 import { platformMeta, platformIconImg, SOURCE_TABS } from '../lib/platforms'
 import { previewText, chatSubTitle } from '../lib/mapMessage'
@@ -53,6 +54,8 @@ export class UniboxApp {
   flashMsgId: number | null = null
   /** Поиск по тексту в открытом треде. */
   find: FindState | null = null
+  /** Активный персонаж — фильтр диалогов (как аккаунты в Telegram). */
+  activePersonaId: PersonaFilter = 'all'
 
   private scroll = new ThreadScroll()
   private unbindScroll: (() => void) | null = null
@@ -71,12 +74,88 @@ export class UniboxApp {
     if (saved) {
       this.theme = saved.theme === 'dark' ? 'dark' : 'light'
       this.accent = saved.accent || this.accent
+      if (saved.activePersonaId != null) this.activePersonaId = saved.activePersonaId
     }
     this.applyTheme()
 
     this.ctrl.subscribe(() => this.renderAll())
     this.bindGlobal()
     this.initStrips()
+    this.resolveActivePersona()
+    this.renderAll()
+  }
+
+  /** После загрузки models — валидируем сохранённый персонаж. */
+  resolveActivePersona(): void {
+    const models = this.ctrl.models
+    if (models.length === 1 && !this.hasUnassignedChats()) {
+      this.activePersonaId = models[0].id
+      return
+    }
+    if (typeof this.activePersonaId === 'number') {
+      if (!models.some((m) => m.id === this.activePersonaId)) {
+        this.activePersonaId = models.length > 1 ? 'all' : (models[0]?.id ?? 'all')
+      }
+    }
+  }
+
+  private hasUnassignedChats(): boolean {
+    return this.ctrl.chats.some((c) => c.raw.studio_model_id == null)
+  }
+
+  private showPersonaSwitcher(): boolean {
+    return this.ctrl.models.length > 1 || this.hasUnassignedChats()
+  }
+
+  /** Диалог принадлежит выбранному персонажу. */
+  private inPersona(c: UiChat): boolean {
+    if (!this.showPersonaSwitcher()) {
+      if (this.ctrl.models.length === 1) {
+        return c.raw.studio_model_id === this.ctrl.models[0].id
+      }
+      return true
+    }
+    if (this.activePersonaId === 'all') return true
+    if (this.activePersonaId === 'none') return c.raw.studio_model_id == null
+    return Number(c.raw.studio_model_id) === Number(this.activePersonaId)
+  }
+
+  private unreadForPersona(filter: PersonaFilter): number {
+    return this.ctrl.chats
+      .filter((c) => {
+        if (filter === 'all') return true
+        if (filter === 'none') return c.raw.studio_model_id == null
+        return Number(c.raw.studio_model_id) === Number(filter)
+      })
+      .reduce((a, c) => a + c.unread, 0)
+  }
+
+  private currentPersonaLabel(): string {
+    if (typeof this.activePersonaId === 'number') {
+      return this.ctrl.models.find((m) => m.id === this.activePersonaId)?.name || 'Персонаж'
+    }
+    if (this.activePersonaId === 'none') return 'Без модели'
+    return 'Все персонажи'
+  }
+
+  private personaAvaHtml(model: StudioModel, idx: number, sm = false): string {
+    const img = model.images?.[0]?.url
+    const inner = img ? `<img src="${esc(img)}" alt="">` : esc(initials(model.name))
+    const cls = img ? `has-photo ${sm ? 'sm' : ''}` : sm ? 'sm' : ''
+    return `<div class="ava ${cls}" style="${img ? '' : avatarGradient(idx % 7)}">${inner}</div>`
+  }
+
+  private async switchPersona(id: PersonaFilter): Promise<void> {
+    this.activePersonaId = id
+    void saveUiSettings(this.theme, this.accent, id)
+    const active = this.ctrl.activeChat
+    if (active && !this.inPersona(active)) {
+      this.ctrl.activeChatId = null
+      $('#app')?.classList.remove('open')
+      this.pane = false
+      $('#app')?.classList.remove('side-open')
+    }
+    this.drawer(false)
     this.renderAll()
   }
 
@@ -177,6 +256,13 @@ export class UniboxApp {
         this.applyTheme()
         this.renderDrawer()
       }
+      const pr = t.closest('[data-persona]') as HTMLElement | null
+      if (pr) {
+        const raw = pr.dataset.persona || 'all'
+        const next: PersonaFilter = raw === 'all' ? 'all' : raw === 'none' ? 'none' : Number(raw)
+        void this.switchPersona(next)
+        return
+      }
       const di = t.closest('.dr-item') as HTMLElement | null
       if (di) this.drawerAct(di.dataset.act || '')
       const st = t.closest('[data-strip]') as HTMLElement | null
@@ -261,11 +347,11 @@ export class UniboxApp {
       `<button class="tab ${on ? 'on' : ''}" data-f="${esc(id)}" data-ftab="${esc(id)}">${esc(name)}${unread ? `<i>${unread > 99 ? '99+' : unread}</i>` : ''}</button>`
 
     const folderTabs = SYS_FOLDERS.map((f) => {
-      const u = this.ctrl.chats.filter((c) => this.inSrc(c) && this.matchFolderId(c, f.id)).reduce((a, c) => a + c.unread, 0)
+      const u = this.ctrl.chats.filter((c) => this.inPersona(c) && this.inSrc(c) && this.matchFolderId(c, f.id)).reduce((a, c) => a + c.unread, 0)
       return tab(f.id, f.n, u, this.folder === f.id)
     })
     const custom = this.ctrl.folders.map((f) => {
-      const u = this.ctrl.chats.filter((c) => f.conversation_ids.includes(c.id) && this.inSrc(c)).reduce((a, c) => a + c.unread, 0)
+      const u = this.ctrl.chats.filter((c) => this.inPersona(c) && f.conversation_ids.includes(c.id) && this.inSrc(c)).reduce((a, c) => a + c.unread, 0)
       return tab(String(f.id), f.name, u, this.folder === String(f.id))
     })
     $('#folders')!.innerHTML = folderTabs.join('') + custom.join('')
@@ -276,7 +362,7 @@ export class UniboxApp {
     }
 
     const srcUnread = (id: string) =>
-      this.ctrl.chats.filter((c) => this.inFolder(c) && (id === 'all' || c.src === id)).reduce((a, c) => a + c.unread, 0)
+      this.ctrl.chats.filter((c) => this.inPersona(c) && this.inFolder(c) && (id === 'all' || c.src === id)).reduce((a, c) => a + c.unread, 0)
 
     $('#sources')!.innerHTML =
       srcTab('all', 'Все сети', null, srcUnread('all'), this.src === 'all') +
@@ -312,7 +398,7 @@ export class UniboxApp {
 
   private renderList(): void {
     const q = this.query.trim().toLowerCase()
-    let list = this.ctrl.chats.filter((c) => this.inFolder(c) && this.inSrc(c))
+    let list = this.ctrl.chats.filter((c) => this.inPersona(c) && this.inFolder(c) && this.inSrc(c))
     if (q) {
       list = list.filter((c) => {
         const last = previewText(c.msgs[c.msgs.length - 1] || null).toLowerCase()
@@ -342,6 +428,11 @@ export class UniboxApp {
   }
 
   async openChat(convId: number): Promise<void> {
+    const chat = this.ctrl.chats.find((c) => c.id === convId)
+    if (chat && !this.inPersona(chat)) {
+      const mid = chat.raw.studio_model_id
+      await this.switchPersona(mid == null ? 'none' : mid)
+    }
     this.reply = null
     this.find = null
     this.scroll.onThreadOpen()
@@ -769,6 +860,7 @@ export class UniboxApp {
     return `<div class="p-top">${this.avaHtml(c)}
       <h3>${esc(c.name)}</h3><p>${esc(platformMeta(c.raw.platform).name)}</p></div>
       <div class="p-list">
+        <div class="p-row"><span>${I.folder}</span><div><b>Персонаж</b><span>${esc(this.personaNameForChat(c))}</span></div></div>
         <div class="p-row"><span>${I.link}</span><div><b>ID</b><span>${esc(c.handle || String(c.id))}</span></div></div>
         <div class="p-row"><span>${I.globe}</span><div><b>Язык</b><span>${esc(c.lang)}</span></div></div>
         <div class="p-row"><span>${I.info}</span><div><b>AI-компаньон</b><div class="tabs" style="margin-top:6px;flex-wrap:wrap">${companionBtns}</div></div></div>
@@ -791,14 +883,51 @@ export class UniboxApp {
       </div></div>`
   }
 
+  private personaNameForChat(c: UiChat): string {
+    const mid = c.raw.studio_model_id
+    if (mid == null) return 'Без модели'
+    return this.ctrl.models.find((m) => m.id === mid)?.name || `#${mid}`
+  }
+
+  private renderPersonasBlock(): string {
+    if (!this.showPersonaSwitcher()) return ''
+    const rows: string[] = []
+    const mk = (id: PersonaFilter, label: string, ava: string, unread: number) => {
+      const on = this.activePersonaId === id
+      return `<button type="button" class="dr-persona ${on ? 'on' : ''}" data-persona="${id}">
+        ${ava}
+        <div class="mid"><b>${esc(label)}</b><span>${unread ? `${unread} ${plural(unread, 'новое', 'новых', 'новых')}` : 'Нет новых'}</span></div>
+        ${unread ? `<span class="badge">${unread > 99 ? '99+' : unread}</span>` : (on ? `<span class="tick">${I.check}</span>` : '')}
+      </button>`
+    }
+    if (this.ctrl.models.length > 1) {
+      const u = this.unreadForPersona('all')
+      rows.push(mk('all', 'Все персонажи', `<div class="ava" style="${avatarGradient(5)}">${I.folder}</div>`, u))
+    }
+    this.ctrl.models.forEach((m, i) => {
+      rows.push(mk(m.id, m.name, this.personaAvaHtml(m, i), this.unreadForPersona(m.id)))
+    })
+    if (this.hasUnassignedChats()) {
+      rows.push(mk('none', 'Без модели', `<div class="ava" style="${avatarGradient(6)}">?</div>`, this.unreadForPersona('none')))
+    }
+    return `<div class="dr-lab">Персонажи</div><div class="dr-personas">${rows.join('')}</div><div class="dr-sep"></div>`
+  }
+
   private renderDrawer(): void {
-    const total = this.ctrl.chats.reduce((a, c) => a + c.unread, 0)
-    const name = this.ctrl.me?.display_name || this.ctrl.me?.login || 'Оператор'
+    const visibleUnread = this.ctrl.chats.filter((c) => this.inPersona(c)).reduce((a, c) => a + c.unread, 0)
+    const operator = this.ctrl.me?.display_name || this.ctrl.me?.login || 'Оператор'
     const pushOn = pushSupported() && pushPermission() === 'granted'
+    const activeModel = typeof this.activePersonaId === 'number'
+      ? this.ctrl.models.find((m) => m.id === this.activePersonaId)
+      : null
+    const headAva = activeModel
+      ? this.personaAvaHtml(activeModel, 0)
+      : `<div class="ava" style="${avatarGradient(4)}">${esc(initials(operator))}</div>`
     $('#drawer')!.innerHTML = `
-      <div class="dr-top"><div class="ava" style="${avatarGradient(4)}">${esc(initials(name))}</div>
-        <b>${esc(name)}</b><span>${total} ${plural(total, 'новое', 'новых', 'новых')}</span></div>
-      <div class="dr-sep"></div>
+      <div class="dr-top">${headAva}
+        <b>${esc(this.currentPersonaLabel())}</b>
+        <span>${operator}${visibleUnread ? ` · ${visibleUnread} ${plural(visibleUnread, 'новое', 'новых', 'новых')}` : ''}</span></div>
+      ${this.renderPersonasBlock()}
       <div class="dr-item" data-act="workspace">${I.folder}<span>Кабинет OS</span></div>
       <div class="dr-item" data-act="connections">${I.link}<span>Подключения</span></div>
       ${pushSupported() ? `<div class="dr-item" data-act="push">${I.bell}<span>Push-уведомления</span>
@@ -1101,7 +1230,7 @@ export class UniboxApp {
   applyTheme(): void {
     document.body.dataset.theme = this.theme
     document.documentElement.style.setProperty('--accent', this.accent)
-    void saveUiSettings(this.theme, this.accent)
+    void saveUiSettings(this.theme, this.accent, this.activePersonaId)
   }
 
   private initStrips(): void {
