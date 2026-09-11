@@ -51,6 +51,26 @@ git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build api studio-worker
 ```
 
+## Unibox `/chat/` — белый экран или редирект на главную
+
+1. Host nginx должен проксировать `/chat/` в **frontend:5180**, не в api:
+
+```bash
+grep -A2 'location /chat/' /etc/nginx/sites-enabled/model-mate.online
+curl -s https://model-mate.online/chat/ | head -5
+# ожидается: /chat/assets/index-....js (префикс /chat/assets/, не /assets/)
+```
+
+2. Пересборка frontend с dist-chat:
+
+```bash
+docker compose exec frontend test -f /usr/share/nginx/html/chat/index.html && echo OK
+docker compose exec frontend ls /usr/share/nginx/html/chat/assets/
+```
+
+3. **Кэш браузера:** после деплоя сделайте жёсткое обновление (`Ctrl+Shift+R`) или DevTools → Application → Clear site data.  
+   Симптом: в консоли 404 на старый `index-XXXXXXXX.js` — HTML закэширован от прошлой сборки.
+
 ## Проверка
 
 ```bash

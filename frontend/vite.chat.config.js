@@ -13,7 +13,8 @@ export default defineConfig(({ mode }) => {
   return {
     root: chatRoot,
     base: '/chat/',
-    publicDir: path.join(frontendRoot, 'public'),
+    // Не копируем весь marketing public (sw.js и т.д.) — только исходники чата
+    publicDir: false,
     build: {
       outDir: path.join(frontendRoot, 'dist-chat'),
       emptyOutDir: true,
