@@ -5,7 +5,7 @@ import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
 import { useAuthSessionGate } from '../auth/useAuthSessionGate'
 import { AuthPanel } from '../AuthPanel'
 import { mergePartnerAttribution } from './partnerAttribution'
-import { goAfterAuthNext } from './workspaceEntry'
+import { goAfterAuthNext, isExternalAppPath } from './workspaceEntry'
 import '../styles/auth-ui.css'
 
 function safeNext(raw: string | null): string {
@@ -40,6 +40,12 @@ export function LoginPage() {
   const onSuccess = useCallback(() => {
     goAfterAuthNext(next, navigate)
   }, [navigate, next])
+
+  // Unibox (/chat/) — синхронный redirect, не ждём useEffect (иначе React Router успевает увести на /)
+  if (session === 'authenticated' && isExternalAppPath(next)) {
+    goAfterAuthNext(next, navigate)
+    return <AuthCheckingScreen />
+  }
 
   if (session === 'checking' || session === 'authenticated') {
     return <AuthCheckingScreen />

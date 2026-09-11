@@ -3,28 +3,30 @@ import { apiFetch, getToken, setToken } from '../api'
 
 export type AuthSessionStatus = 'checking' | 'authenticated' | 'anonymous'
 
-/** Проверка токена через /api/auth/me — без мигания login при живой сессии. */
+/** Проверка сессии через /api/auth/me (Bearer + HttpOnly cookie). */
 export function useAuthSessionGate(): AuthSessionStatus {
-  const [status, setStatus] = useState<AuthSessionStatus>(() =>
-    getToken() ? 'checking' : 'anonymous',
-  )
+  const [status, setStatus] = useState<AuthSessionStatus>('checking')
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) {
-      setStatus('anonymous')
-      return
-    }
-
     let cancelled = false
     void (async () => {
-      const r = await apiFetch('/api/auth/me')
+      const token = getToken()
+      let r = await apiFetch('/api/auth/me')
       if (cancelled) return
       if (r.ok) {
         setStatus('authenticated')
         return
       }
-      setToken(null)
+      // Stale JWT в LS — сброс и повтор только с cookie
+      if (token) {
+        setToken(null)
+        r = await fetch('/api/auth/me', { credentials: 'include' })
+        if (cancelled) return
+        if (r.ok) {
+          setStatus('authenticated')
+          return
+        }
+      }
       setStatus('anonymous')
     })()
 

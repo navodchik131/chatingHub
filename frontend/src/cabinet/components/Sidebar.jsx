@@ -17,17 +17,20 @@ import { assetUrl } from '../utils/assets';
 import { goToAdmin } from '../../marketing/workspaceEntry';
 import SeedanceSaleLabel from './SeedanceSaleLabel';
 
-const NavItem = ({ item, active, onClick }) => (
+const NavItem = ({ item, active, onClick, href }) => (
   <Hoverable
+    as={href ? 'a' : undefined}
+    href={href}
     style={{
       display: 'flex', alignItems: 'center', gap: 11,
       padding: '8px 10px', borderRadius: 10, fontSize: 13, cursor: 'pointer',
+      textDecoration: 'none',
       ...(active
         ? { background: 'rgba(215,244,82,.1)', color: color.lime, fontWeight: 800 }
         : { color: color.navIdle, fontWeight: 600 }),
     }}
     hover={active ? {} : { background: 'rgba(255,255,255,.05)', color: color.text }}
-    onClick={onClick}
+    onClick={href ? undefined : onClick}
     aria-current={active ? 'page' : undefined}
   >
     <span style={{ display: 'flex', width: 17, height: 17, flex: 'none' }}>
@@ -125,7 +128,8 @@ export default function Sidebar() {
                 key={it.id}
                 item={it}
                 active={page === it.id}
-                onClick={it.externalHref ? () => { window.location.href = it.externalHref } : go(it.id)}
+                href={it.externalHref || undefined}
+                onClick={it.externalHref ? undefined : go(it.id)}
               />
             ))}
           </div>

@@ -1,6 +1,6 @@
-/** Платформы и иконки из frontend/public/marketing/. */
+/** Иконки лежат в /marketing/ на origin, не под /chat/. */
 
-const BASE = import.meta.env.BASE_URL
+const MARKETING = '/marketing/'
 
 export interface PlatformMeta {
   id: string
@@ -14,25 +14,25 @@ const PLAT: Record<string, PlatformMeta> = {
     id: 'tg',
     name: 'Telegram',
     color: '#2AABEE',
-    iconUrl: `${BASE}marketing/telegram.svg`,
+    iconUrl: `${MARKETING}telegram.svg`,
   },
   telegram_user: {
     id: 'tg',
     name: 'Telegram',
     color: '#2AABEE',
-    iconUrl: `${BASE}marketing/telegram.svg`,
+    iconUrl: `${MARKETING}telegram.svg`,
   },
   fanvue: {
     id: 'fv',
     name: 'Fanvue',
     color: '#7C4DFF',
-    iconUrl: `${BASE}marketing/fanvue.svg`,
+    iconUrl: `${MARKETING}fanvue.svg`,
   },
   instagram: {
     id: 'ig',
     name: 'Instagram',
     color: '#E1306C',
-    iconUrl: `${BASE}marketing/insta.svg`,
+    iconUrl: `${MARKETING}insta.svg`,
   },
 }
 

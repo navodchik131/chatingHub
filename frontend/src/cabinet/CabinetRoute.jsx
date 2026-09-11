@@ -26,7 +26,9 @@ export function CabinetRoute() {
   }
 
   if (session === 'anonymous') {
-    const next = encodeURIComponent(location.pathname + location.search)
+    const page = pageFromPathname(location.pathname)
+    const rawNext = page === 'dialogs' ? CHAT_APP_URL : `${location.pathname}${location.search}`
+    const next = encodeURIComponent(rawNext)
     const loginPath = appendPartnerAttributionToLoginPath(`/login?next=${next}`)
     return <Navigate to={loginPath} replace />
   }

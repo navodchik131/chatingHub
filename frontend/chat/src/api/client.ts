@@ -23,12 +23,20 @@ export function redirectToLogin(): void {
   window.location.href = `/login?next=${next}`
 }
 
-/** Сессия может жить только в HttpOnly cookie — проверяем через /api/auth/me. */
+/** Сессия: всегда проверяем /api/auth/me; stale Bearer не блокирует HttpOnly cookie. */
 export async function hasActiveSession(): Promise<boolean> {
-  if (getToken()) return true
+  const token = getToken()
   try {
-    const r = await fetch('/api/auth/me', { credentials: 'include' })
-    return r.ok
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+    const r = await fetch('/api/auth/me', { credentials: 'include', headers })
+    if (r.ok) return true
+    // Протухший JWT в localStorage — убираем и пробуем только cookie
+    if (token) {
+      localStorage.removeItem(TOKEN_KEY)
+      const r2 = await fetch('/api/auth/me', { credentials: 'include' })
+      return r2.ok
+    }
+    return false
   } catch {
     return false
   }
