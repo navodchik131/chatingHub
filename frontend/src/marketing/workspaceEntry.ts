@@ -1,6 +1,29 @@
 /** Production path to кабинету. В едином SPA — тот же origin. */
 
+import type { NavigateFunction } from 'react-router-dom'
+
 export const WORKSPACE_URL = '/workspace'
+
+/** Unibox — отдельное SPA, только полная перезагрузка (не React Router). */
+export const CHAT_APP_URL = '/chat/'
+
+export function isExternalAppPath(path: string): boolean {
+  return path === '/chat' || path.startsWith('/chat/')
+}
+
+export function goToChat(): void {
+  window.location.assign(CHAT_APP_URL)
+}
+
+/** После login/register: внешние SPA — assign, кабинет/маркетинг — navigate. */
+export function goAfterAuthNext(next: string, navigate: NavigateFunction): void {
+  if (isExternalAppPath(next)) {
+    const target = next.endsWith('/') ? next : `${next}/`
+    window.location.assign(target)
+    return
+  }
+  navigate(next, { replace: true })
+}
 
 
 

@@ -5,6 +5,7 @@ import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
 import { useAuthSessionGate } from '../auth/useAuthSessionGate'
 import { AuthPanel } from '../AuthPanel'
 import { useMarketingPath } from './i18n/useMarketingPath'
+import { goAfterAuthNext } from './workspaceEntry'
 import '../styles/auth-ui.css'
 
 function safeNext(raw: string | null): string {
@@ -29,12 +30,12 @@ export function PartnerRegisterPage() {
 
   useEffect(() => {
     if (session === 'authenticated') {
-      navigate(next, { replace: true })
+      goAfterAuthNext(next, navigate)
     }
   }, [session, navigate, next])
 
   const onSuccess = useCallback(() => {
-    navigate(next, { replace: true })
+    goAfterAuthNext(next, navigate)
   }, [navigate, next])
 
   if (session === 'checking' || session === 'authenticated') {

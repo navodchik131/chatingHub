@@ -10,6 +10,7 @@ import {
   writeStoredLocale,
 } from '../api/locale';
 import { pageFromPathname, pathnameFromPage, WORKFLOW_APP_URL } from '../CabinetRoute';
+import { CHAT_APP_URL } from '../../marketing/workspaceEntry';
 import { dict } from '../data/i18n';
 import { BREAKPOINT_MOBILE, BREAKPOINT_NARROW } from '../styles/tokens';
 
@@ -157,6 +158,10 @@ export function AppProvider({ children, forceMobile = false }) {
   const go = useCallback((nextPage) => () => {
     if (nextPage === 'workflow') {
       window.location.assign(WORKFLOW_APP_URL)
+      return
+    }
+    if (nextPage === 'dialogs') {
+      window.location.assign(CHAT_APP_URL)
       return
     }
     navigate(pathnameFromPage(nextPage))
