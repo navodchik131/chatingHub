@@ -237,6 +237,8 @@ export class UniboxApp {
     $('#app')?.classList.add('open')
     await this.ctrl.openChat(convId)
     this.renderAll()
+    // Не даём браузеру проскроллить document при фокусе на input — шапка уезжала вверх
+    window.scrollTo(0, 0)
   }
 
   private renderChat(): void {
@@ -430,7 +432,13 @@ export class UniboxApp {
           void this.send(c, inp)
         }
       })
-      if (!window.matchMedia('(max-width:900px)').matches) inp.focus()
+      if (!window.matchMedia('(max-width:900px)').matches) {
+        try {
+          inp.focus({ preventScroll: true })
+        } catch {
+          inp.focus()
+        }
+      }
     }
     $('#sendBtn')?.addEventListener('click', () => {
       if (inp) void this.send(c, inp)
