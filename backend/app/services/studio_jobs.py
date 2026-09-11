@@ -249,10 +249,16 @@ def schedule_studio_job(job_id: int) -> None:
 
 
 async def _next_pending_studio_job_id() -> int | None:
+    pending_cutoff = datetime.now(timezone.utc) - timedelta(
+        minutes=STUDIO_PENDING_MAX_AGE_MINUTES
+    )
     async with SessionLocal() as session:
         stmt = (
             select(StudioJob.id)
-            .where(StudioJob.status == StudioJobStatus.pending.value)
+            .where(
+                StudioJob.status == StudioJobStatus.pending.value,
+                StudioJob.created_at >= pending_cutoff,
+            )
             .order_by(StudioJob.created_at.asc())
             .limit(1)
         )
@@ -286,15 +292,22 @@ async def studio_jobs_worker_loop() -> None:
 STARTUP_INTERRUPTED_JOB_MESSAGE = (
     "Задача прервана перезапуском сервера. Запустите генерацию заново."
 )
+STALE_PENDING_JOB_MESSAGE = (
+    "Задача устарела: очередь студии была недоступна слишком долго. "
+    "Запустите генерацию заново — повторно не выполняем."
+)
+# Worker без APP_ROLE=all копит pending в БД; без лимита воз возит старые jobs и списывает кредиты.
+STUDIO_PENDING_MAX_AGE_MINUTES = 30
 
 
 async def recover_studio_jobs_on_startup() -> None:
-    """После рестарта API: свежие pending (<30 мин); running — failed (не OOM-loop)."""
+    """После рестарта: свежие pending (<30 мин); running/stale pending — failed."""
     now = datetime.now(timezone.utc)
-    pending_cutoff = now - timedelta(minutes=30)
+    pending_cutoff = now - timedelta(minutes=STUDIO_PENDING_MAX_AGE_MINUTES)
     to_run: list[StudioJob] = []
     skipped_provider: list[StudioJob] = []
     interrupted: list[StudioJob] = []
+    stale_pending: list[StudioJob] = []
     async with SessionLocal() as session:
         stmt = select(StudioJob).where(
             StudioJob.status.in_(
@@ -338,9 +351,16 @@ async def recover_studio_jobs_on_startup() -> None:
                     created = created.replace(tzinfo=timezone.utc)
                 if created is not None and created >= pending_cutoff:
                     to_run.append(job)
-        if not to_run and not skipped_provider and not interrupted:
+                else:
+                    job.status = StudioJobStatus.failed.value
+                    job.error_message = STALE_PENDING_JOB_MESSAGE[:4000]
+                    job.completed_at = now
+                    job.updated_at = now
+                    session.add(job)
+                    stale_pending.append(job)
+        if not to_run and not skipped_provider and not interrupted and not stale_pending:
             return
-        terminal_jobs = skipped_provider + interrupted
+        terminal_jobs = skipped_provider + interrupted + stale_pending
         if terminal_jobs:
             from app.services.studio_generation_placeholders import (
                 finalize_studio_generation_for_terminal_job,
@@ -354,6 +374,13 @@ async def recover_studio_jobs_on_startup() -> None:
                         "studio jobs: finalize after startup terminal job=%s",
                         job.id,
                     )
+                try:
+                    await _maybe_release_demo_slot_after_failure(session, job)
+                except Exception:
+                    log.exception(
+                        "studio jobs: demo slot release after startup job=%s",
+                        job.id,
+                    )
         await session.commit()
     if skipped_provider:
         log.info(
@@ -364,6 +391,12 @@ async def recover_studio_jobs_on_startup() -> None:
         log.info(
             "studio jobs: marked %s interrupted running job(s) as failed after startup",
             len(interrupted),
+        )
+    if stale_pending:
+        log.warning(
+            "studio jobs: cancelled %s stale pending job(s) older than %s min",
+            len(stale_pending),
+            STUDIO_PENDING_MAX_AGE_MINUTES,
         )
     if not to_run:
         return

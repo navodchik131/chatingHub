@@ -23,7 +23,7 @@ _MAX_ATTEMPTS = 3
 # Grok 402/429: больше попыток и длиннее пауза — после пополнения баланса job сам доедет
 _LLM_MAX_ATTEMPTS = 12
 _LLM_RETRY_BASE_SEC = 45
-_RECOVER_EVERY_TICKS = 30  # ~60 с при poll=2
+_RECOVER_EVERY_TICKS = 150  # ~5 мин при poll=2 — не дёргать running jobs каждую минуту
 
 
 def _utcnow() -> datetime:
@@ -334,7 +334,7 @@ async def companion_job_worker_loop() -> None:
         tick += 1
         try:
             if tick == 1 or tick % _RECOVER_EVERY_TICKS == 0:
-                await recover_stale_companion_jobs_on_startup(stale_minutes=2)
+                await recover_stale_companion_jobs_on_startup(stale_minutes=15)
             n = await process_due_companion_jobs()
             if n:
                 log.debug("companion jobs processed=%s", n)
