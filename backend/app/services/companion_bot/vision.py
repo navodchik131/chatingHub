@@ -10,7 +10,10 @@ from app.config import settings
 from app.db.models import Conversation, Message, MessageDirection
 from app.services.chat_attachment import resolve_chat_attachment_file
 from app.services.chat_message_meta import merge_meta_dict, parse_reactions
-from app.services.companion_bot.prompt import _message_text_for_transcript
+from app.services.companion_bot.prompt import (
+    _message_has_loaded_attachments,
+    _message_text_for_transcript,
+)
 from app.services.studio_keys import StudioOpenAiCredentials
 from app.services.studio_openai import _chat_completion_text
 
@@ -47,7 +50,7 @@ def _recent_context_before_trigger(
         text = _message_text_for_transcript(m)
         if text:
             lines.append(f"{who}: {text}")
-        elif m.direction == MessageDirection.inbound and getattr(m, "attachments", None):
+        elif m.direction == MessageDirection.inbound and _message_has_loaded_attachments(m):
             if m.id == trigger_id:
                 lines.append(f"{who}: [sent an image — see description below]")
             else:
@@ -141,7 +144,9 @@ async def maybe_describe_fan_image_for_companion(
     if cached:
         return cached
 
-    attachments = getattr(trigger, "attachments", None) or []
+    if not _message_has_loaded_attachments(trigger):
+        return None
+    attachments = trigger.attachments or []
     if not attachments:
         return None
 

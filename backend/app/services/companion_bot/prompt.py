@@ -6,6 +6,9 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.orm import attributes as orm_attributes
+
 from app.db.models import Conversation, ConversationNote, ConversationNoteKind, Message, MessageDirection
 from app.services.companion_bot.goals import format_companion_goal_block, is_funnel_goal
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
@@ -13,6 +16,14 @@ from app.services.chat_message_meta import parse_reactions
 from app.services.translation import detect_lang
 
 PROMPT_VERSION = "v10-media-library"
+
+
+def _message_has_loaded_attachments(message: Message) -> bool:
+    """True только если attachments уже в памяти — без implicit lazy-load (async greenlet)."""
+    loaded = sa_inspect(message).attrs.attachments.loaded_value
+    if loaded is orm_attributes.NO_VALUE:
+        return False
+    return bool(loaded)
 
 _GREETING_ONLY_RE = re.compile(
     r"^[\s\W]*("
@@ -635,7 +646,7 @@ def _format_transcript(
     for m in messages:
         who = "Fan" if m.direction == MessageDirection.inbound else "You"
         text = _message_text_for_transcript(m)
-        if not text and m.direction == MessageDirection.inbound and getattr(m, "attachments", None):
+        if not text and m.direction == MessageDirection.inbound and _message_has_loaded_attachments(m):
             text = "[sent an image]"
         if not text:
             continue

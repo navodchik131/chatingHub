@@ -399,7 +399,7 @@ async def create_companion_reply_event(
         fail = BotResponseEvent(
             conversation_id=conv.id,
             trigger_message_id=trigger_message_id,
-            draft_text="",
+            draft_text=f"[error] {str(e)[:480]}",
             status=BotResponseEventStatus.failed,
             prompt_version=PROMPT_VERSION,
             persona_model_id=cfg.studio_model_id,

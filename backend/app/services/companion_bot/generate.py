@@ -6,6 +6,7 @@ import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.db.models import (
@@ -85,17 +86,54 @@ async def _load_or_create_state(
     return row
 
 
+async def _preload_messages_attachments(
+    session: AsyncSession,
+    messages: list[Message],
+    *,
+    trigger_message: Message | None = None,
+) -> Message | None:
+    """Eager-load attachments одним запросом — lazy-load после await → greenlet_spawn."""
+    ids = {m.id for m in messages}
+    if trigger_message is not None:
+        ids.add(trigger_message.id)
+    if not ids:
+        return trigger_message
+    loaded = {
+        m.id: m
+        for m in (
+            await session.scalars(
+                select(Message)
+                .where(Message.id.in_(ids))
+                .options(selectinload(Message.attachments))
+            )
+        ).all()
+    }
+    for idx, msg in enumerate(messages):
+        if msg.id in loaded:
+            messages[idx] = loaded[msg.id]
+    if trigger_message is None:
+        return None
+    return loaded.get(trigger_message.id, trigger_message)
+
+
 async def _refresh_companion_orm_rows(
     session: AsyncSession,
     *,
     conv: Conversation,
     model_row: UserStudioModel,
     state: CompanionConversationState,
-) -> None:
-    """После долгого await (LLM/HTTP) AsyncSession может expire ORM — без refresh lazy-load падает greenlet_spawn."""
+    messages: list[Message] | None = None,
+    trigger_message: Message | None = None,
+) -> Message | None:
+    """После долгого await (LLM/HTTP) AsyncSession expire ORM — refresh + attachments без lazy IO."""
     await session.refresh(conv)
     await session.refresh(model_row)
     await session.refresh(state)
+    if messages is None:
+        return trigger_message
+    return await _preload_messages_attachments(
+        session, messages, trigger_message=trigger_message
+    )
 
 
 async def generate_companion_reply(
@@ -122,6 +160,10 @@ async def generate_companion_reply(
     sub, llm_row, _, plan, _, _ = await load_owner_studio_billing(session, owner_id)
     cred = studio_llm_credentials(plan=plan, llm_row=llm_row)
 
+    trigger_message = await _preload_messages_attachments(
+        session, messages, trigger_message=trigger_message
+    )
+
     memory_refreshed = await maybe_refresh_companion_memory(
         session,
         conv=conv,
@@ -130,14 +172,18 @@ async def generate_companion_reply(
         owner_id=owner_id,
     )
     # maybe_refresh_companion_memory делает внешний LLM-вызов — перечитываем ORM до следующих обращений к полям.
-    await _refresh_companion_orm_rows(
-        session, conv=conv, model_row=model_row, state=state
+    trigger_message = await _refresh_companion_orm_rows(
+        session,
+        conv=conv,
+        model_row=model_row,
+        state=state,
+        messages=messages,
+        trigger_message=trigger_message,
     )
     notes = await _load_notes(session, conv.id)
 
     fan_image_description: str | None = None
     if trigger_message and not followup:
-        await session.refresh(trigger_message, attribute_names=["attachments"])
         fan_image_description = await maybe_describe_fan_image_for_companion(
             session,
             owner_id=owner_id,
@@ -147,8 +193,13 @@ async def generate_companion_reply(
             credentials=cred,
         )
         # Vision тоже ходит во внешний LLM — refresh перед сборкой промпта.
-        await _refresh_companion_orm_rows(
-            session, conv=conv, model_row=model_row, state=state
+        trigger_message = await _refresh_companion_orm_rows(
+            session,
+            conv=conv,
+            model_row=model_row,
+            state=state,
+            messages=messages,
+            trigger_message=trigger_message,
         )
 
     target_lang = resolve_target_lang(conv, last_fan_text=last_fan_message_text(messages))
@@ -180,8 +231,13 @@ async def generate_companion_reply(
         credentials=cred,
     )
     # style RAG может вызывать embeddings API — снова refresh ORM перед финальной генерацией.
-    await _refresh_companion_orm_rows(
-        session, conv=conv, model_row=model_row, state=state
+    trigger_message = await _refresh_companion_orm_rows(
+        session,
+        conv=conv,
+        model_row=model_row,
+        state=state,
+        messages=messages,
+        trigger_message=trigger_message,
     )
     if style_block:
         system += "\n" + style_block
@@ -200,11 +256,14 @@ async def generate_companion_reply(
         manual_category=conv.manual_category,
     )
     # pick_companion_media может вызывать embeddings API — refresh перед сборкой user prompt.
-    await _refresh_companion_orm_rows(
-        session, conv=conv, model_row=model_row, state=state
+    trigger_message = await _refresh_companion_orm_rows(
+        session,
+        conv=conv,
+        model_row=model_row,
+        state=state,
+        messages=messages,
+        trigger_message=trigger_message,
     )
-    if trigger_message is not None:
-        await session.refresh(trigger_message, attribute_names=["attachments"])
 
     model = companion_chat_model()
     recent = recent_outbound_texts(messages, limit=4)
@@ -235,8 +294,13 @@ async def generate_companion_reply(
             timeout_seconds=90.0,
         )
         # LLM-вызов отпускает greenlet — refresh перед чтением ORM в retry/snapshot.
-        await _refresh_companion_orm_rows(
-            session, conv=conv, model_row=model_row, state=state
+        trigger_message = await _refresh_companion_orm_rows(
+            session,
+            conv=conv,
+            model_row=model_row,
+            state=state,
+            messages=messages,
+            trigger_message=trigger_message,
         )
         reply = (raw or "").strip()
         if not reply:
