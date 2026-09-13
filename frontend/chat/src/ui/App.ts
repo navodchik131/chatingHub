@@ -7,6 +7,7 @@ import type { PersonaFilter } from '../cache/threadCache'
 import type { StudioModel, UiChat, UiMessage } from '../types'
 import { esc, initials, avatarGradient, plural } from '../lib/format'
 import { platformMeta, platformIconImg, SOURCE_TABS } from '../lib/platforms'
+import { outboundLangOptions, replyLangDisplay, translationLineLabel } from '../lib/lang'
 import { previewText, chatSubTitle } from '../lib/mapMessage'
 import { REACTION_EMOJIS } from '../lib/reactions'
 import { loadUiSettings, saveUiSettings } from '../cache/threadCache'
@@ -452,7 +453,8 @@ export class UniboxApp {
     }
 
     const sub = chatSubTitle(c)
-    const trOn = c.tr.in || c.tr.out
+    const trOn = !c.raw.auto_translate_disabled
+    const replyLang = replyLangDisplay(c.raw)
     const head = this.find
       ? `<header class="head">
           <button class="ic" id="findClose" title="Закрыть поиск">${I.close}</button>
@@ -468,7 +470,7 @@ export class UniboxApp {
           <span id="headAva" style="cursor:pointer">${this.avaHtml(c, true)}</span>
           <div class="t" id="openPane">
             <div class="h-nm">${esc(c.name)}</div>
-            <div class="h-sub">${esc(sub.t)} ${trOn ? `<span class="tr-chip">${esc(c.tr.lang.toUpperCase())} ⇄ RU</span>` : ''}</div>
+            <div class="h-sub">${esc(sub.t)} ${trOn ? `<span class="tr-chip">RU ⇄ ${esc(replyLang)}</span>` : ''}</div>
           </div>
           <button class="ic" id="notesBtn" title="Заметки">${I.note}</button>
           <button class="ic" id="trBtn" title="Перевод">${I.globe}</button>
@@ -486,7 +488,7 @@ export class UniboxApp {
           <textarea class="inp" id="inp" rows="1" placeholder="Сообщение…">${esc(c.draft || '')}</textarea>
           <button class="send" id="sendBtn" title="Отправить">${I.send}</button>
         </div>
-        ${c.tr.out && c.tr.lang !== 'ru' ? `<div class="out-tr">${I.globe} Ответ уйдёт на ${esc(c.tr.lang.toUpperCase())}</div>` : ''}
+        ${trOn && replyLang !== 'Русский' && replyLang !== 'RU' ? `<div class="out-tr">${I.globe} Клиенту уйдёт на ${esc(replyLang)}</div>` : ''}
       </div>`
 
     this.renderMsgs(false)
@@ -545,7 +547,9 @@ export class UniboxApp {
   private msgHtml(m: UiMessage, c: UiChat, tail: boolean, idx = -1): string {
     const findHit = this.find && idx >= 0 && this.find.hits[this.find.i] === m.id
     const cls = ['mrow', m.out ? 'out' : '', tail ? '' : '', m.pending ? 'pending' : '', findHit ? 'find-hit' : ''].filter(Boolean).join(' ')
-    const showTr = c.tr.in && m.ru && !m.out
+    // Перевод: входящие → RU снизу; исходящие → сверху RU оператора, снизу текст клиенту
+    const showTr = Boolean(m.ru && m.ru !== m.text && !c.raw.auto_translate_disabled)
+    const trLb = translationLineLabel(m.out, c.raw)
     const meta = `<span class="meta">${esc(m.time)}${m.pending ? ' …' : ''}</span>`
     let inner = ''
 
@@ -563,15 +567,18 @@ export class UniboxApp {
           : `<img src="${mediaSrc}" alt="" loading="lazy">`)
         : '<span style="padding:20px;display:block">…</span>'
       inner += `<div class="photo ${isVn ? 'vn' : ''}" data-msg-media="${m.id}" data-vn="${isVn ? '1' : '0'}">${mediaTag}</div>`
-      if (m.text) inner += `<div class="txt">${this.fmt(m.text)}</div>${showTr ? `<div class="tr"><span class="lb">RU</span>${this.fmt(m.ru!)}</div>` : ''}${meta}`
-      else inner += meta
+      if (m.text) {
+        inner += `<div class="txt">${this.fmt(m.text)}</div>`
+        if (showTr) inner += `<div class="tr tr-${m.out ? 'out' : 'in'}"><span class="lb">${esc(trLb)}</span>${this.fmt(m.ru!)}</div>`
+        inner += meta
+      } else inner += meta
     } else if (m.kind === 'voice') {
       inner += `<div class="voice"><button class="play">${I.send}</button><div style="flex:1"><div class="vdur">Голосовое</div></div></div>${meta}`
     } else if (m.kind === 'file') {
       inner += `<div class="file"><div class="fico">${esc(m.fext || 'FILE')}</div><div><b>${esc(m.fname || 'Файл')}</b></div></div>${meta}`
     } else {
       inner += `<div class="txt">${this.fmt(m.text)}${showTr ? '' : meta}</div>`
-      if (showTr) inner += `<div class="tr"><span class="lb">RU</span>${this.fmt(m.ru!)}${meta}</div>`
+      if (showTr) inner += `<div class="tr tr-${m.out ? 'out' : 'in'}"><span class="lb">${esc(trLb)}</span>${this.fmt(m.ru!)}${meta}</div>`
     }
 
     const reacts = Object.entries(m.reactions || {}).filter(([, n]) => n > 0)
@@ -786,19 +793,33 @@ export class UniboxApp {
 
   private openTranslation(c: UiChat): void {
     const auto = !c.raw.auto_translate_disabled
+    const outboundVal = (c.raw.outbound_lang || '').trim() ? String(c.raw.outbound_lang).trim().toLowerCase() : 'auto'
+    const langOpts = outboundLangOptions(c.raw.user_lang)
     const body = `
-      <div class="f-row" data-tr="in"><div class="mid"><b>Автоперевод входящих</b></div>
+      <div class="f-row" data-tr="toggle"><div class="mid"><b>Автоперевод</b>
+        <span>Входящие → RU, ваши ответы → язык клиента</span></div>
         <div class="sw-t ${auto ? 'on' : ''}"></div></div>
-      <div class="f-row" data-tr="out"><div class="mid"><b>Переводить мои ответы</b></div>
-        <div class="sw-t ${auto ? 'on' : ''}"></div></div>`
+      ${auto ? `
+        <div class="dr-lab" style="padding-top:6px">Язык ответа клиенту</div>
+        <select class="f-in tr-lang-sel" id="outLangSel">
+          ${langOpts.map((o) => `<option value="${esc(o.value)}" ${o.value === outboundVal ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+        </select>
+        <p class="tr-hint">«Авто» — по языку последних сообщений фана (${esc(replyLangDisplay(c.raw))})</p>
+      ` : ''}`
     this.modal('Перевод', body, (el) => {
-      el.querySelectorAll('[data-tr]').forEach((r) => {
-        r.addEventListener('click', () => {
-          const on = !c.raw.auto_translate_disabled
-          void this.ctrl.updateTranslation(c.id, { auto_translate_disabled: on })
-          c.raw.auto_translate_disabled = on
-          r.querySelector('.sw-t')?.classList.toggle('on', !on)
-        })
+      el.querySelector('[data-tr="toggle"]')?.addEventListener('click', () => {
+        const nextDisabled = !c.raw.auto_translate_disabled
+        void this.ctrl.updateTranslation(c.id, { auto_translate_disabled: nextDisabled })
+        c.raw.auto_translate_disabled = nextDisabled
+        c.tr.in = !nextDisabled
+        c.tr.out = !nextDisabled
+        this.openTranslation(c)
+      })
+      el.querySelector('#outLangSel')?.addEventListener('change', (ev) => {
+        const v = (ev.target as HTMLSelectElement).value
+        void this.ctrl.updateTranslation(c.id, { outbound_lang: v === 'auto' ? null : v })
+        c.raw.outbound_lang = v === 'auto' ? null : v
+        this.renderChat()
       })
     })
   }

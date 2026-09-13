@@ -37,6 +37,7 @@ import {
   loadThreadCache,
   saveThreadCache,
 } from '../cache/threadCache'
+import { normalizeLangCode } from '../lib/lang'
 import {
   mapApiConversation,
   mapApiMessages,
@@ -510,7 +511,9 @@ export class ChatController {
         chat.tr.out = on
       }
       if ('outbound_lang' in patch) {
-        chat.tr.lang = ((patch.outbound_lang as string) || chat.lang || 'en').toLowerCase()
+        // NULL outbound_lang = авто по user_lang (язык фана)
+        const forced = normalizeLangCode(updated.outbound_lang)
+        chat.tr.lang = forced || normalizeLangCode(updated.user_lang) || chat.lang || 'en'
       }
       if ('manual_category' in patch) {
         chat.pinned = updated.manual_category === 'vip'
