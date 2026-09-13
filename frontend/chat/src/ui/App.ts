@@ -8,7 +8,7 @@ import type { StudioModel, UiChat, UiMessage } from '../types'
 import { esc, initials, avatarGradient, plural } from '../lib/format'
 import { platformMeta, platformIconImg, SOURCE_TABS } from '../lib/platforms'
 import { outboundLangOptions, replyLangDisplay, translationLineLabel } from '../lib/lang'
-import { previewText, chatSubTitle } from '../lib/mapMessage'
+import { previewText, chatSubTitle, chatListPreview, chatListTime } from '../lib/mapMessage'
 import { REACTION_EMOJIS } from '../lib/reactions'
 import { loadUiSettings, saveUiSettings } from '../cache/threadCache'
 import { pushPermission, pushSupported, registerChatPush, unregisterChatPush } from '../api/push'
@@ -418,7 +418,7 @@ export class UniboxApp {
     let list = this.ctrl.chats.filter((c) => this.inPersona(c) && this.inFolder(c) && this.inSrc(c))
     if (q) {
       list = list.filter((c) => {
-        const last = previewText(c.msgs[c.msgs.length - 1] || null).toLowerCase()
+        const last = chatListPreview(c).toLowerCase()
         return c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q) || last.includes(q)
       })
     }
@@ -428,13 +428,14 @@ export class UniboxApp {
     const html = list.map((c) => {
       const m = c.msgs[c.msgs.length - 1] || null
       const ticks = m && m.out ? `<span class="ticks">${I.checks}</span>` : ''
+      const listTime = chatListTime(c)
       return `<div class="row ${activeId === c.id ? 'on' : ''}" data-chat="${c.id}">
         ${this.avaHtml(c)}
         <div class="mid">
           <div class="r1"><span class="nm">${esc(c.name)}</span>
-            <span class="time">${ticks}${m ? esc(m.time) : ''}</span></div>
+            <span class="time">${ticks}${listTime ? esc(listTime) : ''}</span></div>
           <div class="r2">
-            <span class="last">${esc(previewText(m))}</span>
+            <span class="last">${esc(chatListPreview(c))}</span>
             ${c.unread ? `<span class="badge">${c.unread > 99 ? '99+' : c.unread}</span>` : ''}
           </div>
         </div>

@@ -155,8 +155,11 @@ export class ChatController {
 
   private async prefetchAvatars(rows: ApiConversation[]): Promise<void> {
     for (const c of rows.slice(0, 40)) {
-      if (!c.has_avatar && !c.avatar_url) continue
-      void this.resolveAvatar(c.id, c.avatar_url)
+      // telegram_user: аватар качается on-demand с MTProto — URL есть даже без has_avatar
+      const tryAvatar = c.avatar_url
+        || (c.platform === 'telegram_user' ? `/api/conversations/${c.id}/avatar` : null)
+      if (!tryAvatar && !c.has_avatar) continue
+      void this.resolveAvatar(c.id, tryAvatar)
     }
   }
 
@@ -168,7 +171,10 @@ export class ChatController {
     if (!fetchUrl) return null
     const key = avatarCacheKey(convId)
     const objectUrl = await getCachedObjectUrl(key, () => apiFetch(fetchUrl), 'avatar')
-    if (objectUrl) this.avatarUrls.set(convId, objectUrl)
+    if (objectUrl) {
+      this.avatarUrls.set(convId, objectUrl)
+      this.emit() // перерисовать список — иначе остаются инициалы до следующего события
+    }
     return objectUrl
   }
 

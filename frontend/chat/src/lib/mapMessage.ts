@@ -123,6 +123,22 @@ export function previewText(m: UiMessage | null): string {
   return m.ru || m.text || '—'
 }
 
+/** Превью в списке диалогов: локальные msgs или last_message_preview с API. */
+export function chatListPreview(c: UiChat): string {
+  const loaded = c.msgs[c.msgs.length - 1]
+  if (loaded) return previewText(loaded)
+  const api = (c.raw.last_message_preview || '').trim()
+  return api || '—'
+}
+
+/** Время последнего сообщения в списке. */
+export function chatListTime(c: UiChat): string {
+  const loaded = c.msgs[c.msgs.length - 1]
+  if (loaded) return loaded.time
+  if (c.raw.updated_at) return fmtTime(c.raw.updated_at)
+  return ''
+}
+
 export function chatSubTitle(c: UiChat): { t: string; on: boolean } {
   return { t: c.raw.platform.replace('_', ' '), on: false }
 }

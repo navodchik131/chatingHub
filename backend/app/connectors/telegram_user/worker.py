@@ -23,10 +23,23 @@ _TELEGRAM_USER_LEASE_KEY = "telegram_user_worker"
 _worker_refresh = asyncio.Event()
 _running_clients: dict[int, object] = {}
 _running_tasks: dict[int, asyncio.Task[None]] = {}
+# Сессии в процессе login — worker не должен держать тот же auth key
+_login_blocked: set[int] = set()
 
 
 def request_telegram_user_worker_refresh() -> None:
     _worker_refresh.set()
+
+
+async def block_telegram_user_worker_session(session_id: int) -> None:
+    """Остановить worker-клиент перед login/re-auth — иначе Telethon: disconnected."""
+    _login_blocked.add(session_id)
+    await _stop_client(session_id)
+    request_telegram_user_worker_refresh()
+
+
+def unblock_telegram_user_worker_session(session_id: int) -> None:
+    _login_blocked.discard(session_id)
 
 
 def get_worker_client(session_id: int):
@@ -166,6 +179,8 @@ async def _sync_clients() -> None:
         if sid not in active_ids:
             await _stop_client(sid)
     for row in active_rows:
+        if row.id in _login_blocked:
+            continue
         existing = _running_clients.get(row.id)
         if existing is not None and getattr(existing, "is_connected", lambda: False)():
             continue

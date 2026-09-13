@@ -11,8 +11,10 @@ from telethon import TelegramClient
 
 from app.connectors.telegram_user.client import build_telegram_client
 from app.connectors.telegram_user.worker import (
+    block_telegram_user_worker_session,
     get_worker_client,
     request_telegram_user_worker_refresh,
+    unblock_telegram_user_worker_session,
 )
 
 log = logging.getLogger(__name__)
@@ -48,9 +50,13 @@ async def run_with_telegram_user_client(
                 session_id,
             )
 
+    # Второе MTProto-подключение с тем же auth key рвёт worker ingest — сначала гасим worker.
+    await block_telegram_user_worker_session(session_id)
     client = build_telegram_client(session_encrypted=session_encrypted)
     try:
         await client.connect()
+        if not client.is_connected():
+            raise RuntimeError("telegram user session disconnected")
         if not await client.is_user_authorized():
             raise RuntimeError("telegram user session not authorized")
         return await operation(client)
@@ -59,4 +65,5 @@ async def run_with_telegram_user_client(
             await client.disconnect()
         except Exception:
             log.exception("telegram_user ephemeral disconnect failed session=%s", session_id)
+        unblock_telegram_user_worker_session(session_id)
         request_telegram_user_worker_refresh()

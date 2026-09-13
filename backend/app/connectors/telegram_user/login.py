@@ -16,6 +16,10 @@ from telethon.errors import (
 )
 
 from app.connectors.telegram_user.client import build_telegram_client
+from app.connectors.telegram_user.worker import (
+    block_telegram_user_worker_session,
+    unblock_telegram_user_worker_session,
+)
 from app.db.models import TelegramUserSession, TelegramUserSessionStatus
 from app.services.crypto_secret import decrypt_secret, encrypt_secret
 
@@ -53,18 +57,28 @@ async def start_telegram_user_login(
         if not row or row.user_id != owner_id:
             raise ValueError("session not found")
 
-    client = build_telegram_client(
-        session_encrypted=row.session_encrypted if row else None,
-    )
+    blocked_session_id: int | None = row.id if row else None
+    if blocked_session_id is not None:
+        # Worker держит тот же auth key — параллельный connect даёт «disconnected».
+        await block_telegram_user_worker_session(blocked_session_id)
+
+    # Новая StringSession на каждый send_code: hash привязан к auth key этой сессии.
+    client = build_telegram_client(session_encrypted=None)
     pending_session_enc: str | None = None
     try:
         await client.connect()
+        if not client.is_connected():
+            raise RuntimeError("Не удалось подключиться к Telegram — проверьте сеть или TELEGRAM_PROXY.")
         sent = await client.send_code_request(normalized)
         phone_code_hash = sent.phone_code_hash
-        # phone_code_hash привязан к auth key этой сессии — сохраняем до sign_in.
         pending_session_enc = encrypt_secret(client.session.save())
     finally:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except Exception:
+            log.exception("telegram_user login disconnect failed phone=%s", normalized[-4:])
+        if blocked_session_id is not None:
+            unblock_telegram_user_worker_session(blocked_session_id)
 
     enc_hash = encrypt_secret(phone_code_hash)
     if row is None:
@@ -121,9 +135,12 @@ async def confirm_telegram_user_code(
     if not otp:
         raise ValueError("Введите код из Telegram или SMS.")
 
+    await block_telegram_user_worker_session(row.id)
     client = build_telegram_client(session_encrypted=row.session_encrypted)
     try:
         await client.connect()
+        if not client.is_connected():
+            raise RuntimeError("Не удалось подключиться к Telegram — запросите код заново.")
         try:
             await client.sign_in(phone, otp, phone_code_hash=phone_code_hash)
         except SessionPasswordNeededError:
@@ -161,7 +178,11 @@ async def confirm_telegram_user_code(
         await session.flush()
         raise ValueError("invalid phone") from e
     finally:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except Exception:
+            log.exception("telegram_user confirm code disconnect failed session=%s", row.id)
+        unblock_telegram_user_worker_session(row.id)
 
 
 async def confirm_telegram_user_password(
@@ -172,9 +193,12 @@ async def confirm_telegram_user_password(
 ) -> TelegramUserSession:
     if row.status != TelegramUserSessionStatus.pending_2fa.value:
         raise ValueError("2FA not required")
+    await block_telegram_user_worker_session(row.id)
     client = build_telegram_client(session_encrypted=row.session_encrypted)
     try:
         await client.connect()
+        if not client.is_connected():
+            raise RuntimeError("Не удалось подключиться к Telegram — повторите ввод пароля.")
         try:
             await client.sign_in(password=(password or "").strip())
         except PasswordHashInvalidError as e:
@@ -193,4 +217,8 @@ async def confirm_telegram_user_password(
         await session.flush()
         return row
     finally:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except Exception:
+            log.exception("telegram_user confirm password disconnect failed session=%s", row.id)
+        unblock_telegram_user_worker_session(row.id)
