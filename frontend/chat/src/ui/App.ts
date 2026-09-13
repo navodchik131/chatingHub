@@ -160,10 +160,21 @@ export class UniboxApp {
     this.renderAll()
   }
 
+  /** Пользователь печатает в composer — нельзя пересоздавать textarea (сбросит курсор). */
+  private isComposingMessage(): boolean {
+    const el = document.activeElement
+    return el instanceof HTMLTextAreaElement && el.id === 'inp'
+  }
+
   private renderAll(): void {
     this.renderTabs()
     this.renderList()
-    this.renderChat()
+    if (this.isComposingMessage()) {
+      // WS/обновления списка — только лента сообщений, поле ввода не трогаем
+      this.renderMsgs(true)
+    } else {
+      this.renderChat()
+    }
     if (this.pane) this.renderPane()
   }
 
@@ -731,7 +742,9 @@ export class UniboxApp {
           void this.send(c, inp)
         }
       })
-      if (!window.matchMedia('(max-width:900px)').matches) {
+      // Фокус только при открытии чата, не при каждой перерисовке (иначе скачет курсор)
+      const mobile = window.matchMedia('(max-width:900px)').matches
+      if (!mobile && document.activeElement !== inp) {
         try {
           inp.focus({ preventScroll: true })
         } catch {
