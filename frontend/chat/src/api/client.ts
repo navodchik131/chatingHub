@@ -1,5 +1,7 @@
 /** HTTP-клиент — тот же JWT, что и кабинет (/workspace/). */
 
+import { formatHttpApiError } from './errors'
+
 const TOKEN_KEY = 'chating_token'
 
 function readCookieToken(): string | null {
@@ -66,8 +68,7 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
     throw new Error('Unauthorized')
   }
   if (!res.ok) {
-    const detail = typeof data.detail === 'string' ? data.detail : res.statusText
-    throw new Error(detail || 'Request failed')
+    throw new Error(formatHttpApiError(res, data))
   }
   return data as T
 }

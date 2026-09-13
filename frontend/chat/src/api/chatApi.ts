@@ -1,4 +1,5 @@
 import type { ApiConversation, ApiMessage, ConversationFolder, StudioModel, UserMe } from '../types'
+import { formatHttpApiError } from './errors'
 import { apiFetch, apiJson } from './client'
 
 export async function fetchMe(): Promise<UserMe> {
@@ -50,7 +51,7 @@ export async function sendImageReply(convId: number, text: string, file: File): 
   fd.append('image', file, file.name || 'photo.jpg')
   const res = await apiFetch(`/api/conversations/${convId}/reply`, { method: 'POST', body: fd })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Send failed')
+  if (!res.ok) throw new Error(formatHttpApiError(res, data))
   return data as ApiMessage
 }
 

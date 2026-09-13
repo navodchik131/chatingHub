@@ -7,12 +7,56 @@ import tempfile
 from pathlib import Path
 
 from telethon import TelegramClient
+from telethon.errors import (
+    ChatWriteForbiddenError,
+    FloodWaitError,
+    InputUserDeactivatedError,
+    PeerIdInvalidError,
+    UserIsBlockedError,
+)
 
 from app.connectors.telegram_user.session_runtime import run_with_telegram_user_client
 from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
 from fastapi import HTTPException
 
 log = logging.getLogger(__name__)
+
+
+def _telegram_user_send_http_error(exc: BaseException) -> HTTPException:
+    """MTProto-ошибки отправки → 502 с текстом для оператора (не голый 500)."""
+    if isinstance(exc, UserIsBlockedError):
+        return HTTPException(
+            status_code=502,
+            detail="Пользователь заблокировал ваш Telegram — отправка невозможна.",
+        )
+    if isinstance(exc, ChatWriteForbiddenError):
+        return HTTPException(
+            status_code=502,
+            detail="Telegram запретил писать этому пользователю (ЧС или закрытые сообщения).",
+        )
+    if isinstance(exc, InputUserDeactivatedError):
+        return HTTPException(
+            status_code=410,
+            detail="Аккаунт Telegram пользователя удалён или недоступен.",
+        )
+    if isinstance(exc, PeerIdInvalidError):
+        return HTTPException(
+            status_code=502,
+            detail="Telegram не находит этого пользователя — проверьте диалог.",
+        )
+    if isinstance(exc, FloodWaitError):
+        sec = int(getattr(exc, "seconds", 0) or 0)
+        return HTTPException(
+            status_code=429,
+            detail=f"Telegram просит подождать {sec} сек. перед следующей отправкой.",
+        )
+    if isinstance(exc, RuntimeError) and "not authorized" in str(exc).lower():
+        return HTTPException(
+            status_code=503,
+            detail="Личный Telegram отключён — переподключите в «Подключения».",
+        )
+    msg = str(exc).strip() or exc.__class__.__name__
+    return HTTPException(status_code=502, detail=f"Telegram: {msg[:480]}")
 
 
 async def _send_via_client(
@@ -119,22 +163,33 @@ async def send_telegram_user_outbound(
     video_note_already_converted: bool = False,
     reply_to_telegram_message_id: int | None = None,
 ) -> int | None:
-    return await run_with_telegram_user_client(
-        session_id=session_id,
-        session_encrypted=session_encrypted,
-        operation=lambda client: _send_via_client(
-            client,
-            peer_user_id=peer_user_id,
-            text=text,
-            image_bytes=image_bytes,
-            image_mime=image_mime,
-            video_bytes=video_bytes,
-            video_mime=video_mime,
-            send_as_video_note=send_as_video_note,
-            video_note_already_converted=video_note_already_converted,
-            reply_to_telegram_message_id=reply_to_telegram_message_id,
-        ),
-    )
+    try:
+        return await run_with_telegram_user_client(
+            session_id=session_id,
+            session_encrypted=session_encrypted,
+            operation=lambda client: _send_via_client(
+                client,
+                peer_user_id=peer_user_id,
+                text=text,
+                image_bytes=image_bytes,
+                image_mime=image_mime,
+                video_bytes=video_bytes,
+                video_mime=video_mime,
+                send_as_video_note=send_as_video_note,
+                video_note_already_converted=video_note_already_converted,
+                reply_to_telegram_message_id=reply_to_telegram_message_id,
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning(
+            "telegram_user outbound failed peer=%s: %s",
+            peer_user_id,
+            exc,
+            exc_info=True,
+        )
+        raise _telegram_user_send_http_error(exc) from exc
 
 
 async def set_telegram_user_message_reaction(
