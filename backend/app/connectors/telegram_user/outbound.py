@@ -15,6 +15,7 @@ from telethon.errors import (
     UserIsBlockedError,
 )
 
+from app.connectors.telegram_user.peer_entity import resolve_telegram_user_peer
 from app.connectors.telegram_user.session_runtime import run_with_telegram_user_client
 from app.services.telegram_video_note import convert_video_bytes_to_telegram_note_async
 from fastapi import HTTPException
@@ -56,6 +57,14 @@ def _telegram_user_send_http_error(exc: BaseException) -> HTTPException:
             detail="Личный Telegram отключён — переподключите в «Подключения».",
         )
     msg = str(exc).strip() or exc.__class__.__name__
+    if "could not find the input entity" in msg.lower():
+        return HTTPException(
+            status_code=502,
+            detail=(
+                "Telegram не знает этого пользователя в текущей сессии. "
+                "Попросите его написать снова или переподключите личный Telegram."
+            ),
+        )
     return HTTPException(status_code=502, detail=f"Telegram: {msg[:480]}")
 
 
@@ -63,6 +72,8 @@ async def _send_via_client(
     client: TelegramClient,
     *,
     peer_user_id: int,
+    peer_username: str | None = None,
+    peer_access_hash: int | None = None,
     text: str,
     image_bytes: bytes | None,
     image_mime: str | None,
@@ -72,6 +83,12 @@ async def _send_via_client(
     video_note_already_converted: bool = False,
     reply_to_telegram_message_id: int | None,
 ) -> int | None:
+    peer = await resolve_telegram_user_peer(
+        client,
+        peer_user_id,
+        username=peer_username,
+        access_hash=peer_access_hash,
+    )
     reply_to = reply_to_telegram_message_id if reply_to_telegram_message_id else None
     sent = None
     if video_bytes:
@@ -93,16 +110,16 @@ async def _send_via_client(
         try:
             if send_as_video_note:
                 sent = await client.send_file(
-                    peer_user_id,
+                    peer,
                     tmp_path,
                     reply_to=reply_to,
                     video_note=True,
                 )
                 if (text or "").strip():
-                    await client.send_message(peer_user_id, text, reply_to=reply_to)
+                    await client.send_message(peer, text, reply_to=reply_to)
             elif (text or "").strip():
                 sent = await client.send_file(
-                    peer_user_id,
+                    peer,
                     tmp_path,
                     caption=text,
                     reply_to=reply_to,
@@ -110,7 +127,7 @@ async def _send_via_client(
                 )
             else:
                 sent = await client.send_file(
-                    peer_user_id,
+                    peer,
                     tmp_path,
                     reply_to=reply_to,
                     force_document=False,
@@ -129,21 +146,21 @@ async def _send_via_client(
         try:
             if (text or "").strip():
                 sent = await client.send_file(
-                    peer_user_id,
+                    peer,
                     tmp_path,
                     caption=text,
                     reply_to=reply_to,
                 )
             else:
                 sent = await client.send_file(
-                    peer_user_id,
+                    peer,
                     tmp_path,
                     reply_to=reply_to,
                 )
         finally:
             Path(tmp_path).unlink(missing_ok=True)
     elif (text or "").strip():
-        sent = await client.send_message(peer_user_id, text, reply_to=reply_to)
+        sent = await client.send_message(peer, text, reply_to=reply_to)
     else:
         raise ValueError("empty outbound message")
     return int(sent.id) if sent and sent.id else None
@@ -154,6 +171,8 @@ async def send_telegram_user_outbound(
     session_id: int,
     session_encrypted: str,
     peer_user_id: int,
+    peer_username: str | None = None,
+    peer_access_hash: int | None = None,
     text: str,
     image_bytes: bytes | None = None,
     image_mime: str | None = None,
@@ -170,6 +189,8 @@ async def send_telegram_user_outbound(
             operation=lambda client: _send_via_client(
                 client,
                 peer_user_id=peer_user_id,
+                peer_username=peer_username,
+                peer_access_hash=peer_access_hash,
                 text=text,
                 image_bytes=image_bytes,
                 image_mime=image_mime,

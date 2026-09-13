@@ -122,10 +122,19 @@ async def ingest_telegram_user_dm(
             if parent:
                 reply_to_message_id = parent.id
 
+        # access_hash нужен для исходящих при ephemeral MTProto (StringSession без entity cache)
+        peer_access_hash = int(sender.access_hash) if sender and sender.access_hash else None
+        if sender and client is not None:
+            try:
+                await client.get_input_entity(sender)
+            except Exception:
+                pass
+
         meta = json.dumps(
             {
                 "message_id": message.id,
                 "from_user_id": peer_id,
+                "from_user_access_hash": peer_access_hash,
                 "ingest_source": source,
                 "has_image": bool(image_bytes),
                 "has_media": bool(image_bytes),

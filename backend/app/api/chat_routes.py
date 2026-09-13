@@ -1014,10 +1014,17 @@ async def api_reply(
                         tg_reply_id = int(raw)
                     except ValueError:
                         tg_reply_id = None
+        from app.connectors.telegram_user.peer_entity import load_telegram_user_peer_hints
+
+        peer_username, peer_access_hash = await load_telegram_user_peer_hints(
+            session, conv.id, conv.user_display_name
+        )
         sent_id = await send_telegram_user_outbound(
             session_id=row_tu.id,
             session_encrypted=row_tu.session_encrypted,
             peer_user_id=peer_id,
+            peer_username=peer_username,
+            peer_access_hash=peer_access_hash,
             text=outgoing,
             image_bytes=image_bytes,
             image_mime=image_mime,
