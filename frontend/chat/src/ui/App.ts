@@ -912,7 +912,7 @@ export class UniboxApp {
         <div class="p-row"><span>${I.link}</span><div><b>ID</b><span>${esc(c.handle || String(c.id))}</span></div></div>
         <div class="p-row"><span>${I.globe}</span><div><b>Язык</b><span>${esc(c.lang)}</span></div></div>
         <div class="p-row"><span>${I.info}</span><div><b>AI-компаньон</b>
-          <span>Автоответчик для этого диалога. «Полуавто» — только на длинные сообщения.</span>
+          <span>Автоответчик для этого диалога. «Полуавто» — только короткие сообщения (до 320 символов).</span>
           <div class="tabs" style="margin-top:6px;flex-wrap:wrap">${companionBtns}</div></div></div>
       </div>
       <div class="p-list" style="margin-top:12px">
