@@ -32,6 +32,15 @@ from app.services.workspace import workspace_owner_id
 
 log = logging.getLogger(__name__)
 
+
+def _dt_iso(value: datetime | None) -> str | None:
+    """datetime → ISO-строка для json.dumps (snapshot companion bot, API)."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
+
 MEDIA_STATUSES = frozenset({"active", "disabled"})
 MEDIA_TIERS = frozenset({"free", "teaser", "paid"})
 MEDIA_TYPES = frozenset({"photo", "video"})
@@ -153,8 +162,8 @@ def pack_to_dict(row: CompanionMediaPack, *, asset_count: int = 0) -> dict[str, 
         "max_send_count": row.max_send_count,
         "status": row.status,
         "asset_count": asset_count,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
+        "created_at": _dt_iso(row.created_at),
+        "updated_at": _dt_iso(row.updated_at),
     }
 
 
@@ -190,8 +199,8 @@ def asset_to_dict(
         "sent_count": sent_count,
         "fan_count": fan_count,
         "preview_url": preview_url,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
+        "created_at": _dt_iso(row.created_at),
+        "updated_at": _dt_iso(row.updated_at),
     }
 
 
