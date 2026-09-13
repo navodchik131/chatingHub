@@ -232,6 +232,7 @@ body[data-theme="light"] .mrow.out .tr.tr-out{border-top-color:rgba(0,0,0,.18)}
 @keyframes blink{50%{opacity:.25}}
 .rec .dot2{width:11px;height:11px;border-radius:50%;background:var(--danger);animation:blink 1s infinite}
 .rec .hint{margin-left:auto;color:var(--txt-2);font-weight:400;font-size:13px}
+.bot-chip{background:rgba(135,116,225,.14);color:#8774e1}
 .out-tr{font-size:12.5px;color:var(--txt-2);padding:2px 12px 4px;display:flex;gap:6px;align-items:center}
 .out-tr svg{width:15px;height:15px;flex:0 0 auto}
 

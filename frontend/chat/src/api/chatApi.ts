@@ -112,8 +112,9 @@ export async function deleteFolder(folderId: number): Promise<void> {
 }
 
 export async function addConversationToFolder(folderId: number, convId: number): Promise<ConversationFolder> {
+  // Бэкенд принимает POST (не PUT) — иначе 405 Method Not Allowed.
   return apiJson<ConversationFolder>(`/api/conversation-folders/${folderId}/conversations/${convId}`, {
-    method: 'PUT',
+    method: 'POST',
     body: '{}',
   })
 }

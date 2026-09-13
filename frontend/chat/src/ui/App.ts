@@ -34,6 +34,11 @@ const COMPANION_MODES = [
   { id: 'auto', label: 'Авто' },
 ] as const
 
+/** Подпись режима AI-компаньона для шапки чата и меню. */
+function companionModeLabel(mode: string | null | undefined): string {
+  return COMPANION_MODES.find((m) => m.id === mode)?.label || 'Выкл'
+}
+
 /** Быстрые эмодзи для вставки в поле ввода. */
 const EMOJI_QUICK = [
   '😀', '😃', '😄', '😁', '😂', '🙂', '😉', '😊', '🥰', '😍',
@@ -466,6 +471,10 @@ export class UniboxApp {
     const sub = chatSubTitle(c)
     const trOn = !c.raw.auto_translate_disabled
     const replyLang = replyLangDisplay(c.raw)
+    const companionMode = c.raw.companion_mode_override ?? c.raw.effective_companion_mode ?? 'off'
+    const companionChip = companionMode !== 'off'
+      ? `<span class="tr-chip bot-chip">AI · ${esc(companionModeLabel(companionMode))}</span>`
+      : ''
     const head = this.find
       ? `<header class="head">
           <button class="ic" id="findClose" title="Закрыть поиск">${I.close}</button>
@@ -481,8 +490,9 @@ export class UniboxApp {
           <span id="headAva" style="cursor:pointer">${this.avaHtml(c, true)}</span>
           <div class="t" id="openPane">
             <div class="h-nm">${esc(c.name)}</div>
-            <div class="h-sub">${esc(sub.t)} ${trOn ? `<span class="tr-chip">RU ⇄ ${esc(replyLang)}</span>` : ''}</div>
+            <div class="h-sub">${esc(sub.t)} ${trOn ? `<span class="tr-chip">RU ⇄ ${esc(replyLang)}</span>` : ''}${companionChip}</div>
           </div>
+          <button class="ic" id="companionBtn" title="AI-компаньон">${I.info}</button>
           <button class="ic" id="notesBtn" title="Заметки">${I.note}</button>
           <button class="ic" id="trBtn" title="Перевод">${I.globe}</button>
           <button class="ic" id="searchInChat" title="Поиск в чате">${I.search}</button>
@@ -700,12 +710,8 @@ export class UniboxApp {
       const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
       this.showPop($('#emojiPop')!, r.left - 280, r.top - 280)
     })
-    $('#openPane')?.addEventListener('click', () => {
-      this.pane = true
-      this.ptab = 'info'
-      $('#app')?.classList.add('side-open')
-      this.renderPane()
-    })
+    $('#openPane')?.addEventListener('click', () => this.openInfoPane())
+    $('#companionBtn')?.addEventListener('click', () => this.openInfoPane())
     $('#notesBtn')?.addEventListener('click', () => {
       this.pane = true
       this.ptab = 'notes'
@@ -837,6 +843,14 @@ export class UniboxApp {
     })
   }
 
+  /** Правая панель «Инфо» — режим бота, персонаж, язык. */
+  private openInfoPane(): void {
+    this.pane = true
+    this.ptab = 'info'
+    $('#app')?.classList.add('side-open')
+    this.renderPane()
+  }
+
   private renderPane(): void {
     const c = this.ctrl.activeChat
     const pane = $('#pane')!
@@ -897,7 +911,9 @@ export class UniboxApp {
         <div class="p-row"><span>${I.folder}</span><div><b>Персонаж</b><span>${esc(this.personaNameForChat(c))}</span></div></div>
         <div class="p-row"><span>${I.link}</span><div><b>ID</b><span>${esc(c.handle || String(c.id))}</span></div></div>
         <div class="p-row"><span>${I.globe}</span><div><b>Язык</b><span>${esc(c.lang)}</span></div></div>
-        <div class="p-row"><span>${I.info}</span><div><b>AI-компаньон</b><div class="tabs" style="margin-top:6px;flex-wrap:wrap">${companionBtns}</div></div></div>
+        <div class="p-row"><span>${I.info}</span><div><b>AI-компаньон</b>
+          <span>Автоответчик для этого диалога. «Полуавто» — только на длинные сообщения.</span>
+          <div class="tabs" style="margin-top:6px;flex-wrap:wrap">${companionBtns}</div></div></div>
       </div>
       <div class="p-list" style="margin-top:12px">
         <a class="f-row" href="/workspace/connections" style="text-decoration:none;color:inherit">
@@ -1031,6 +1047,7 @@ export class UniboxApp {
   private chatMenu(c: UiChat, x: number, y: number): void {
     const ctx = $('#ctx')!
     const items = [
+      [I.info, 'AI-компаньон', 'companion'],
       [I.folder, 'Добавить в папку', 'folder'],
       [I.note, 'Заметки', 'notes'],
       [I.pin, c.pinned ? 'Снять VIP' : 'VIP', 'pin'],
@@ -1075,6 +1092,9 @@ export class UniboxApp {
     const convId = Number(ctx.dataset.chat)
     const c = this.ctrl.chats.find((x) => x.id === convId) || this.ctrl.activeChat
     if (!c) return
+    if (a === 'companion') {
+      void this.openChat(c.id).then(() => this.openInfoPane())
+    }
     if (a === 'folder') this.openFolderPick(c.id)
     if (a === 'notes') {
       void this.openChat(c.id).then(() => {
