@@ -11,6 +11,7 @@ from telethon import events
 
 from app.config import settings
 from app.connectors.telegram_user.client import build_telegram_client, require_mtproto_config
+from app.connectors.telegram_user.proxy import telethon_proxy_tuple
 from app.connectors.telegram_user.ingest import ingest_telegram_user_dm
 from app.db.models import TelegramUserSession, TelegramUserSessionStatus
 from app.db.session import SessionLocal
@@ -184,6 +185,7 @@ async def _sync_clients() -> None:
     for sid in list(_running_clients.keys()):
         if sid not in active_ids:
             await _stop_client(sid)
+    started_this_sync = 0
     for row in active_rows:
         if row.id in _login_blocked:
             continue
@@ -193,6 +195,32 @@ async def _sync_clients() -> None:
         if existing is not None:
             await _stop_client(row.id)
         await _start_client(row)
+        started_this_sync += 1
+        # Не открываем 4 MTProto сразу — DC режет параллельные connect с одного IP.
+        if started_this_sync < len(active_rows):
+            await asyncio.sleep(4.0)
+
+    connected = sum(
+        1
+        for row in active_rows
+        if get_worker_client(row.id) is not None
+    )
+    proxy_on = telethon_proxy_tuple() is not None
+    if connected < len(active_rows):
+        log.warning(
+            "telegram_user worker sync: active=%s connected=%s proxy=%s "
+            "(если connected=0 — задайте TELEGRAM_PROXY или оставьте 1 active сессию)",
+            len(active_rows),
+            connected,
+            "yes" if proxy_on else "no",
+        )
+    else:
+        log.info(
+            "telegram_user worker sync ok: active=%s connected=%s proxy=%s",
+            len(active_rows),
+            connected,
+            "yes" if proxy_on else "no",
+        )
 
 
 async def telegram_user_worker_loop() -> None:
@@ -216,7 +244,7 @@ async def telegram_user_worker_loop() -> None:
                     ttl_seconds=45,
                 )
             if not has_lease:
-                log.debug("telegram_user worker: another process holds lease, skip sync")
+                log.warning("telegram_user worker: another process holds lease, skip sync")
             else:
                 await _sync_clients()
         except Exception:

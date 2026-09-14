@@ -26,11 +26,14 @@ def build_telegram_client(*, session_encrypted: str | None = None) -> TelegramCl
     if session_encrypted:
         session_str = decrypt_secret(session_encrypted)
     proxy = telethon_proxy_tuple()
+    # timeout=60: на VPS часто TimeoutError при дефолтных 10s до MTProto DC.
     return TelegramClient(
         StringSession(session_str),
         api_id,
         api_hash,
         proxy=proxy,
-        connection_retries=5,
-        retry_delay=2,
+        connection_retries=10,
+        retry_delay=3,
+        timeout=60,
+        request_retries=5,
     )
