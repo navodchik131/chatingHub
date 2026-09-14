@@ -160,6 +160,7 @@ def pack_to_dict(row: CompanionMediaPack, *, asset_count: int = 0) -> dict[str, 
         "description": row.description,
         "tags": parse_tags_json(row.tags_json),
         "max_send_count": row.max_send_count,
+        "price_stars": int(row.price_stars or 0),
         "status": row.status,
         "asset_count": asset_count,
         "created_at": _dt_iso(row.created_at),
@@ -285,6 +286,10 @@ async def create_media_pack(
     if status not in MEDIA_STATUSES:
         raise HTTPException(status_code=400, detail="invalid status")
 
+    price_stars = int(data.get("price_stars") or 0)
+    if price_stars < 0 or price_stars > 25_000:
+        raise HTTPException(status_code=400, detail="invalid price_stars")
+
     row = CompanionMediaPack(
         user_id=owner_id,
         studio_model_id=studio_model_id,
@@ -292,6 +297,7 @@ async def create_media_pack(
         description=(data.get("description") or "").strip() or None,
         tags_json=dump_tags_json(data.get("tags")),
         max_send_count=max_send,
+        price_stars=price_stars,
         status=status,
     )
     session.add(row)
@@ -323,6 +329,11 @@ async def update_media_pack(
         if max_send < 1 or max_send > MAX_PACK_SEND_COUNT:
             raise HTTPException(status_code=400, detail="invalid max_send_count")
         row.max_send_count = max_send
+    if "price_stars" in data and data["price_stars"] is not None:
+        ps = int(data["price_stars"])
+        if ps < 0 or ps > 25_000:
+            raise HTTPException(status_code=400, detail="invalid price_stars")
+        row.price_stars = ps
     if "status" in data and data["status"] is not None:
         status = str(data["status"]).strip().lower()
         if status not in MEDIA_STATUSES:

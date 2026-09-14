@@ -582,6 +582,11 @@ export class UniboxApp {
         ${this.reply ? this.replyBar(c) : ''}
         <div class="crow">
           <button class="ic" id="attachBtn" title="Фото">${I.clip}</button>
+          ${
+            c.raw.platform === 'telegram_user' && c.raw.studio_model_id
+              ? '<button class="ic" id="starsPaidBtn" title="Платный контент ⭐">⭐</button>'
+              : ''
+          }
           <button class="ic" id="emojiBtn" title="Эмодзи">${I.smile}</button>
           <textarea class="inp" id="inp" rows="1" placeholder="Сообщение…">${esc(c.draft || '')}</textarea>
           <button class="send" id="sendBtn" title="Отправить">${I.send}</button>
@@ -807,6 +812,9 @@ export class UniboxApp {
       this.renderChat()
     })
     $('#attachBtn')?.addEventListener('click', () => this.fileInput?.click())
+    $('#starsPaidBtn')?.addEventListener('click', () => {
+      void this.openPaidMediaPicker(c)
+    })
 
     const inp = $('#inp') as HTMLTextAreaElement | null
     if (inp) {
@@ -891,6 +899,58 @@ export class UniboxApp {
     } catch (e) {
       this.toast(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  private async openPaidMediaPicker(c: UiChat): Promise<void> {
+    const { fetchPaidMediaPacks } = await import('../api/chatApi')
+    let packs: Awaited<ReturnType<typeof fetchPaidMediaPacks>>
+    try {
+      packs = await fetchPaidMediaPacks(c.id)
+    } catch (e) {
+      this.toast(e instanceof Error ? e.message : String(e))
+      return
+    }
+    if (!packs.length) {
+      this.toast('Нет паков с ценой ⭐ — задайте в медиатеке персонажа')
+      return
+    }
+    const inp = $('#inp') as HTMLTextAreaElement | null
+    const captionHint = inp?.value.trim() || ''
+    const list = packs
+      .map(
+        (p) =>
+          `<button type="button" class="paid-pack-row" data-pack="${p.id}">
+            <b>${esc(p.name)}</b>
+            <span>${p.price_stars} ⭐ · ${p.asset_count} файлов · до ${p.max_send_count} в отправке</span>
+          </button>`,
+      )
+      .join('')
+    this.modal(
+      'Платный контент',
+      `<p class="tr-hint">Одна цена ⭐ на весь пак. Подпись — из поля ввода${captionHint ? `: «${esc(captionHint.slice(0, 80))}»` : ''}.</p>
+      <div class="paid-pack-list">${list}</div>`,
+      (wrap) => {
+        wrap.querySelectorAll('[data-pack]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const packId = Number((btn as HTMLElement).dataset.pack)
+            wrap.remove()
+            void this.ctrl
+              .sendPaidMedia(c.id, packId, captionHint || undefined)
+              .then(() => {
+                this.scroll.forceBottomNext = true
+                this.renderMsgs(true)
+                this.renderListIfChanged()
+                if (inp && captionHint) {
+                  inp.value = ''
+                  inp.style.height = 'auto'
+                  this.ctrl.clearDraft(c.id)
+                }
+              })
+              .catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+          })
+        })
+      },
+    )
   }
 
   private openTranslation(c: UiChat): void {

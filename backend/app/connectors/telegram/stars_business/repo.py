@@ -13,6 +13,7 @@ from app.db.models import (
     StarsBusinessFanChat,
     StarsBusinessOperator,
     StarsBusinessOrder,
+    User,
 )
 
 
@@ -22,6 +23,22 @@ def utcnow() -> datetime:
 
 async def get_connection(session: AsyncSession, owner_tg_user_id: int) -> StarsBusinessConnection | None:
     return await session.get(StarsBusinessConnection, owner_tg_user_id)
+
+
+async def get_connection_for_workspace_user(
+    session: AsyncSession,
+    workspace_owner_user_id: int,
+) -> StarsBusinessConnection | None:
+    """Business OWNER, привязанный к владельцу workspace (Unibox)."""
+    return await session.scalar(
+        select(StarsBusinessConnection)
+        .where(
+            StarsBusinessConnection.user_id == int(workspace_owner_user_id),
+            StarsBusinessConnection.is_enabled.is_(True),
+        )
+        .order_by(StarsBusinessConnection.updated_at.desc())
+        .limit(1)
+    )
 
 
 async def get_connection_by_connection_id(
@@ -69,6 +86,16 @@ async def upsert_business_connection(
         row.is_enabled = is_enabled
         row.owner_user_chat_id = owner_user_chat_id
         row.updated_at = utcnow()
+    if row.user_id is None:
+        owner_user = await session.scalar(
+            select(User).where(
+                User.telegram_id == owner_tg_user_id,
+                User.is_active.is_(True),
+                User.parent_user_id.is_(None),
+            )
+        )
+        if owner_user is not None:
+            row.user_id = int(owner_user.id)
     await session.flush()
     await sync_operators_from_env(session, owner_tg_user_id)
     return row
@@ -177,6 +204,22 @@ async def list_fan_chats(
     return list(rows)
 
 
+async def link_connection_to_workspace_user(
+    session: AsyncSession,
+    *,
+    workspace_owner_user_id: int,
+    owner_tg_user_id: int,
+) -> StarsBusinessConnection | None:
+    """Явная привязка Business OWNER к user_id workspace (интеграции)."""
+    row = await get_connection(session, owner_tg_user_id)
+    if not row:
+        return None
+    row.user_id = int(workspace_owner_user_id)
+    row.updated_at = utcnow()
+    await session.flush()
+    return row
+
+
 async def create_order(
     session: AsyncSession,
     *,
@@ -187,6 +230,10 @@ async def create_order(
     caption: str | None,
     media_relative_path: str,
     media_type: str,
+    conversation_id: int | None = None,
+    pack_id: int | None = None,
+    asset_id: int | None = None,
+    created_by_user_id: int | None = None,
 ) -> StarsBusinessOrder:
     order = StarsBusinessOrder(
         owner_tg_user_id=owner_tg_user_id,
@@ -197,6 +244,10 @@ async def create_order(
         media_relative_path=media_relative_path,
         media_type=media_type,
         status="draft",
+        conversation_id=conversation_id,
+        pack_id=pack_id,
+        asset_id=asset_id,
+        created_by_user_id=created_by_user_id,
     )
     session.add(order)
     await session.flush()
@@ -208,11 +259,14 @@ async def mark_order_sent(
     order: StarsBusinessOrder,
     *,
     platform_message_id: int,
+    unibox_message_id: int | None = None,
 ) -> None:
     order.status = "sent"
     order.platform_message_id = platform_message_id
     order.sent_at = utcnow()
     order.error_code = None
+    if unibox_message_id is not None:
+        order.unibox_message_id = unibox_message_id
     await session.flush()
 
 

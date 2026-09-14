@@ -1190,6 +1190,8 @@ class CompanionMediaPack(Base):
     tags_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Сколько кадров из серии отправлять за раз (обычно 3–4)."""
     max_send_count: Mapped[int] = mapped_column(Integer, default=4, server_default="4")
+    """Цена всего пака в Telegram Stars (0 = не для paid media)."""
+    price_stars: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -2112,6 +2114,10 @@ class StarsBusinessConnection(Base):
     connection_id: Mapped[str] = mapped_column(String(128), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     owner_user_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    """Владелец workspace в кабинете (привязка к User.telegram_id OWNER)."""
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -2182,6 +2188,21 @@ class StarsBusinessOrder(Base):
     status: Mapped[str] = mapped_column(String(16), default="draft", server_default="draft", index=True)
     platform_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    conversation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    pack_id: Mapped[int | None] = mapped_column(
+        ForeignKey("companion_media_packs.id", ondelete="SET NULL"), nullable=True
+    )
+    asset_id: Mapped[int | None] = mapped_column(
+        ForeignKey("companion_media_assets.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    unibox_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

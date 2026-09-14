@@ -138,3 +138,30 @@ export async function analyzeNotes(convId: number): Promise<unknown[]> {
 export async function deleteConversation(convId: number): Promise<void> {
   await apiFetch(`/api/conversations/${convId}`, { method: 'DELETE' })
 }
+
+export interface PaidMediaPack {
+  id: number
+  name: string
+  price_stars: number
+  asset_count: number
+  max_send_count: number
+}
+
+/** Паки медиатеки с ценой ⭐ для диалога (telegram_user + Stars Business). */
+export async function fetchPaidMediaPacks(convId: number): Promise<PaidMediaPack[]> {
+  const rows = await apiJson<PaidMediaPack[]>(`/api/conversations/${convId}/paid-media-packs`)
+  return Array.isArray(rows) ? rows : []
+}
+
+export async function sendPaidMediaPack(
+  convId: number,
+  packId: number,
+  caption?: string,
+): Promise<ApiMessage> {
+  const body: Record<string, unknown> = { pack_id: packId }
+  if (caption?.trim()) body.caption = caption.trim()
+  return apiJson<ApiMessage>(`/api/conversations/${convId}/send-paid-media`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}

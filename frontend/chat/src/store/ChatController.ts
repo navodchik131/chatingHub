@@ -12,6 +12,7 @@ import {
   markConversationRead,
   sendImageReply,
   sendTextReply,
+  sendPaidMediaPack,
   patchConversation,
   fetchMe,
   fetchStudioModels,
@@ -428,6 +429,18 @@ export class ChatController {
       this.emit()
       throw e
     }
+  }
+
+  /** Paid media (Stars) — пак из медиатеки, одна цена ⭐ на весь пак. */
+  async sendPaidMedia(convId: number, packId: number, caption?: string): Promise<void> {
+    const chat = this.chats.find((c) => c.id === convId)
+    if (!chat) return
+    const sent = await sendPaidMediaPack(convId, packId, caption)
+    const merged = mergeApiMessages(this.apiMessages.get(convId) || [], [sent])
+    this.apiMessages.set(convId, merged)
+    chat.msgs = mapApiMessages(merged, chat)
+    await saveThreadCache(convId, merged)
+    this.emit()
   }
 
   async sendImage(convId: number, text: string, file: File): Promise<void> {

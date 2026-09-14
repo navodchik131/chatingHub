@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -16,7 +17,9 @@ from app.connectors.telegram.stars_business.repo import (
     upsert_business_connection,
     upsert_fan_inbound,
 )
+from app.db.models import Message
 from app.db.session import SessionLocal
+from app.services.chat_ingest import broadcast_message_updated
 
 log = logging.getLogger(__name__)
 
@@ -188,6 +191,9 @@ async def on_purchased_paid_media(ppm: PaidMediaPurchased) -> None:
         log.info("stars business purchase without payload user=%s", ppm.from_user.id if ppm.from_user else None)
         return
     oid: int | None = None
+    unibox_msg_id: int | None = None
+    conv_id: int | None = None
+    owner_user_id: int | None = None
     async with SessionLocal() as session:
         order = await get_order_by_payload(session, payload)
         if not order:
@@ -197,7 +203,42 @@ async def on_purchased_paid_media(ppm: PaidMediaPurchased) -> None:
             await session.commit()
             return
         oid = order.id
+        unibox_msg_id = order.unibox_message_id
+        conv_id = order.conversation_id
         await mark_order_paid(session, oid)
+        if unibox_msg_id:
+            msg = await session.get(Message, unibox_msg_id)
+            if msg:
+                # Не затираем order_id в stars_paid_media — merge_meta_dict поверхностный.
+                try:
+                    parsed = json.loads(msg.meta or "{}")
+                except json.JSONDecodeError:
+                    parsed = {}
+                if not isinstance(parsed, dict):
+                    parsed = {}
+                spm = parsed.get("stars_paid_media")
+                if not isinstance(spm, dict):
+                    spm = {}
+                spm["status"] = "paid"
+                parsed["stars_paid_media"] = spm
+                msg.meta = json.dumps(parsed, ensure_ascii=False)
+                from app.db.models import Conversation
+
+                conv = await session.get(Conversation, msg.conversation_id)
+                owner_user_id = int(conv.user_id) if conv else None
         await session.commit()
     if oid is not None:
         log.info("stars business order paid id=%s payload=%s", oid, payload)
+    if unibox_msg_id and conv_id and owner_user_id:
+        try:
+            async with SessionLocal() as session:
+                msg = await session.get(Message, unibox_msg_id)
+                if msg:
+                    await broadcast_message_updated(
+                        session,
+                        owner_user_id=owner_user_id,
+                        conv_id=conv_id,
+                        row=msg,
+                    )
+        except Exception:
+            log.exception("stars business unibox broadcast paid failed msg=%s", unibox_msg_id)

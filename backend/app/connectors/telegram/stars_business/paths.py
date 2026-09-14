@@ -20,4 +20,8 @@ def relative_media_path(owner_tg_user_id: int, filename: str) -> str:
 
 
 def absolute_media_path(relative: str) -> Path:
-    return BACKEND_DIR / "data" / relative
+    """stars_business/… — под data/; медиатека — data/companion_media/… в заказе."""
+    rel = (relative or "").strip().replace("\\", "/")
+    if rel.startswith("data/"):
+        return (BACKEND_DIR / rel).resolve()
+    return (BACKEND_DIR / "data" / rel).resolve()

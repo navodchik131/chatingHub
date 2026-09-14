@@ -1906,6 +1906,7 @@ class CompanionMediaPackIn(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     tags: list[str] = Field(default_factory=list)
     max_send_count: int = Field(default=4, ge=1, le=10)
+    price_stars: int = Field(default=0, ge=0, le=25_000)
     status: Literal["active", "disabled"] = "active"
 
 
@@ -1914,6 +1915,7 @@ class CompanionMediaPackPatchIn(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     tags: list[str] | None = None
     max_send_count: int | None = Field(default=None, ge=1, le=10)
+    price_stars: int | None = Field(default=None, ge=0, le=25_000)
     status: Literal["active", "disabled"] | None = None
 
 
@@ -1924,10 +1926,28 @@ class CompanionMediaPackOut(BaseModel):
     description: str | None = None
     tags: list[str] = Field(default_factory=list)
     max_send_count: int
+    price_stars: int = 0
     status: str
     asset_count: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class StarsBusinessStatusOut(BaseModel):
+    configured: bool
+    linked: bool
+    owner_tg_user_id: int | None = None
+    is_enabled: bool = False
+    user_telegram_id: int | None = None
+
+
+class StarsBusinessLinkIn(BaseModel):
+    owner_tg_user_id: int | None = Field(default=None, ge=1)
+
+
+class SendPaidMediaIn(BaseModel):
+    pack_id: int = Field(ge=1)
+    caption: str | None = Field(default=None, max_length=1024)
 
 
 class CompanionMediaAssetFromGenerationIn(BaseModel):

@@ -359,6 +359,10 @@ body[data-theme="light"] .mrow.out .tr.tr-out{border-top-color:rgba(0,0,0,.18)}
 .modal-h b{font-size:17px;flex:1}
 .modal-b{padding:8px 0;overflow-y:auto}
 .modal-f{display:flex;justify-content:flex-end;gap:4px;padding:9px 10px;border-top:1px solid var(--line)}
+.paid-pack-list{display:flex;flex-direction:column;gap:6px;padding:8px 14px 14px}
+.paid-pack-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg-2);cursor:pointer;font:inherit;color:inherit}
+.paid-pack-row:hover{border-color:var(--accent);background:var(--bg)}
+.paid-pack-row span{font-size:12px;color:var(--txt-2)}
 .btn-t{border:0;background:transparent;color:var(--accent);font-weight:600;padding:9px 16px;border-radius:8px;
   cursor:pointer;font-size:14px;text-transform:uppercase;letter-spacing:.02em}
 .btn-t:hover{background:var(--hover)}

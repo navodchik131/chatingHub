@@ -429,8 +429,24 @@ export default function TabMedia() {
             <Panel key={pk.id} style={{ padding: 14, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 150 }}>
                 <div style={{ fontWeight: 800, fontSize: 13.5 }}>{pk.name}</div>
-                <div style={{ fontFamily: font.mono, fontSize: 9.5, color: color.textGhost }}>{pk.asset_count} · max {pk.max_send_count}</div>
+                <div style={{ fontFamily: font.mono, fontSize: 9.5, color: color.textGhost }}>
+                  {pk.asset_count} · max {pk.max_send_count}
+                  {pk.price_stars > 0 ? ` · ${pk.price_stars} ⭐` : ''}
+                </div>
               </div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 9, color: color.textGhost }}>
+                {ru ? '⭐ НА ПАК' : '⭐ PACK'}
+                <input
+                  defaultValue={String(pk.price_stars ?? 0)}
+                  key={`stars-${pk.id}-${pk.price_stars}`}
+                  onBlur={(e) => {
+                    const v = Math.max(0, Math.min(25000, parseInt(e.target.value, 10) || 0));
+                    if (v === (pk.price_stars ?? 0)) return;
+                    void updateCompanionMediaPack(pk.id, { price_stars: v }).then(reload);
+                  }}
+                  style={{ ...inputSt, width: 72, boxSizing: 'border-box' }}
+                />
+              </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Hoverable
                   style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${line.mid}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}

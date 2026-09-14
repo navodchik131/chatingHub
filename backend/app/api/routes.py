@@ -31,6 +31,7 @@ from app.api.studio_motion_control_routes import router as studio_motion_control
 from app.api.studio_workflow_routes import router as studio_workflow_router
 from app.api.support_routes import router as support_router
 from app.api.tribute_routes import router as tribute_router
+from app.api.stars_business_routes import router as stars_business_router
 from app.api.webhooks_routes import router as webhooks_router
 from app.api.workspace_routes import router as workspace_router
 from app.auth.routes import router as auth_router
@@ -47,6 +48,7 @@ router.include_router(companion_media_router)
 router.include_router(reference_router)
 router.include_router(news_router)
 router.include_router(integrations_router)
+router.include_router(stars_business_router)
 router.include_router(telegram_user_router)
 router.include_router(billing_router)
 router.include_router(referral_router)

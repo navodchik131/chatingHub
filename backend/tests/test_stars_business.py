@@ -7,6 +7,7 @@ from aiogram.types import Chat, Message, User
 from app.connectors.telegram.stars_business.fan_window import chat_window_open, window_label
 from app.connectors.telegram.stars_business.handlers_business import _inbound_dt
 from app.connectors.telegram.stars_business.media_storage import decode_media_paths, encode_media_paths
+from app.connectors.telegram.stars_business.paths import absolute_media_path
 
 
 def test_chat_window_open_within_24h():
@@ -35,6 +36,15 @@ def test_inbound_dt_accepts_aiogram_datetime():
         business_connection_id="bc-test",
     )
     assert _inbound_dt(msg) == ts
+
+
+def test_absolute_media_path_companion_and_stars():
+    stars = absolute_media_path("stars_business/1/a.jpg")
+    assert stars.name == "a.jpg"
+    assert "stars_business" in str(stars)
+    comp = absolute_media_path("data/companion_media/1/2/x.jpg")
+    assert comp.name == "x.jpg"
+    assert "companion_media" in str(comp)
 
 
 def test_chat_window_closed_after_24h():
