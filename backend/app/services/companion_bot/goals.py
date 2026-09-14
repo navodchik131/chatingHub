@@ -2,9 +2,112 @@
 
 from __future__ import annotations
 
-from app.db.models import Platform
+import re
+
+from app.db.models import Message, Platform
 
 COMPANION_GOAL_PRESETS = frozenset({"chat", "funnel", "sales", "custom"})
+
+_PAY_REFUSAL_HINTS = (
+    "won't pay",
+    "wont pay",
+    "not paying",
+    "won't buy",
+    "wont buy",
+    "не буду платить",
+    "не заплачу",
+    "не собираюсь платить",
+    "не буду покупать",
+    "only free",
+    "free only",
+    "just free",
+    "бесплатно только",
+    "only for free",
+    "no money",
+    "without paying",
+    "не буду платить за",
+)
+
+
+def fan_refused_to_pay(text: str | None) -> bool:
+    low = (text or "").strip().lower()
+    return any(h in low for h in _PAY_REFUSAL_HINTS)
+
+
+def goal_link_used_in_text(text: str | None, goal_link: str | None) -> bool:
+    link = (goal_link or "").strip().lower()
+    if not link:
+        return False
+    low = (text or "").lower()
+    if link in low:
+        return True
+    handle = re.search(r"t\.me/([^/?#\s]+)", link)
+    if handle and handle.group(1).lower() in low:
+        return True
+    return False
+
+
+def goal_link_in_recent_outbound(
+    messages: list[Message],
+    goal_link: str | None,
+    *,
+    limit: int = 8,
+) -> bool:
+    from app.db.models import MessageDirection
+
+    count = 0
+    for m in reversed(messages):
+        if m.direction != MessageDirection.outbound:
+            continue
+        text = (m.text_original or m.text_translated or "").strip()
+        if text and goal_link_used_in_text(text, goal_link):
+            return True
+        count += 1
+        if count >= limit:
+            break
+    return False
+
+
+def strip_goal_link_from_reply(text: str, goal_link: str | None) -> str:
+    """Убрать URL/handle из ответа, если ссылку вставлять нельзя."""
+    raw = (text or "").strip()
+    link = (goal_link or "").strip()
+    if not raw or not link:
+        return raw
+    out = raw.replace(link, "").strip()
+    handle = re.search(r"t\.me/([^/?#\s]+)", link)
+    if handle:
+        h = handle.group(1)
+        out = re.sub(rf"https?://t\.me/{re.escape(h)}[^\s]*", "", out, flags=re.I).strip()
+        out = re.sub(rf"\bt\.me/{re.escape(h)}[^\s]*", "", out, flags=re.I).strip()
+        out = re.sub(rf"@{re.escape(h)}\b", "", out, flags=re.I).strip()
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r"\s+([,.!?])", r"\1", out)
+    return out.strip()
+
+
+def should_allow_goal_link_in_reply(
+    *,
+    messages: list[Message],
+    goal_link: str | None,
+    goal_preset: str | None,
+    last_fan_text: str | None,
+    explicit_ask: bool = False,
+) -> bool:
+    """Когда модель может вставить destination link в ответ."""
+    if not (goal_link or "").strip():
+        return False
+    if goal_link_in_recent_outbound(messages, goal_link):
+        return False
+    norm = normalize_companion_goal_preset(goal_preset)
+    if norm == "funnel":
+        return True
+    # Явный запрос фото/нюдов — уходим словами, без ссылки (operator custom flow).
+    if explicit_ask:
+        return False
+    if norm in ("custom", "chat", "sales"):
+        return fan_refused_to_pay(last_fan_text)
+    return False
 
 
 def normalize_companion_goal_preset(raw: str | None) -> str:
@@ -87,9 +190,11 @@ def format_companion_goal_block(
                 f"- DESTINATION (give the real URL/@handle they can tap — first time once the chat is warm, "
                 f"then again if they stay here asking for more): {link[:240]}"
             )
+        elif norm == "custom":
+            lines.append(f"- Channel URL (see operator rules — NOT for every reply): {link[:240]}")
         else:
             lines.append(
-                f"- Destination (share sparingly — roughly once per 5–8 warm replies max): {link[:240]}"
+                f"- Destination (only if fan explicitly refuses to pay — once per thread max): {link[:240]}"
             )
     elif norm == "funnel":
         lines.append(
@@ -109,9 +214,11 @@ def format_companion_goal_block(
     else:
         lines.extend(
             [
-                "- Answer the fan's LAST message first; any funnel/sales hint comes after, only if natural.",
-                "- Never spam links back-to-back; never push during trust repair, complaints, or factual Q&A.",
-                "- One soft hint beats a promo paragraph — stay in the persona's texting voice.",
+                "- Answer the fan's LAST message first; stay in flirt/chat — do NOT paste the channel URL by default.",
+                "- On nudes/boobs/explicit asks: playful deflect IN TEXT (mood, tease, «not that easy») — NO link, NO lecture.",
+                "- Channel URL ONLY if operator instructions allow AND fan explicitly said they won't pay — once per thread.",
+                "- If YOUR RECENT OUTBOUND already contains the link — never send it again.",
+                "- Never spam links; never push during trust repair, complaints, or factual Q&A.",
             ]
         )
     return "\n".join(lines) + "\n\n"

@@ -296,7 +296,8 @@ def build_media_llm_hint(plan: MediaPlan) -> str:
         return (
             "MEDIA LIBRARY: fan asked for content but nothing suitable to send now. "
             "Playfully deflect like a real person — busy, later, wrong mood, tease without promising "
-            "a specific photo. Do NOT say «sending now» or invent content you don't have."
+            "a specific photo. Do NOT say «sending now» or invent content you don't have. "
+            "Do NOT paste channel/t.me links — keep them in the chat with words only."
         )
     return ""
 

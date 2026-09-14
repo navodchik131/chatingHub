@@ -18,6 +18,12 @@ from app.db.models import (
     UserStudioModel,
 )
 from app.services.companion_bot.config import get_companion_config_for_conversation
+from app.services.companion_bot.goals import (
+    goal_link_used_in_text,
+    is_funnel_goal,
+    should_allow_goal_link_in_reply,
+    strip_goal_link_from_reply,
+)
 from app.services.companion_bot.memory import maybe_refresh_companion_memory
 from app.services.companion_bot.vision import maybe_describe_fan_image_for_companion
 from app.services.companion_bot.persona import parse_companion_persona
@@ -32,7 +38,7 @@ from app.services.companion_bot.prompt import (
     reply_too_similar_to_recent,
     resolve_target_lang,
 )
-from app.services.companion_bot.media_planner import plan_companion_media
+from app.services.companion_bot.media_planner import detect_explicit_request, plan_companion_media
 from app.services.companion_bot.style_rag import format_style_examples_block
 from app.services.studio_keys import load_owner_studio_billing, studio_llm_credentials
 from app.services.studio_openai import _chat_completion_text
@@ -268,14 +274,30 @@ async def generate_companion_reply(
     model = companion_chat_model()
     recent = recent_outbound_texts(messages, limit=4)
     signals = analyze_thread_signals(messages)
+    fan_text = last_fan_message_text(messages)
+    allow_goal_link = should_allow_goal_link_in_reply(
+        messages=messages,
+        goal_link=cfg.goal_link if cfg else None,
+        goal_preset=cfg.goal_preset if cfg else None,
+        last_fan_text=fan_text,
+        explicit_ask=detect_explicit_request(fan_text),
+    )
+    link_forbidden = bool(cfg and cfg.goal_link and not allow_goal_link)
     extra_avoid: str | None = None
+    if link_forbidden:
+        extra_avoid = (
+            "Do NOT include the channel URL, t.me link, or @channel handle in this reply. "
+            "Deflect explicit/content asks with flirt and words only — stay in the DM vibe."
+        )
     reply = ""
+    funnel = is_funnel_goal(cfg.goal_preset if cfg else None)
 
     for attempt in range(3):
         user_msg = build_companion_user_prompt(
             conv=conv,
             messages=messages,
             followup=followup,
+            funnel=funnel,
             extra_avoid=extra_avoid,
             fan_image_description=fan_image_description,
             trigger_message=trigger_message,
@@ -305,15 +327,31 @@ async def generate_companion_reply(
         reply = (raw or "").strip()
         if not reply:
             raise RuntimeError("empty companion reply")
+        link_spam = link_forbidden and goal_link_used_in_text(reply, cfg.goal_link if cfg else None)
+        if link_spam:
+            reply = strip_goal_link_from_reply(reply, cfg.goal_link if cfg else None)
+            if reply and not goal_link_used_in_text(reply, cfg.goal_link if cfg else None):
+                link_spam = False
+                log.info("companion stripped forbidden goal link conv=%s", conv.id)
         too_similar = reply_too_similar_to_recent(reply, recent)
         over_reports = reply_over_reports_on_checkin(
             reply,
             casual_checkin=signals.casual_checkin,
         )
-        if not too_similar and not over_reports:
+        if not too_similar and not over_reports and not link_spam:
             break
         if attempt < 2:
-            if over_reports:
+            if link_spam:
+                extra_avoid = (
+                    "You included the forbidden channel link. Rewrite with ZERO URLs and ZERO t.me handles. "
+                    "Tease or deflect in character — keep them in this chat."
+                )
+                log.info(
+                    "companion reply had forbidden link conv=%s attempt=%s",
+                    conv.id,
+                    attempt + 1,
+                )
+            elif over_reports:
                 extra_avoid = (
                     "Your draft sounded like a work/time report. "
                     "Answer ONLY what you're doing right now — activity and mood. "

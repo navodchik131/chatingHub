@@ -703,5 +703,60 @@ def test_funnel_prompt_switches_to_handoff_after_two_replies():
     )
     assert "Handoff phase" in sys
     assert "3-4 sentences max" in sys
-    user = build_companion_user_prompt(conv=conv, messages=messages)
+    user = build_companion_user_prompt(conv=conv, messages=messages, funnel=True)
     assert "FUNNEL HANDOFF" in user
+
+    user_chat = build_companion_user_prompt(conv=conv, messages=messages, funnel=False)
+    assert "FUNNEL HANDOFF" not in user_chat
+
+
+def test_goal_link_guard_explicit_and_recent():
+    from datetime import datetime, timezone
+
+    from app.services.companion_bot.goals import (
+        goal_link_in_recent_outbound,
+        should_allow_goal_link_in_reply,
+        strip_goal_link_from_reply,
+    )
+
+    link = "https://t.me/nibulla_moments"
+    now = datetime.now(timezone.utc)
+    messages = [
+        Message(
+            id=1,
+            conversation_id=1,
+            direction=MessageDirection.outbound,
+            text_original=f"check {link}",
+            created_at=now,
+        ),
+        Message(
+            id=2,
+            conversation_id=1,
+            direction=MessageDirection.inbound,
+            text_original="show me your boobs",
+            created_at=now,
+        ),
+    ]
+    assert goal_link_in_recent_outbound(messages, link) is True
+    assert (
+        should_allow_goal_link_in_reply(
+            messages=messages,
+            goal_link=link,
+            goal_preset="custom",
+            last_fan_text="show me your boobs",
+            explicit_ask=True,
+        )
+        is False
+    )
+    stripped = strip_goal_link_from_reply(f"lol not here {link}", link)
+    assert "t.me" not in stripped.lower()
+    assert (
+        should_allow_goal_link_in_reply(
+            messages=[],
+            goal_link=link,
+            goal_preset="custom",
+            last_fan_text="i wont pay for content",
+            explicit_ask=False,
+        )
+        is True
+    )

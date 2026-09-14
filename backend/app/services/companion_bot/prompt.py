@@ -796,6 +796,7 @@ def build_companion_user_prompt(
     conv: Conversation,
     messages: list[Message],
     followup: bool = False,
+    funnel: bool = False,
     extra_avoid: str | None = None,
     fan_image_description: str | None = None,
     trigger_message: Message | None = None,
@@ -841,7 +842,7 @@ def build_companion_user_prompt(
                 "\nTRUST REPAIR: fan just challenged you — acknowledge, answer the fact, "
                 "do not say «не бот». No tease pivot.\n"
             )
-        if signals.outbound_count >= 2:
+        if funnel and signals.outbound_count >= 2:
             focus += (
                 "\nFUNNEL HANDOFF: you've already replied here a couple of times. "
                 "Do not keep a long Instagram back-and-forth. "

@@ -68,6 +68,12 @@ export class UniboxApp {
   private fileInput: HTMLInputElement | null = null
   /** Блокируем повторную подгрузку истории при скролле. */
   private olderLoadLock = false
+  /** Схлопываем пачку emit() в один кадр. */
+  private renderRaf = 0
+  /** Уже отрисованный shell чата — не пересоздаём composer без нужды. */
+  private chatShellConvId: number | null = null
+  private listHtmlSig = ''
+  private tabsHtmlSig = ''
 
   constructor(private ctrl: ChatController) {}
 
@@ -84,7 +90,7 @@ export class UniboxApp {
     }
     this.applyTheme()
 
-    this.ctrl.subscribe(() => this.renderAll())
+    this.ctrl.subscribe(() => this.scheduleRender())
     this.bindGlobal()
     this.initStrips()
     this.resolveActivePersona()
@@ -165,22 +171,95 @@ export class UniboxApp {
     this.renderAll()
   }
 
-  /** Пользователь печатает в composer — нельзя пересоздавать textarea (сбросит курсор). */
-  private isComposingMessage(): boolean {
-    const el = document.activeElement
-    return el instanceof HTMLTextAreaElement && el.id === 'inp'
+  /** Правая панель: фокус или черновик заметки — не перерисовывать pane целиком. */
+  private isPaneBusy(): boolean {
+    const pane = $('#pane')
+    if (!pane || pane.style.display === 'none') return false
+    const ae = document.activeElement
+    if (ae && pane.contains(ae)) {
+      if (ae instanceof HTMLInputElement || ae instanceof HTMLTextAreaElement || ae instanceof HTMLSelectElement) {
+        return true
+      }
+    }
+    const note = $('#noteInp') as HTMLTextAreaElement | null
+    return Boolean(note?.value.trim())
+  }
+
+  private scheduleRender(): void {
+    if (this.renderRaf) return
+    this.renderRaf = window.requestAnimationFrame(() => {
+      this.renderRaf = 0
+      this.renderAll()
+    })
   }
 
   private renderAll(): void {
-    this.renderTabs()
-    this.renderList()
-    if (this.isComposingMessage()) {
-      // WS/обновления списка — только лента сообщений, поле ввода не трогаем
-      this.renderMsgs(true)
-    } else {
+    this.renderTabsIfChanged()
+    this.renderListIfChanged()
+
+    const c = this.ctrl.activeChat
+    if (!c) {
+      this.chatShellConvId = null
       this.renderChat()
+      if (this.pane && !this.isPaneBusy()) this.renderPane()
+      return
     }
-    if (this.pane) this.renderPane()
+
+    const convId = c.id
+    const shellOk =
+      Boolean(document.getElementById('msgs')) &&
+      convId === this.chatShellConvId &&
+      !this.find
+
+    if (!shellOk) {
+      this.renderChat()
+      this.chatShellConvId = convId
+    } else {
+      // Только лента + шапка — composer и pane не трогаем (как в Telegram).
+      this.renderMsgs(true)
+      this.patchChatHead(c)
+    }
+
+    if (this.pane && !this.isPaneBusy()) this.renderPane()
+  }
+
+  /** Обновить подпись в шапке без пересборки composer. */
+  private patchChatHead(c: UiChat): void {
+    const subEl = document.querySelector('#chatPane .h-sub')
+    if (!subEl) return
+    const sub = chatSubTitle(c)
+    const trOn = !c.raw.auto_translate_disabled
+    const replyLang = replyLangDisplay(c.raw)
+    const companionMode = c.raw.companion_mode_override ?? c.raw.effective_companion_mode ?? 'off'
+    const companionChip = companionMode !== 'off'
+      ? `<span class="tr-chip bot-chip">AI · ${esc(companionModeLabel(companionMode))}</span>`
+      : ''
+    subEl.innerHTML = `${esc(sub.t)} ${trOn ? `<span class="tr-chip">RU ⇄ ${esc(replyLang)}</span>` : ''}${companionChip}`
+  }
+
+  private renderTabsIfChanged(): void {
+    const sig = `${this.folder}|${this.src}|${this.ctrl.chats.length}|${this.ctrl.folders.length}|` +
+      this.ctrl.chats.reduce((a, c) => a + c.unread, 0)
+    if (sig === this.tabsHtmlSig && document.querySelector('#folders .tab')) return
+    this.tabsHtmlSig = sig
+    this.renderTabs()
+  }
+
+  private renderListIfChanged(): void {
+    const q = this.query.trim().toLowerCase()
+    let list = this.ctrl.chats.filter((c) => this.inPersona(c) && this.inFolder(c) && this.inSrc(c))
+    if (q) {
+      list = list.filter((c) => {
+        const last = chatListPreview(c).toLowerCase()
+        return c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q) || last.includes(q)
+      })
+    }
+    list = [...list].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
+    const sig = list.map((c) => `${c.id}:${c.unread}:${chatListPreview(c)}:${chatListTime(c)}`).join('|') +
+      `|${this.ctrl.activeChatId}|${q}`
+    if (sig === this.listHtmlSig && document.querySelector('#list .row')) return
+    this.listHtmlSig = sig
+    this.renderList()
   }
 
   private bindGlobal(): void {
@@ -452,6 +531,7 @@ export class UniboxApp {
     this.scroll.onThreadOpen()
     $('#app')?.classList.add('open')
     await this.ctrl.openChat(convId)
+    this.chatShellConvId = null
     this.renderAll()
     // Не даём браузеру проскроллить document при фокусе на input — шапка уезжала вверх
     window.scrollTo(0, 0)
@@ -737,7 +817,7 @@ export class UniboxApp {
       fit()
       inp.addEventListener('input', () => {
         fit()
-        c.draft = inp.value
+        this.ctrl.setDraft(c.id, inp.value)
       })
       inp.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -796,12 +876,18 @@ export class UniboxApp {
     if (!text) return
     const replyTo = this.reply
     inp.value = ''
-    c.draft = ''
+    inp.style.height = 'auto'
+    this.ctrl.clearDraft(c.id)
     this.reply = null
     try {
       await this.ctrl.sendText(c.id, text, replyTo)
       this.scroll.forceBottomNext = true
-      this.renderChat()
+      this.renderMsgs(true)
+      this.renderListIfChanged()
+      if (this.reply === null) {
+        const bar = document.querySelector('#chatPane .cbar')
+        bar?.remove()
+      }
     } catch (e) {
       this.toast(e instanceof Error ? e.message : String(e))
     }
