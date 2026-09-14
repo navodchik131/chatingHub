@@ -19,4 +19,14 @@ def telethon_proxy_tuple() -> tuple | None:
     port = parsed.port
     if not host or not port:
         return None
+    # Telethon: (type, host, port, rdns, username, password)
+    if parsed.username:
+        return (
+            scheme,
+            host,
+            port,
+            True,
+            parsed.username,
+            parsed.password or "",
+        )
     return (scheme, host, port)
