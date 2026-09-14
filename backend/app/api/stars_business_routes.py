@@ -103,7 +103,7 @@ async def conversation_paid_media_packs(
     conv = await session.get(Conversation, conv_id)
     if not conv or conv.user_id != oid:
         raise HTTPException(status_code=404, detail="conversation not found")
-    await require_conversation_chat_access(session, user, conv)
+    await require_conversation_chat_access(session, user, conv_id, oid)
     if not conv.studio_model_id:
         return []
     rows = await list_media_packs(
@@ -127,7 +127,7 @@ async def conversation_send_paid_media(
     conv = await session.get(Conversation, conv_id)
     if not conv or conv.user_id != oid:
         raise HTTPException(status_code=404, detail="conversation not found")
-    await require_conversation_chat_access(session, user, conv)
+    await require_conversation_chat_access(session, user, conv_id, oid)
 
     msg_id, _order_id = await send_unibox_paid_pack(
         session,
