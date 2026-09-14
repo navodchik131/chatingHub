@@ -237,6 +237,21 @@ async def lifespan(app: FastAPI):
     except Exception:
         log.exception("Telegram webhook refresh on startup failed")
     if settings.stars_business_configured:
+        log.info(
+            "stars_business startup: token=set operators_env=%s polling=%s public_url=%s",
+            len(settings.stars_business_operator_ids),
+            settings.stars_business_polling,
+            (settings.public_app_url or "").strip()[:48] or "(empty)",
+        )
+        try:
+            from app.connectors.telegram.stars_business.repo import sync_operators_for_active_owner_from_env
+            from app.db.session import SessionLocal
+
+            async with SessionLocal() as session:
+                await sync_operators_for_active_owner_from_env(session)
+                await session.commit()
+        except Exception:
+            log.exception("stars_business startup: operator sync from env failed")
         if settings.stars_business_polling:
             from app.connectors.telegram.stars_business.bot import run_stars_business_polling
 
@@ -252,7 +267,7 @@ async def lifespan(app: FastAPI):
                 log.exception("Stars Business webhook setup failed")
     else:
         stars_business_polling_task = None
-        log.info("Stars Business bot disabled (STARS_BUSINESS_BOT_TOKEN)")
+        log.info("Stars Business bot disabled (STARS_BUSINESS_BOT_TOKEN empty in container env)")
     if settings.app_role_normalized in ("api", "all"):
         asyncio.create_task(_deferred_recover_studio_jobs_on_startup())
     redis_bridge = None

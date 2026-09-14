@@ -9,6 +9,7 @@ from aiogram import Router
 from aiogram.types import BusinessConnection, Message, PaidMediaPurchased
 
 from app.connectors.telegram.stars_business.repo import (
+    get_active_connection,
     get_connection_by_connection_id,
     get_order_by_payload,
     mark_order_paid,
@@ -22,9 +23,12 @@ log = logging.getLogger(__name__)
 router = Router(name="stars_business_updates")
 
 
-@router.business_connection()
-async def on_business_connection(connection: BusinessConnection) -> None:
+async def apply_business_connection(connection: BusinessConnection) -> None:
+    """Сохранить business_connection в БД (webhook + aiogram handler)."""
     owner = connection.user
+    if owner is None:
+        log.warning("stars business connection without user id=%s", connection.id)
+        return
     async with SessionLocal() as session:
         await upsert_business_connection(
             session,
@@ -35,10 +39,19 @@ async def on_business_connection(connection: BusinessConnection) -> None:
         )
         await session.commit()
     log.info(
-        "stars business connection owner=%s enabled=%s",
+        "stars business connection owner=%s enabled=%s connection_id=%s",
         owner.id,
         connection.is_enabled,
+        connection.id,
     )
+
+
+@router.business_connection()
+async def on_business_connection(connection: BusinessConnection) -> None:
+    try:
+        await apply_business_connection(connection)
+    except Exception:
+        log.exception("stars business connection handler failed")
 
 
 def _inbound_dt(message: Message) -> datetime:
@@ -47,10 +60,19 @@ def _inbound_dt(message: Message) -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def _cache_fan_message(message: Message) -> None:
-    if not message.business_connection_id or not message.from_user:
+async def apply_business_message_cache(message: Message) -> None:
+    """Кэш фана для /chats и /paid — только входящие от фана (не исходящие OWNER)."""
+    bcid = (message.business_connection_id or "").strip()
+    if not bcid:
+        log.debug("stars business message skip: no business_connection_id")
+        return
+    if not message.from_user:
+        log.debug("stars business message skip: no from_user")
         return
     if message.from_user.is_bot:
+        return
+    # Исходящие с аккаунта OWNER не считаем «входящим от фана» для окна 24ч.
+    if message.out:
         return
     fan_chat_id = int(message.chat.id)
     name = " ".join(
@@ -63,8 +85,28 @@ async def _cache_fan_message(message: Message) -> None:
         if x
     ).strip()
     async with SessionLocal() as session:
-        conn_row = await get_connection_by_connection_id(session, message.business_connection_id)
-        if not conn_row or not conn_row.is_enabled:
+        conn_row = await get_connection_by_connection_id(session, bcid)
+        if conn_row is None:
+            # Этап 1: один OWNER — если id в апдейте сменился, привязываем к активной записи.
+            conn_row = await get_active_connection(session)
+            if conn_row is not None and conn_row.connection_id != bcid:
+                log.warning(
+                    "stars business message: connection_id mismatch db=%s msg=%s — sync",
+                    conn_row.connection_id,
+                    bcid,
+                )
+                conn_row.connection_id = bcid
+                await session.flush()
+        if conn_row is None:
+            log.warning(
+                "stars business message skip: no OWNER in DB (fan_chat=%s bcid=%s) — "
+                "OWNER должен подключить бота в Business",
+                fan_chat_id,
+                bcid,
+            )
+            return
+        if not conn_row.is_enabled:
+            log.warning("stars business message skip: business disabled owner=%s", conn_row.owner_tg_user_id)
             return
         await upsert_fan_inbound(
             session,
@@ -74,16 +116,28 @@ async def _cache_fan_message(message: Message) -> None:
             inbound_at=_inbound_dt(message),
         )
         await session.commit()
+    log.info(
+        "stars business fan cached owner=%s fan_chat=%s name=%s",
+        conn_row.owner_tg_user_id,
+        fan_chat_id,
+        name or "?",
+    )
 
 
 @router.business_message()
 async def on_business_message(message: Message) -> None:
-    await _cache_fan_message(message)
+    try:
+        await apply_business_message_cache(message)
+    except Exception:
+        log.exception("stars business_message handler failed")
 
 
 @router.edited_business_message()
 async def on_edited_business_message(message: Message) -> None:
-    await _cache_fan_message(message)
+    try:
+        await apply_business_message_cache(message)
+    except Exception:
+        log.exception("stars edited_business_message handler failed")
 
 
 @router.purchased_paid_media()

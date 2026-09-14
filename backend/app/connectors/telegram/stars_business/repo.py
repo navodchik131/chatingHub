@@ -109,7 +109,20 @@ async def is_operator(
             StarsBusinessOperator.is_active.is_(True),
         )
     )
-    return row is not None
+    if row is not None:
+        return True
+    # Этап 1: один OWNER — env whitelist, если sync в БД ещё не был (деплой до business_connection).
+    if telegram_user_id in settings.stars_business_operator_ids:
+        return True
+    return False
+
+
+async def sync_operators_for_active_owner_from_env(session: AsyncSession) -> None:
+    """Подтянуть OPERATOR из env после деплоя без переподключения Business."""
+    conn = await get_active_connection(session)
+    if not conn or not conn.is_enabled:
+        return
+    await sync_operators_from_env(session, int(conn.owner_tg_user_id))
 
 
 async def is_owner(session: AsyncSession, owner_tg_user_id: int, telegram_user_id: int) -> bool:

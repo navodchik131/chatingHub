@@ -50,6 +50,30 @@ async def _stars_business_webhook_handler(request: Request) -> dict:
     except Exception as e:
         raise HTTPException(status_code=400, detail="invalid telegram update") from e
 
+    # business_connection приходит один раз при подключении бота в Business — логируем и пишем в БД явно.
+    kinds = [k for k in body if k != "update_id"]
+    log.info("stars business webhook update_id=%s kinds=%s", body.get("update_id"), kinds)
+    from app.connectors.telegram.stars_business.handlers_business import (
+        apply_business_connection,
+        apply_business_message_cache,
+    )
+
+    if upd.business_connection is not None:
+        try:
+            await apply_business_connection(upd.business_connection)
+        except Exception:
+            log.exception("stars business apply_business_connection failed")
+    if upd.business_message is not None:
+        try:
+            await apply_business_message_cache(upd.business_message)
+        except Exception:
+            log.exception("stars business apply_business_message failed")
+    if upd.edited_business_message is not None:
+        try:
+            await apply_business_message_cache(upd.edited_business_message)
+        except Exception:
+            log.exception("stars business apply_edited_business_message failed")
+
     bot = create_stars_business_bot()
     await stars_business_dp.feed_update(bot, upd)
     return {"ok": True}

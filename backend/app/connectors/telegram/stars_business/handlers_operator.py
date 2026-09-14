@@ -10,7 +10,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from app.connectors.telegram.stars_business.fan_window import chat_window_open, window_label
+from app.connectors.telegram.stars_business.fan_window import chat_window_open
 from app.connectors.telegram.stars_business.forward import fan_chat_id_from_forward
 from app.connectors.telegram.stars_business.keyboards import (
     confirm_send_kb,
@@ -42,14 +42,16 @@ async def _resolve_access(telegram_user_id: int) -> tuple[str, int | None]:
     """Роль и owner_tg_user_id (этап 1 — один OWNER)."""
     async with SessionLocal() as session:
         conn = await get_active_connection(session)
-        if not conn or not conn.is_enabled:
-            return "none", None
+        if conn is None:
+            return "no_business", None
+        if not conn.is_enabled:
+            return "business_off", None
         owner_id = int(conn.owner_tg_user_id)
         if await is_owner(session, owner_id, telegram_user_id):
             return "OWNER", owner_id
         if await is_operator(session, owner_tg_user_id=owner_id, telegram_user_id=telegram_user_id):
             return "OPERATOR", owner_id
-    return "none", None
+    return "denied", None
 
 
 @router.message(CommandStart())
@@ -72,7 +74,25 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
             reply_markup=operator_main_kb(),
         )
         return
-    await message.answer("Нет доступа. Обратитесь к OWNER для добавления в whitelist OPERATOR.")
+    if role == "no_business":
+        await message.answer(
+            "Business-подключение ещё <b>не зарегистрировано</b> на сервере.\n\n"
+            "<b>OWNER</b> (аккаунт Telegram Business): Настройки → Business → "
+            "<b>Chatbots</b> → подключите <b>этого</b> бота (Secretary Mode в BotFather).\n\n"
+            "После подключения OWNER увидит «Вы OWNER», OPERATOR из whitelist — /start снова.",
+            parse_mode="HTML",
+        )
+        return
+    if role == "business_off":
+        await message.answer(
+            "Business-подключение отключено в Telegram.\n"
+            "OWNER: снова включите бота в Business → Chatbots.",
+        )
+        return
+    await message.answer(
+        "Нет доступа. Ваш Telegram id не в whitelist OPERATOR — попросите OWNER добавить "
+        "STARS_BUSINESS_OPERATOR_TELEGRAM_IDS на сервере."
+    )
 
 
 @router.message(Command("cancel"))
@@ -189,9 +209,22 @@ async def paid_got_stars(message: Message, state: FSMContext) -> None:
     async with SessionLocal() as session:
         chats = await list_fan_chats(session, owner_id)
     await state.set_state(OperatorPaidStates.waiting_recipient)
+    if chats:
+        step3 = (
+            "Шаг 3/3: нажмите фана в списке ниже или <b>перешлите</b> сюда его сообщение.\n"
+            "🟢/🔴 у кнопки — окно 24ч (входящее от фана OWNER)."
+        )
+    else:
+        step3 = (
+            "Шаг 3/3: <b>кнопок нет</b> — бот ещё не кэшировал диалоги OWNER с фанами.\n\n"
+            "Как указать получателя:\n"
+            "1) Фан пишет OWNER в личку → через минуту снова /paid или /chats;\n"
+            "2) <b>Перешлите</b> сюда сообщение фана (отправитель должен быть виден);\n"
+            "3) Отправьте <b>числовой Telegram id</b> фана (например из @userinfobot).\n\n"
+            "/chats — список кэша."
+        )
     await message.answer(
-        "Шаг 3/3: выберите фана из списка или <b>перешлите</b> любое его сообщение.\n"
-        f"{window_label(True)} — можно отправить paid media.",
+        step3,
         parse_mode="HTML",
         reply_markup=fan_pick_kb(chats),
     )
@@ -203,10 +236,27 @@ async def paid_pick_fan(callback: CallbackQuery, state: FSMContext) -> None:
     await _goto_confirm(callback, state, fan_chat_id=fan_id)
 
 
+@router.message(OperatorPaidStates.waiting_recipient, F.text)
+async def paid_recipient_text(message: Message, state: FSMContext) -> None:
+    raw = (message.text or "").strip()
+    if raw.isdigit():
+        await _goto_confirm_message(message, state, fan_chat_id=int(raw))
+        return
+    await message.answer(
+        "На шаге 3: кнопка фана, <b>пересылка</b> его сообщения или числовой id.\n/cancel — отмена.",
+        parse_mode="HTML",
+    )
+
+
 @router.message(OperatorPaidStates.waiting_recipient)
 async def paid_recipient_forward(message: Message, state: FSMContext) -> None:
     fan_id = fan_chat_id_from_forward(message)
     if fan_id is None:
+        if message.forward_date or message.forward_origin:
+            await message.answer(
+                "Не вижу id фана в пересылке (скрыта анонимная пересылка).\n"
+                "Перешлите без «скрыть отправителя» или отправьте числовой Telegram id фана.",
+            )
         return
     await _goto_confirm_message(message, state, fan_chat_id=fan_id)
 
