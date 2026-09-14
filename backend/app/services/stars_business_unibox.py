@@ -138,13 +138,13 @@ async def _assert_conv_and_conn(
         hint = ""
         if active:
             hint = (
-                f" Business OWNER в Telegram: {active.owner_tg_user_id}. "
-                "Привяжите тот же Telegram к аккаунту кабинета (вход через Telegram) "
-                "или POST /api/integrations/stars-business/link с owner_tg_user_id."
+                f" Telegram OWNER id: {active.owner_tg_user_id}. "
+                "Если Business уже подключён — обновите страницу после деплоя; "
+                "иначе войдите через Telegram или POST …/stars-business/link."
             )
         raise HTTPException(
             status_code=503,
-            detail="Подключите Stars Business: OWNER добавляет бота в Telegram → Business → Chatbots."
+            detail="Stars Business не привязан к этому workspace."
             + hint,
         )
     return oid, conn

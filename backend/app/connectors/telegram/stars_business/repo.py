@@ -225,6 +225,21 @@ async def resolve_connection_for_workspace(
         )
         if linked and linked.is_enabled:
             return linked
+
+    # Вход в кабинет по email: telegram_id пустой, но Business OWNER уже в БД (бот /paid работал).
+    active = await get_active_connection(session)
+    if not active or not active.is_enabled:
+        return None
+    wid = int(workspace_owner_user_id)
+    if active.user_id is not None and int(active.user_id) != wid:
+        return None
+    linked = await link_connection_to_workspace_user(
+        session,
+        workspace_owner_user_id=wid,
+        owner_tg_user_id=int(active.owner_tg_user_id),
+    )
+    if linked and linked.is_enabled:
+        return linked
     return None
 
 
