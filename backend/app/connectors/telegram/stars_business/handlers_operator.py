@@ -284,7 +284,6 @@ async def _finalize_recipient(message: Message, state: FSMContext, *, fan_chat_i
     async with SessionLocal() as session:
         chats = await list_fan_chats(session, owner_id)
         chat_row = next((c for c in chats if int(c.fan_chat_id) == fan_chat_id), None)
-        open_ = chat_window_open(chat_row.last_inbound_at) if chat_row else False
         order = await create_order(
             session,
             owner_tg_user_id=owner_id,
@@ -300,17 +299,25 @@ async def _finalize_recipient(message: Message, state: FSMContext, *, fan_chat_i
 
     await state.set_state(OperatorPaidStates.confirm_send)
     await state.update_data(order_id=order_id, fan_chat_id=fan_chat_id)
-    warn = ""
-    if not open_:
-        warn = (
-            "\n\n⚠️ <b>Окно закрыто</b> — входящих от фана >24ч. "
-            "Telegram вернёт BUSINESS_CHAT_INACTIVE."
+    # Без строки в кэше (ручной id) нельзя считать окно закрытым — раньше всегда показывали ложный ⚠️.
+    if chat_row is None:
+        window_note = (
+            "\n\nℹ️ Фан не в кэше бота (id вручную или кэш ещё не успел). "
+            "Если он недавно писал <b>OWNER в личку</b> — жмите «Отправить»; "
+            "Telegram сам проверит 24ч. Ошибка будет только при BUSINESS_CHAT_INACTIVE."
+        )
+    elif chat_window_open(chat_row.last_inbound_at):
+        window_note = "\n\n🟢 По кэшу: входящее от фана было менее 24ч назад."
+    else:
+        window_note = (
+            "\n\n⚠️ По кэшу: последнее входящее от фана >24ч — "
+            "возможен BUSINESS_CHAT_INACTIVE."
         )
     await message.answer(
         f"Проверка:\n"
         f"• фан chat_id: <code>{fan_chat_id}</code>\n"
         f"• цена: <b>{stars} ⭐</b>\n"
-        f"• заказ #{order_id}{warn}",
+        f"• заказ #{order_id}{window_note}",
         parse_mode="HTML",
         reply_markup=confirm_send_kb(order_id),
     )

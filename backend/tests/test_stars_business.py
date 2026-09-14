@@ -2,7 +2,10 @@
 
 from datetime import datetime, timedelta, timezone
 
+from aiogram.types import Chat, Message, User
+
 from app.connectors.telegram.stars_business.fan_window import chat_window_open, window_label
+from app.connectors.telegram.stars_business.handlers_business import _inbound_dt
 
 
 def test_chat_window_open_within_24h():
@@ -10,6 +13,19 @@ def test_chat_window_open_within_24h():
     last = now - timedelta(hours=23)
     assert chat_window_open(last, now=now) is True
     assert "🟢" in window_label(True)
+
+
+def test_inbound_dt_accepts_aiogram_datetime():
+    """Регрессия: int(message.date) падал на datetime от pydantic."""
+    ts = datetime(2026, 3, 14, 10, 0, tzinfo=timezone.utc)
+    msg = Message(
+        message_id=1,
+        date=ts,
+        chat=Chat(id=99, type="private"),
+        from_user=User(id=99, is_bot=False, first_name="Fan"),
+        business_connection_id="bc-test",
+    )
+    assert _inbound_dt(msg) == ts
 
 
 def test_chat_window_closed_after_24h():

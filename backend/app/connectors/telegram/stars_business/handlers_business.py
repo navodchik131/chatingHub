@@ -67,7 +67,9 @@ async def apply_business_connection(connection: BusinessConnection) -> None:
         owner.id,
         connection.is_enabled,
         connection.id,
-        rights.model_dump(exclude_none=True) if rights is not None else None,
+        rights.model_dump(exclude_none=True)
+        if rights is not None and hasattr(rights, "model_dump")
+        else None,
     )
 
 
@@ -80,9 +82,15 @@ async def on_business_connection(connection: BusinessConnection) -> None:
 
 
 def _inbound_dt(message: Message) -> datetime:
-    if message.date:
-        return datetime.fromtimestamp(int(message.date), tz=timezone.utc)
-    return datetime.now(timezone.utc)
+    """Telegram API — unix int; aiogram 3.x в Message уже парсит date в datetime."""
+    raw = message.date
+    if raw is None:
+        return datetime.now(timezone.utc)
+    if isinstance(raw, datetime):
+        if raw.tzinfo is None:
+            return raw.replace(tzinfo=timezone.utc)
+        return raw
+    return datetime.fromtimestamp(int(raw), tz=timezone.utc)
 
 
 async def apply_business_message_cache(message: Message) -> None:
@@ -99,7 +107,10 @@ async def apply_business_message_cache(message: Message) -> None:
     # Bot API Message не имеет out; исходящие от OWNER через бота — sender_business_bot.
     if getattr(message, "sender_business_bot", None) is not None:
         return
-    fan_chat_id = int(message.chat.id)
+    if message.chat is not None:
+        fan_chat_id = int(message.chat.id)
+    else:
+        fan_chat_id = int(message.from_user.id)
     name = " ".join(
         x
         for x in [
@@ -109,6 +120,7 @@ async def apply_business_message_cache(message: Message) -> None:
         ]
         if x
     ).strip()
+    owner_id: int | None = None
     async with SessionLocal() as session:
         conn_row = await get_connection_by_connection_id(session, bcid)
         if conn_row is None:
@@ -142,13 +154,15 @@ async def apply_business_message_cache(message: Message) -> None:
             fan_display_name=name or None,
             inbound_at=_inbound_dt(message),
         )
+        owner_id = int(conn_row.owner_tg_user_id)
         await session.commit()
-    log.info(
-        "stars business fan cached owner=%s fan_chat=%s name=%s",
-        conn_row.owner_tg_user_id,
-        fan_chat_id,
-        name or "?",
-    )
+    if owner_id is not None:
+        log.info(
+            "stars business fan cached owner=%s fan_chat=%s name=%s",
+            owner_id,
+            fan_chat_id,
+            name or "?",
+        )
 
 
 @router.business_message()
