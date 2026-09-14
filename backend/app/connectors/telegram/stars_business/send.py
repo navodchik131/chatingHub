@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InputPaidMediaPhoto, InputPaidMediaVideo
 from aiogram.types import FSInputFile
 
+from app.connectors.telegram.stars_business.media_storage import decode_media_paths
 from app.connectors.telegram.stars_business.paths import absolute_media_path
 from app.db.models import StarsBusinessConnection, StarsBusinessOrder
 
@@ -46,8 +47,13 @@ async def send_paid_media_order(
     conn: StarsBusinessConnection,
     order: StarsBusinessOrder,
 ) -> SendPaidResult:
-    path = absolute_media_path(order.media_relative_path)
-    if not path.is_file():
+    try:
+        rel_paths = decode_media_paths(order.media_relative_path)
+    except ValueError:
+        return SendPaidResult(ok=False, error_code="MEDIA_INVALID", error_text="Некорректный список медиа в заказе.")
+
+    abs_paths = [absolute_media_path(rel) for rel in rel_paths]
+    if not all(p.is_file() for p in abs_paths):
         return SendPaidResult(ok=False, error_code="MEDIA_MISSING", error_text="Файл медиа не найден на сервере.")
 
     star_count = max(1, min(25_000, int(order.star_count)))
@@ -55,9 +61,15 @@ async def send_paid_media_order(
     caption = (order.caption or "").strip() or None
 
     if order.media_type == "video":
-        media = [InputPaidMediaVideo(media=FSInputFile(path))]
+        if len(abs_paths) != 1:
+            return SendPaidResult(
+                ok=False,
+                error_code="MEDIA_INVALID",
+                error_text="В paid media только одно видео за раз.",
+            )
+        media = [InputPaidMediaVideo(media=FSInputFile(abs_paths[0]))]
     else:
-        media = [InputPaidMediaPhoto(media=FSInputFile(path))]
+        media = [InputPaidMediaPhoto(media=FSInputFile(p)) for p in abs_paths[:10]]
 
     try:
         msg = await bot.send_paid_media(

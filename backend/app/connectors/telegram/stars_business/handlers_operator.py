@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 
@@ -13,11 +14,16 @@ from aiogram.types import CallbackQuery, Message
 from app.connectors.telegram.stars_business.fan_window import chat_window_open
 from app.connectors.telegram.stars_business.forward import fan_chat_id_from_forward
 from app.connectors.telegram.stars_business.keyboards import (
+    OPERATOR_BTN_CANCEL,
+    OPERATOR_BTN_CHATS,
+    OPERATOR_BTN_PAID,
     confirm_send_kb,
     fan_pick_kb,
     format_fan_list,
     operator_main_kb,
+    operator_menu_reply_kb,
 )
+from app.connectors.telegram.stars_business.media_storage import encode_media_paths
 from app.connectors.telegram.stars_business.paths import owner_media_dir, relative_media_path
 from app.connectors.telegram.stars_business.repo import (
     create_order,
@@ -33,6 +39,11 @@ from app.connectors.telegram.stars_business.states import OperatorPaidStates
 from app.db.session import SessionLocal
 
 log = logging.getLogger(__name__)
+
+# Сбор альбома (media_group): Telegram шлёт каждое фото отдельным апдейтом.
+_ALBUM_COLLECT_SEC = 1.25
+_MAX_ALBUM_PHOTOS = 10
+_album_finalize_tasks: dict[tuple[int, str], asyncio.Task[None]] = {}
 
 router = Router(name="stars_business_operator")
 router.message.filter(F.chat.type == "private")
@@ -69,10 +80,11 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     if role == "OPERATOR":
         await message.answer(
             "Вы <b>OPERATOR</b>. Отправка paid media от имени OWNER.\n"
-            "Команды: /paid — мастер, /chats — список диалогов, /cancel — сброс.",
+            "Меню внизу или кнопки под сообщением.",
             parse_mode="HTML",
-            reply_markup=operator_main_kb(),
+            reply_markup=operator_menu_reply_kb(),
         )
+        await message.answer("Быстрые действия:", reply_markup=operator_main_kb())
         return
     if role == "no_business":
         await message.answer(
@@ -95,6 +107,18 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     )
 
 
+@router.message(F.text.in_({OPERATOR_BTN_PAID, OPERATOR_BTN_CHATS, OPERATOR_BTN_CANCEL}))
+async def operator_menu_text(message: Message, state: FSMContext) -> None:
+    """Нижнее меню OPERATOR — те же действия, что /paid /chats /cancel."""
+    text = (message.text or "").strip()
+    if text == OPERATOR_BTN_PAID:
+        await cmd_paid(message, state)
+    elif text == OPERATOR_BTN_CHATS:
+        await cmd_chats(message)
+    elif text == OPERATOR_BTN_CANCEL:
+        await cmd_cancel(message, state)
+
+
 @router.message(Command("cancel"))
 @router.callback_query(F.data == "sb:cancel")
 async def cmd_cancel(event: Message | CallbackQuery, state: FSMContext) -> None:
@@ -103,9 +127,12 @@ async def cmd_cancel(event: Message | CallbackQuery, state: FSMContext) -> None:
     if isinstance(event, CallbackQuery):
         await event.answer()
         if event.message:
-            await event.message.answer(text)
+            await event.message.answer(text, reply_markup=operator_menu_reply_kb())
     else:
-        await event.answer(text)
+        uid = event.from_user.id if event.from_user else 0
+        role, _ = await _resolve_access(uid)
+        kb = operator_menu_reply_kb() if role == "OPERATOR" else None
+        await event.answer(text, reply_markup=kb)
 
 
 @router.message(Command("chats"))
@@ -154,8 +181,10 @@ async def cmd_paid(event: Message | CallbackQuery, state: FSMContext) -> None:
     await state.set_state(OperatorPaidStates.waiting_media)
     await state.update_data(owner_tg_user_id=owner_id, operator_tg_user_id=uid)
     prompt = (
-        "Шаг 1/3: отправьте <b>фото или видео</b> (одним сообщением).\n"
-        "/cancel — отмена."
+        "Шаг 1/3: отправьте <b>фото или видео</b>.\n"
+        "Можно <b>альбом</b> (несколько фото одной группой, до 10) — соберём автоматически.\n"
+        "Видео — только одним файлом.\n"
+        f"{OPERATOR_BTN_CANCEL} — отмена."
     )
     if isinstance(event, CallbackQuery):
         await event.answer()
@@ -165,10 +194,8 @@ async def cmd_paid(event: Message | CallbackQuery, state: FSMContext) -> None:
         await event.answer(prompt, parse_mode="HTML")
 
 
-@router.message(OperatorPaidStates.waiting_media, F.photo | F.video)
-async def paid_got_media(message: Message, state: FSMContext, bot: Bot) -> None:
-    data = await state.get_data()
-    owner_id = int(data["owner_tg_user_id"])
+async def _download_message_media(message: Message, bot: Bot, owner_id: int) -> tuple[str, str]:
+    """Скачать фото/видео в каталог OWNER; вернуть (relative_path, media_type)."""
     media_type = "video" if message.video else "photo"
     ext = "mp4" if media_type == "video" else "jpg"
     fname = f"{uuid.uuid4().hex}.{ext}"
@@ -180,13 +207,83 @@ async def paid_got_media(message: Message, state: FSMContext, bot: Bot) -> None:
         photo = message.photo[-1]
         file = await bot.get_file(photo.file_id)
         await bot.download_file(file.file_path, dest)
-    rel = relative_media_path(owner_id, fname)
-    await state.update_data(media_relative_path=rel, media_type=media_type)
+    return relative_media_path(owner_id, fname), media_type
+
+
+async def _advance_to_star_count(message: Message, state: FSMContext, paths: list[str], media_type: str) -> None:
+    await state.update_data(
+        media_relative_path=encode_media_paths(paths),
+        media_type=media_type,
+        album_paths=[],
+        album_group_id=None,
+    )
     await state.set_state(OperatorPaidStates.waiting_star_count)
+    n = len(paths)
+    suffix = f" (альбом: {n} фото)" if n > 1 else ""
     await message.answer(
-        "Шаг 2/3: укажите цену в ⭐ (число от 1 до 25000).",
+        f"Шаг 2/3: укажите цену в ⭐ (число от 1 до 25000).{suffix}",
         parse_mode="HTML",
     )
+
+
+async def _schedule_album_finalize(
+    message: Message,
+    state: FSMContext,
+    *,
+    media_group_id: str,
+) -> None:
+    chat_id = int(message.chat.id)
+    key = (chat_id, media_group_id)
+    prev = _album_finalize_tasks.pop(key, None)
+    if prev is not None:
+        prev.cancel()
+
+    async def _job() -> None:
+        try:
+            await asyncio.sleep(_ALBUM_COLLECT_SEC)
+            data = await state.get_data()
+            if data.get("album_group_id") != media_group_id:
+                return
+            paths = list(data.get("album_paths") or [])
+            if not paths:
+                return
+            await _advance_to_star_count(message, state, paths, "photo")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("stars business album finalize failed")
+
+    _album_finalize_tasks[key] = asyncio.create_task(_job())
+
+
+@router.message(OperatorPaidStates.waiting_media, F.photo | F.video)
+async def paid_got_media(message: Message, state: FSMContext, bot: Bot) -> None:
+    data = await state.get_data()
+    owner_id = int(data["owner_tg_user_id"])
+    rel, media_type = await _download_message_media(message, bot, owner_id)
+
+    mgid = (message.media_group_id or "").strip()
+    if mgid and message.photo:
+        paths = list(data.get("album_paths") or [])
+        paths.append(rel)
+        if len(paths) > _MAX_ALBUM_PHOTOS:
+            paths = paths[:_MAX_ALBUM_PHOTOS]
+        await state.update_data(album_paths=paths, album_group_id=mgid)
+        if len(paths) == 1:
+            await message.answer(
+                f"Собираю альбом… (до {_MAX_ALBUM_PHOTOS} фото одной группой).",
+            )
+        if len(paths) >= _MAX_ALBUM_PHOTOS:
+            await _advance_to_star_count(message, state, paths, "photo")
+            return
+        await _schedule_album_finalize(message, state, media_group_id=mgid)
+        return
+
+    if message.video and mgid:
+        await message.answer("В paid media альбом только из фото. Отправьте одно видео без группы.")
+        return
+
+    await _advance_to_star_count(message, state, [rel], media_type)
 
 
 @router.message(OperatorPaidStates.waiting_media)

@@ -2,10 +2,30 @@
 
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+
+# Тексты кнопок меню OPERATOR (ReplyKeyboard — не путать с командами).
+OPERATOR_BTN_PAID = "⭐ Отправить paid media"
+OPERATOR_BTN_CHATS = "📋 Диалоги"
+OPERATOR_BTN_CANCEL = "❌ Отмена"
 
 from app.connectors.telegram.stars_business.fan_window import chat_window_open, window_label
 from app.db.models import StarsBusinessFanChat
+
+
+def operator_menu_reply_kb() -> ReplyKeyboardMarkup:
+    """Постоянное меню внизу чата — без ввода /paid и /chats."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text=OPERATOR_BTN_PAID),
+                KeyboardButton(text=OPERATOR_BTN_CHATS),
+            ],
+            [KeyboardButton(text=OPERATOR_BTN_CANCEL)],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
 
 
 def operator_main_kb() -> InlineKeyboardMarkup:

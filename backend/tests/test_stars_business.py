@@ -6,6 +6,7 @@ from aiogram.types import Chat, Message, User
 
 from app.connectors.telegram.stars_business.fan_window import chat_window_open, window_label
 from app.connectors.telegram.stars_business.handlers_business import _inbound_dt
+from app.connectors.telegram.stars_business.media_storage import decode_media_paths, encode_media_paths
 
 
 def test_chat_window_open_within_24h():
@@ -13,6 +14,14 @@ def test_chat_window_open_within_24h():
     last = now - timedelta(hours=23)
     assert chat_window_open(last, now=now) is True
     assert "🟢" in window_label(True)
+
+
+def test_encode_decode_album_paths():
+    one = encode_media_paths(["owner/a.jpg"])
+    assert one == "owner/a.jpg"
+    assert decode_media_paths(one) == ["owner/a.jpg"]
+    many = encode_media_paths(["owner/a.jpg", "owner/b.jpg"])
+    assert decode_media_paths(many) == ["owner/a.jpg", "owner/b.jpg"]
 
 
 def test_inbound_dt_accepts_aiogram_datetime():
