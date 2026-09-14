@@ -13,6 +13,7 @@ import {
   sendImageReply,
   sendTextReply,
   sendPaidMedia,
+  sendPaidMediaUpload,
   patchConversation,
   fetchMe,
   fetchStudioModels,
@@ -429,6 +430,23 @@ export class ChatController {
       this.emit()
       throw e
     }
+  }
+
+  /** Paid media с устройства (цена ⭐ в форме). */
+  async sendPaidMediaUploadMessage(
+    convId: number,
+    file: File,
+    starCount: number,
+    caption?: string,
+  ): Promise<void> {
+    const chat = this.chats.find((c) => c.id === convId)
+    if (!chat) return
+    const sent = await sendPaidMediaUpload(convId, file, starCount, caption)
+    const merged = mergeApiMessages(this.apiMessages.get(convId) || [], [sent])
+    this.apiMessages.set(convId, merged)
+    chat.msgs = mapApiMessages(merged, chat)
+    await saveThreadCache(convId, merged)
+    this.emit()
   }
 
   /** Paid media (Stars) — пак или один файл из медиатеки. */

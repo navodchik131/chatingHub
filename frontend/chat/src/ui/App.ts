@@ -910,10 +910,6 @@ export class UniboxApp {
       this.toast(e instanceof Error ? e.message : String(e))
       return
     }
-    if (!opts.packs.length && !opts.assets.length) {
-      this.toast('Нет ⭐ — задайте цену на файл или пак в медиатеке персонажа')
-      return
-    }
     const inp = $('#inp') as HTMLTextAreaElement | null
     const captionHint = inp?.value.trim() || ''
     const assetRows = opts.assets
@@ -935,23 +931,52 @@ export class UniboxApp {
       )
       .join('')
     const body = `<p class="tr-hint">Подпись — из поля ввода${captionHint ? `: «${esc(captionHint.slice(0, 80))}»` : ''}.</p>
-      ${assetRows ? `<div class="dr-lab" style="padding:8px 14px 4px;font-size:11px;color:var(--txt-2)">Один файл</div><div class="paid-pack-list">${assetRows}</div>` : ''}
-      ${packRows ? `<div class="dr-lab" style="padding:8px 14px 4px;font-size:11px;color:var(--txt-2)">Пак</div><div class="paid-pack-list">${packRows}</div>` : ''}`
+      <div class="paid-upload-block">
+        <div class="dr-lab" style="padding:4px 0 8px;font-size:11px;color:var(--txt-2)">С устройства</div>
+        <input type="file" id="paidUploadFile" accept="image/*,video/*" class="paid-upload-inp" />
+        <div class="paid-upload-row">
+          <input type="number" id="paidUploadStars" class="paid-upload-inp" min="1" max="25000" placeholder="Цена ⭐" />
+          <button type="button" class="paid-upload-send" id="paidUploadSend">Отправить</button>
+        </div>
+      </div>
+      ${assetRows ? `<div class="dr-lab" style="padding:8px 14px 4px;font-size:11px;color:var(--txt-2)">Медиатека · файл</div><div class="paid-pack-list">${assetRows}</div>` : ''}
+      ${packRows ? `<div class="dr-lab" style="padding:8px 14px 4px;font-size:11px;color:var(--txt-2)">Медиатека · пак</div><div class="paid-pack-list">${packRows}</div>` : ''}
+      ${!assetRows && !packRows ? '<p class="tr-hint" style="padding:0 14px">В медиатеке нет ⭐ — можно отправить файл выше.</p>' : ''}`
     this.modal('Платный контент', body, (wrap) => {
+      const afterSend = () => {
+        this.scroll.forceBottomNext = true
+        this.renderMsgs(true)
+        this.renderListIfChanged()
+        if (inp && captionHint) {
+          inp.value = ''
+          inp.style.height = 'auto'
+          this.ctrl.clearDraft(c.id)
+        }
+      }
+      wrap.querySelector('#paidUploadSend')?.addEventListener('click', () => {
+        const fileInp = wrap.querySelector('#paidUploadFile') as HTMLInputElement | null
+        const starsInp = wrap.querySelector('#paidUploadStars') as HTMLInputElement | null
+        const file = fileInp?.files?.[0]
+        const stars = Math.max(1, Math.min(25000, parseInt(starsInp?.value || '0', 10) || 0))
+        if (!file) {
+          this.toast('Выберите фото или видео')
+          return
+        }
+        if (!starsInp?.value || stars < 1) {
+          this.toast('Укажите цену в ⭐')
+          return
+        }
+        wrap.remove()
+        void this.ctrl
+          .sendPaidMediaUploadMessage(c.id, file, stars, captionHint || undefined)
+          .then(afterSend)
+          .catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+      })
       const send = (target: { packId?: number; assetId?: number }) => {
         wrap.remove()
         void this.ctrl
           .sendPaidMediaMessage(c.id, target, captionHint || undefined)
-          .then(() => {
-            this.scroll.forceBottomNext = true
-            this.renderMsgs(true)
-            this.renderListIfChanged()
-            if (inp && captionHint) {
-              inp.value = ''
-              inp.style.height = 'auto'
-              this.ctrl.clearDraft(c.id)
-            }
-          })
+          .then(afterSend)
           .catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
       }
       wrap.querySelectorAll('[data-pack]').forEach((btn) => {

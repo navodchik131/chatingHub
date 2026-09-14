@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.auth.deps import get_current_user
 from app.config import settings
@@ -29,7 +29,7 @@ from app.services.companion_media.library import list_media_packs
 from app.services.companion_media.storage import create_companion_media_access_token
 from app.services.chat_messages import message_to_out
 from app.services.realtime import hub
-from app.services.stars_business_unibox import send_unibox_paid_media
+from app.services.stars_business_unibox import send_unibox_paid_media, send_unibox_paid_upload
 from app.services.workspace import PERM_CHAT, assert_permission, workspace_owner_id
 from app.services.workspace_model_access import require_conversation_chat_access
 
@@ -194,6 +194,53 @@ async def conversation_send_paid_media(
         pack_id=int(body.pack_id) if body.pack_id is not None else None,
         asset_id=int(body.asset_id) if body.asset_id is not None else None,
         caption=body.caption,
+    )
+    await session.commit()
+    from app.db.models import Message
+
+    row = await session.get(Message, msg_id)
+    if not row:
+        raise HTTPException(status_code=500, detail="message not found after send")
+    await session.refresh(row, attribute_names=["attachments"])
+    out = message_to_out(row, owner_id=oid)
+    await hub.broadcast_user(
+        oid,
+        {
+            "type": "new_message",
+            "conversation_id": conv.id,
+            "message": out.model_dump(mode="json"),
+        },
+    )
+    return out
+
+
+@router.post("/conversations/{conv_id}/send-paid-media-upload", response_model=MessageOut)
+async def conversation_send_paid_media_upload(
+    conv_id: int,
+    star_count: int = Form(..., ge=1, le=25_000),
+    caption: str | None = Form(default=None),
+    media: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MessageOut:
+    """Фото/видео с устройства + цена ⭐ (без медиатеки)."""
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    conv = await session.get(Conversation, conv_id)
+    if not conv or conv.user_id != oid:
+        raise HTTPException(status_code=404, detail="conversation not found")
+    await require_conversation_chat_access(session, user, conv_id, oid)
+
+    raw = await media.read()
+    msg_id, _order_id = await send_unibox_paid_upload(
+        session,
+        viewer=user,
+        conv=conv,
+        caption=caption,
+        star_count=star_count,
+        raw=raw,
+        content_type=media.content_type,
+        filename=media.filename,
     )
     await session.commit()
     from app.db.models import Message

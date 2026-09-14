@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -19,6 +21,7 @@ from app.connectors.telegram.stars_business.repo import (
     mark_order_sent,
     resolve_connection_for_workspace,
 )
+from app.connectors.telegram.stars_business.paths import owner_media_dir, relative_media_path
 from app.connectors.telegram.stars_business.send import send_paid_media_order
 from app.db.models import (
     CompanionMediaAsset,
@@ -26,6 +29,7 @@ from app.db.models import (
     Conversation,
     MessageDirection,
     Platform,
+    StarsBusinessConnection,
     User,
 )
 from app.db.repo import add_message
@@ -38,6 +42,7 @@ log = logging.getLogger(__name__)
 
 # operator_tg_user_id=0 — заказ из кабинета, не из Telegram-бота оператора
 UNIBOX_OPERATOR_TG_ID = 0
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 
 @dataclass
@@ -150,65 +155,16 @@ async def _assert_conv_and_conn(
     return oid, conn
 
 
-async def send_unibox_paid_media(
+async def _deliver_paid_media(
     session: AsyncSession,
     *,
     viewer: User,
     conv: Conversation,
+    conn: StarsBusinessConnection,
+    oid: int,
+    media: ResolvedPaidMedia,
     caption: str | None,
-    pack_id: int | None = None,
-    asset_id: int | None = None,
 ) -> tuple[int, int]:
-    """Пак или один файл — одна цена ⭐ на выбранный объект."""
-    oid, conn = await _assert_conv_and_conn(session, viewer=viewer, conv=conv)
-
-    if pack_id is not None:
-        pack = await session.scalar(
-            select(CompanionMediaPack).where(
-                CompanionMediaPack.id == pack_id,
-                CompanionMediaPack.user_id == oid,
-                CompanionMediaPack.status == "active",
-            )
-        )
-        if not pack:
-            raise HTTPException(status_code=404, detail="pack not found")
-        if conv.studio_model_id and int(conv.studio_model_id) != int(pack.studio_model_id):
-            raise HTTPException(status_code=400, detail="Пак относится к другому персонажу")
-        assets = list(
-            (
-                await session.scalars(
-                    select(CompanionMediaAsset)
-                    .where(
-                        CompanionMediaAsset.pack_id == pack.id,
-                        CompanionMediaAsset.user_id == oid,
-                        CompanionMediaAsset.status == "active",
-                    )
-                    .order_by(CompanionMediaAsset.sort_order, CompanionMediaAsset.id)
-                )
-            ).all()
-        )
-        media = _resolve_pack_media(owner_id=oid, pack=pack, assets=assets)
-    else:
-        aid = int(asset_id or 0)
-        asset = await session.scalar(
-            select(CompanionMediaAsset).where(
-                CompanionMediaAsset.id == aid,
-                CompanionMediaAsset.user_id == oid,
-                CompanionMediaAsset.status == "active",
-            )
-        )
-        if not asset:
-            raise HTTPException(status_code=404, detail="asset not found")
-        if conv.studio_model_id and int(conv.studio_model_id) != int(asset.studio_model_id):
-            raise HTTPException(status_code=400, detail="Файл относится к другому персонажу")
-        media = _resolve_single_asset_media(owner_id=oid, asset=asset)
-
-    if media.star_count < 1:
-        raise HTTPException(
-            status_code=400,
-            detail="Укажите цену ⭐ для пака или файла в медиатеке",
-        )
-
     try:
         fan_chat_id = int(conv.external_chat_id)
     except ValueError as exc:
@@ -273,13 +229,14 @@ async def send_unibox_paid_media(
         platform_message_id=result.message_id,
         unibox_message_id=row.id,
     )
-    await mark_media_sent(
-        session,
-        owner_id=oid,
-        conversation_id=conv.id,
-        asset_ids=media.asset_ids,
-        message_id=row.id,
-    )
+    if media.asset_ids:
+        await mark_media_sent(
+            session,
+            owner_id=oid,
+            conversation_id=conv.id,
+            asset_ids=media.asset_ids,
+            message_id=row.id,
+        )
     await session.flush()
     log.info(
         "unibox paid media sent conv=%s pack=%s asset=%s order=%s tg_msg=%s",
@@ -290,6 +247,142 @@ async def send_unibox_paid_media(
         result.message_id,
     )
     return row.id, order.id
+
+
+def _ext_for_upload(mime: str | None, filename: str | None) -> tuple[str, str]:
+    """mime/filename → (media_type photo|video, extension)."""
+    m = (mime or "").lower()
+    name = (filename or "").lower()
+    if m.startswith("video/") or name.endswith((".mp4", ".mov", ".webm")):
+        if name.endswith(".mov"):
+            return "video", ".mov"
+        if name.endswith(".webm"):
+            return "video", ".webm"
+        return "video", ".mp4"
+    if m.startswith("image/") or name.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
+        if name.endswith(".png"):
+            return "photo", ".png"
+        if name.endswith(".webp"):
+            return "photo", ".webp"
+        if name.endswith(".gif"):
+            return "photo", ".gif"
+        return "photo", ".jpg"
+    raise HTTPException(status_code=400, detail="Поддерживаются только фото или видео")
+
+
+async def send_unibox_paid_upload(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    conv: Conversation,
+    caption: str | None,
+    star_count: int,
+    raw: bytes,
+    content_type: str | None,
+    filename: str | None,
+) -> tuple[int, int]:
+    """Paid media с диска оператора (не из медиатеки)."""
+    oid, conn = await _assert_conv_and_conn(session, viewer=viewer, conv=conv)
+    stars = max(1, min(25_000, int(star_count)))
+    if not raw:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 20 МБ)")
+
+    media_type, ext = _ext_for_upload(content_type, filename)
+    fname = f"{uuid.uuid4().hex}{ext}"
+    dest: Path = owner_media_dir(int(conn.owner_tg_user_id)) / fname
+    dest.write_bytes(raw)
+    rel = relative_media_path(int(conn.owner_tg_user_id), fname)
+
+    media = ResolvedPaidMedia(
+        relative_paths=[rel],
+        media_type=media_type,
+        asset_ids=[],
+        star_count=stars,
+        label_name=(filename or "Файл").strip()[:64] or "Файл",
+        pack_id=None,
+        asset_id=None,
+    )
+    return await _deliver_paid_media(
+        session,
+        viewer=viewer,
+        conv=conv,
+        conn=conn,
+        oid=oid,
+        media=media,
+        caption=caption,
+    )
+
+
+async def send_unibox_paid_media(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    conv: Conversation,
+    caption: str | None,
+    pack_id: int | None = None,
+    asset_id: int | None = None,
+) -> tuple[int, int]:
+    """Пак или один файл — одна цена ⭐ на выбранный объект."""
+    oid, conn = await _assert_conv_and_conn(session, viewer=viewer, conv=conv)
+
+    if pack_id is not None:
+        pack = await session.scalar(
+            select(CompanionMediaPack).where(
+                CompanionMediaPack.id == pack_id,
+                CompanionMediaPack.user_id == oid,
+                CompanionMediaPack.status == "active",
+            )
+        )
+        if not pack:
+            raise HTTPException(status_code=404, detail="pack not found")
+        if conv.studio_model_id and int(conv.studio_model_id) != int(pack.studio_model_id):
+            raise HTTPException(status_code=400, detail="Пак относится к другому персонажу")
+        assets = list(
+            (
+                await session.scalars(
+                    select(CompanionMediaAsset)
+                    .where(
+                        CompanionMediaAsset.pack_id == pack.id,
+                        CompanionMediaAsset.user_id == oid,
+                        CompanionMediaAsset.status == "active",
+                    )
+                    .order_by(CompanionMediaAsset.sort_order, CompanionMediaAsset.id)
+                )
+            ).all()
+        )
+        media = _resolve_pack_media(owner_id=oid, pack=pack, assets=assets)
+    else:
+        aid = int(asset_id or 0)
+        asset = await session.scalar(
+            select(CompanionMediaAsset).where(
+                CompanionMediaAsset.id == aid,
+                CompanionMediaAsset.user_id == oid,
+                CompanionMediaAsset.status == "active",
+            )
+        )
+        if not asset:
+            raise HTTPException(status_code=404, detail="asset not found")
+        if conv.studio_model_id and int(conv.studio_model_id) != int(asset.studio_model_id):
+            raise HTTPException(status_code=400, detail="Файл относится к другому персонажу")
+        media = _resolve_single_asset_media(owner_id=oid, asset=asset)
+
+    if media.star_count < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите цену ⭐ для пака или файла в медиатеке",
+        )
+
+    return await _deliver_paid_media(
+        session,
+        viewer=viewer,
+        conv=conv,
+        conn=conn,
+        oid=oid,
+        media=media,
+        caption=caption,
+    )
 
 
 # Совместимость со старым именем

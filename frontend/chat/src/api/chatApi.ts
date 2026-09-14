@@ -169,6 +169,25 @@ export async function fetchPaidMediaOptions(convId: number): Promise<PaidMediaOp
   }
 }
 
+export async function sendPaidMediaUpload(
+  convId: number,
+  file: File,
+  starCount: number,
+  caption?: string,
+): Promise<ApiMessage> {
+  const fd = new FormData()
+  fd.append('media', file, file.name || 'media')
+  fd.append('star_count', String(Math.max(1, Math.min(25000, starCount))))
+  if (caption?.trim()) fd.append('caption', caption.trim())
+  const res = await apiFetch(`/api/conversations/${convId}/send-paid-media-upload`, {
+    method: 'POST',
+    body: fd,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(formatHttpApiError(res, data))
+  return data as ApiMessage
+}
+
 export async function sendPaidMedia(
   convId: number,
   target: { packId?: number; assetId?: number },
