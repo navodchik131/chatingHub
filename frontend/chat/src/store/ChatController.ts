@@ -12,7 +12,7 @@ import {
   markConversationRead,
   sendImageReply,
   sendTextReply,
-  sendPaidMediaPack,
+  sendPaidMedia,
   patchConversation,
   fetchMe,
   fetchStudioModels,
@@ -431,11 +431,15 @@ export class ChatController {
     }
   }
 
-  /** Paid media (Stars) — пак из медиатеки, одна цена ⭐ на весь пак. */
-  async sendPaidMedia(convId: number, packId: number, caption?: string): Promise<void> {
+  /** Paid media (Stars) — пак или один файл из медиатеки. */
+  async sendPaidMediaMessage(
+    convId: number,
+    target: { packId?: number; assetId?: number },
+    caption?: string,
+  ): Promise<void> {
     const chat = this.chats.find((c) => c.id === convId)
     if (!chat) return
-    const sent = await sendPaidMediaPack(convId, packId, caption)
+    const sent = await sendPaidMedia(convId, target, caption)
     const merged = mergeApiMessages(this.apiMessages.get(convId) || [], [sent])
     this.apiMessages.set(convId, merged)
     chat.msgs = mapApiMessages(merged, chat)

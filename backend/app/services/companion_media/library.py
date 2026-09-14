@@ -196,6 +196,7 @@ def asset_to_dict(
         "has_embedding": bool(row.embedding_json),
         "tier": row.tier,
         "price_usd_cents": int(row.price_usd_cents or 0),
+        "price_stars": int(row.price_stars or 0),
         "status": row.status,
         "sent_count": sent_count,
         "fan_count": fan_count,
@@ -550,6 +551,9 @@ async def _create_asset_row(
     price_usd_cents = int(data.get("price_usd_cents") or 0)
     if price_usd_cents < 0 or price_usd_cents > 500_000:
         raise HTTPException(status_code=400, detail="invalid price_usd_cents")
+    price_stars = int(data.get("price_stars") or 0)
+    if price_stars < 0 or price_stars > 25_000:
+        raise HTTPException(status_code=400, detail="invalid price_stars")
     status = (data.get("status") or "active").strip().lower()
     if status not in MEDIA_STATUSES:
         raise HTTPException(status_code=400, detail="invalid status")
@@ -577,6 +581,7 @@ async def _create_asset_row(
         tags_json=dump_tags_json(data.get("tags")),
         tier=tier,
         price_usd_cents=price_usd_cents,
+        price_stars=price_stars,
         status=status,
     )
     session.add(row)
@@ -629,6 +634,11 @@ async def update_media_asset(
         if price_usd_cents < 0 or price_usd_cents > 500_000:
             raise HTTPException(status_code=400, detail="invalid price_usd_cents")
         row.price_usd_cents = price_usd_cents
+    if "price_stars" in data and data["price_stars"] is not None:
+        price_stars = int(data["price_stars"])
+        if price_stars < 0 or price_stars > 25_000:
+            raise HTTPException(status_code=400, detail="invalid price_stars")
+        row.price_stars = price_stars
     if "status" in data and data["status"] is not None:
         status = str(data["status"]).strip().lower()
         if status not in MEDIA_STATUSES:

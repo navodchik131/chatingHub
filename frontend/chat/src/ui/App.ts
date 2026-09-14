@@ -902,55 +902,65 @@ export class UniboxApp {
   }
 
   private async openPaidMediaPicker(c: UiChat): Promise<void> {
-    const { fetchPaidMediaPacks } = await import('../api/chatApi')
-    let packs: Awaited<ReturnType<typeof fetchPaidMediaPacks>>
+    const { fetchPaidMediaOptions } = await import('../api/chatApi')
+    let opts: Awaited<ReturnType<typeof fetchPaidMediaOptions>>
     try {
-      packs = await fetchPaidMediaPacks(c.id)
+      opts = await fetchPaidMediaOptions(c.id)
     } catch (e) {
       this.toast(e instanceof Error ? e.message : String(e))
       return
     }
-    if (!packs.length) {
-      this.toast('Нет паков с ценой ⭐ — задайте в медиатеке персонажа')
+    if (!opts.packs.length && !opts.assets.length) {
+      this.toast('Нет ⭐ — задайте цену на файл или пак в медиатеке персонажа')
       return
     }
     const inp = $('#inp') as HTMLTextAreaElement | null
     const captionHint = inp?.value.trim() || ''
-    const list = packs
+    const assetRows = opts.assets
+      .map(
+        (a) =>
+          `<button type="button" class="paid-pack-row" data-asset="${a.id}">
+            <b>${esc(a.title || `#${a.id}`)}</b>
+            <span>${a.price_stars} ⭐ · ${a.media_type === 'video' ? 'видео' : 'фото'} · один файл</span>
+          </button>`,
+      )
+      .join('')
+    const packRows = opts.packs
       .map(
         (p) =>
           `<button type="button" class="paid-pack-row" data-pack="${p.id}">
             <b>${esc(p.name)}</b>
-            <span>${p.price_stars} ⭐ · ${p.asset_count} файлов · до ${p.max_send_count} в отправке</span>
+            <span>${p.price_stars} ⭐ · пак · ${p.asset_count} файлов · до ${p.max_send_count}</span>
           </button>`,
       )
       .join('')
-    this.modal(
-      'Платный контент',
-      `<p class="tr-hint">Одна цена ⭐ на весь пак. Подпись — из поля ввода${captionHint ? `: «${esc(captionHint.slice(0, 80))}»` : ''}.</p>
-      <div class="paid-pack-list">${list}</div>`,
-      (wrap) => {
-        wrap.querySelectorAll('[data-pack]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const packId = Number((btn as HTMLElement).dataset.pack)
-            wrap.remove()
-            void this.ctrl
-              .sendPaidMedia(c.id, packId, captionHint || undefined)
-              .then(() => {
-                this.scroll.forceBottomNext = true
-                this.renderMsgs(true)
-                this.renderListIfChanged()
-                if (inp && captionHint) {
-                  inp.value = ''
-                  inp.style.height = 'auto'
-                  this.ctrl.clearDraft(c.id)
-                }
-              })
-              .catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+    const body = `<p class="tr-hint">Подпись — из поля ввода${captionHint ? `: «${esc(captionHint.slice(0, 80))}»` : ''}.</p>
+      ${assetRows ? `<div class="dr-lab" style="padding:8px 14px 4px;font-size:11px;color:var(--txt-2)">Один файл</div><div class="paid-pack-list">${assetRows}</div>` : ''}
+      ${packRows ? `<div class="dr-lab" style="padding:8px 14px 4px;font-size:11px;color:var(--txt-2)">Пак</div><div class="paid-pack-list">${packRows}</div>` : ''}`
+    this.modal('Платный контент', body, (wrap) => {
+      const send = (target: { packId?: number; assetId?: number }) => {
+        wrap.remove()
+        void this.ctrl
+          .sendPaidMediaMessage(c.id, target, captionHint || undefined)
+          .then(() => {
+            this.scroll.forceBottomNext = true
+            this.renderMsgs(true)
+            this.renderListIfChanged()
+            if (inp && captionHint) {
+              inp.value = ''
+              inp.style.height = 'auto'
+              this.ctrl.clearDraft(c.id)
+            }
           })
-        })
-      },
-    )
+          .catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
+      }
+      wrap.querySelectorAll('[data-pack]').forEach((btn) => {
+        btn.addEventListener('click', () => send({ packId: Number((btn as HTMLElement).dataset.pack) }))
+      })
+      wrap.querySelectorAll('[data-asset]').forEach((btn) => {
+        btn.addEventListener('click', () => send({ assetId: Number((btn as HTMLElement).dataset.asset) }))
+      })
+    })
   }
 
   private openTranslation(c: UiChat): void {

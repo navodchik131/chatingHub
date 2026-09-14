@@ -1946,8 +1946,30 @@ class StarsBusinessLinkIn(BaseModel):
 
 
 class SendPaidMediaIn(BaseModel):
-    pack_id: int = Field(ge=1)
+    pack_id: int | None = Field(default=None, ge=1)
+    asset_id: int | None = Field(default=None, ge=1)
     caption: str | None = Field(default=None, max_length=1024)
+
+    @model_validator(mode="after")
+    def pack_or_asset(self) -> SendPaidMediaIn:
+        has_pack = self.pack_id is not None
+        has_asset = self.asset_id is not None
+        if has_pack == has_asset:
+            raise ValueError("Укажите pack_id или asset_id")
+        return self
+
+
+class PaidMediaAssetOptionOut(BaseModel):
+    id: int
+    title: str | None = None
+    media_type: str
+    price_stars: int
+    preview_url: str | None = None
+
+
+class PaidMediaOptionsOut(BaseModel):
+    packs: list[CompanionMediaPackOut] = Field(default_factory=list)
+    assets: list[PaidMediaAssetOptionOut] = Field(default_factory=list)
 
 
 class CompanionMediaAssetFromGenerationIn(BaseModel):
@@ -1959,6 +1981,7 @@ class CompanionMediaAssetFromGenerationIn(BaseModel):
     tags: list[str] = Field(default_factory=list)
     tier: Literal["free", "teaser", "paid"] = "teaser"
     price_usd_cents: int = Field(default=0, ge=0, le=500_000)
+    price_stars: int = Field(default=0, ge=0, le=25_000)
     sort_order: int | None = Field(default=None, ge=0)
 
 
@@ -1969,6 +1992,7 @@ class CompanionMediaAssetPatchIn(BaseModel):
     tags: list[str] | None = None
     tier: Literal["free", "teaser", "paid"] | None = None
     price_usd_cents: int | None = Field(default=None, ge=0, le=500_000)
+    price_stars: int | None = Field(default=None, ge=0, le=25_000)
     status: Literal["active", "disabled"] | None = None
     sort_order: int | None = Field(default=None, ge=0)
 
@@ -1989,6 +2013,7 @@ class CompanionMediaAssetOut(BaseModel):
     has_embedding: bool = False
     tier: str
     price_usd_cents: int = 0
+    price_stars: int = 0
     status: str
     sent_count: int = 0
     fan_count: int = 0

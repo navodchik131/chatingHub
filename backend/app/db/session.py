@@ -1119,6 +1119,13 @@ def _migrate_companion_media_library(sync_conn) -> None:
                     "ADD COLUMN price_usd_cents INTEGER NOT NULL DEFAULT 0"
                 )
             )
+        if "price_stars" not in cols:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE companion_media_assets "
+                    "ADD COLUMN price_stars INTEGER NOT NULL DEFAULT 0"
+                )
+            )
 
     # Stars Unibox: цена ⭐ на весь пак (Alembic 20260314_stars_unibox; дублируем для prod без alembic).
     if insp.has_table("companion_media_packs"):

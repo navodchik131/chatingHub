@@ -13,17 +13,23 @@ from app.connectors.telegram.stars_business.repo import (
 )
 from app.db.models import Conversation, User
 from app.db.session import get_session
+from sqlalchemy import select
+
+from app.db.models import CompanionMediaAsset
 from app.schemas import (
     CompanionMediaPackOut,
     MessageOut,
+    PaidMediaAssetOptionOut,
+    PaidMediaOptionsOut,
     SendPaidMediaIn,
     StarsBusinessLinkIn,
     StarsBusinessStatusOut,
 )
 from app.services.companion_media.library import list_media_packs
+from app.services.companion_media.storage import create_companion_media_access_token
 from app.services.chat_messages import message_to_out
 from app.services.realtime import hub
-from app.services.stars_business_unibox import send_unibox_paid_pack
+from app.services.stars_business_unibox import send_unibox_paid_media
 from app.services.workspace import PERM_CHAT, assert_permission, workspace_owner_id
 from app.services.workspace_model_access import require_conversation_chat_access
 
@@ -115,6 +121,58 @@ async def conversation_paid_media_packs(
     return [CompanionMediaPackOut.model_validate(r) for r in priced]
 
 
+@router.get(
+    "/conversations/{conv_id}/paid-media-options",
+    response_model=PaidMediaOptionsOut,
+)
+async def conversation_paid_media_options(
+    conv_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PaidMediaOptionsOut:
+    """Паки и одиночные файлы с price_stars > 0 для Unibox."""
+    assert_permission(user, PERM_CHAT)
+    oid = workspace_owner_id(user)
+    conv = await session.get(Conversation, conv_id)
+    if not conv or conv.user_id != oid:
+        raise HTTPException(status_code=404, detail="conversation not found")
+    await require_conversation_chat_access(session, user, conv_id, oid)
+    packs_out: list[CompanionMediaPackOut] = []
+    assets_out: list[PaidMediaAssetOptionOut] = []
+    if conv.studio_model_id:
+        mid = int(conv.studio_model_id)
+        pack_rows = await list_media_packs(session, viewer=user, studio_model_id=mid)
+        packs_out = [
+            CompanionMediaPackOut.model_validate(r)
+            for r in pack_rows
+            if int(r.get("price_stars") or 0) > 0 and r.get("status") == "active"
+        ]
+        asset_rows = (
+            await session.scalars(
+                select(CompanionMediaAsset).where(
+                    CompanionMediaAsset.user_id == oid,
+                    CompanionMediaAsset.studio_model_id == mid,
+                    CompanionMediaAsset.status == "active",
+                    CompanionMediaAsset.price_stars > 0,
+                )
+                .order_by(CompanionMediaAsset.id.desc())
+            )
+        ).all()
+        for a in asset_rows:
+            tok = create_companion_media_access_token(user_id=oid, asset_id=a.id)
+            preview = f"/api/companion-media/assets/{a.id}/file?t={tok}"
+            assets_out.append(
+                PaidMediaAssetOptionOut(
+                    id=int(a.id),
+                    title=a.title,
+                    media_type=a.media_type,
+                    price_stars=int(a.price_stars or 0),
+                    preview_url=preview,
+                )
+            )
+    return PaidMediaOptionsOut(packs=packs_out, assets=assets_out)
+
+
 @router.post("/conversations/{conv_id}/send-paid-media", response_model=MessageOut)
 async def conversation_send_paid_media(
     conv_id: int,
@@ -129,11 +187,12 @@ async def conversation_send_paid_media(
         raise HTTPException(status_code=404, detail="conversation not found")
     await require_conversation_chat_access(session, user, conv_id, oid)
 
-    msg_id, _order_id = await send_unibox_paid_pack(
+    msg_id, _order_id = await send_unibox_paid_media(
         session,
         viewer=user,
         conv=conv,
-        pack_id=int(body.pack_id),
+        pack_id=int(body.pack_id) if body.pack_id is not None else None,
+        asset_id=int(body.asset_id) if body.asset_id is not None else None,
         caption=body.caption,
     )
     await session.commit()

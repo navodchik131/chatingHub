@@ -1244,6 +1244,8 @@ class CompanionMediaAsset(Base):
     tier: Mapped[str] = mapped_column(String(16), default="teaser", server_default="teaser")
     """Цена платного контента в центах USD (0 = бесплатно)."""
     price_usd_cents: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """Одиночный paid media в Unibox/Telegram ⭐ (0 = не отправлять как один файл)."""
+    price_stars: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

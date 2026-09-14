@@ -147,18 +147,36 @@ export interface PaidMediaPack {
   max_send_count: number
 }
 
-/** Паки медиатеки с ценой ⭐ для диалога (telegram_user + Stars Business). */
-export async function fetchPaidMediaPacks(convId: number): Promise<PaidMediaPack[]> {
-  const rows = await apiJson<PaidMediaPack[]>(`/api/conversations/${convId}/paid-media-packs`)
-  return Array.isArray(rows) ? rows : []
+export interface PaidMediaAssetOption {
+  id: number
+  title: string | null
+  media_type: string
+  price_stars: number
+  preview_url: string | null
 }
 
-export async function sendPaidMediaPack(
+export interface PaidMediaOptions {
+  packs: PaidMediaPack[]
+  assets: PaidMediaAssetOption[]
+}
+
+/** Паки и одиночные файлы с ⭐ для диалога. */
+export async function fetchPaidMediaOptions(convId: number): Promise<PaidMediaOptions> {
+  const data = await apiJson<PaidMediaOptions>(`/api/conversations/${convId}/paid-media-options`)
+  return {
+    packs: Array.isArray(data?.packs) ? data.packs : [],
+    assets: Array.isArray(data?.assets) ? data.assets : [],
+  }
+}
+
+export async function sendPaidMedia(
   convId: number,
-  packId: number,
+  target: { packId?: number; assetId?: number },
   caption?: string,
 ): Promise<ApiMessage> {
-  const body: Record<string, unknown> = { pack_id: packId }
+  const body: Record<string, unknown> = {}
+  if (target.packId) body.pack_id = target.packId
+  if (target.assetId) body.asset_id = target.assetId
   if (caption?.trim()) body.caption = caption.trim()
   return apiJson<ApiMessage>(`/api/conversations/${convId}/send-paid-media`, {
     method: 'POST',

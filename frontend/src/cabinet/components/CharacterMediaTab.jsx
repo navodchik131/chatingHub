@@ -71,14 +71,15 @@ export default function TabMedia() {
   const ml = useMemo(() => ({
     title: ru ? 'Медиатека персонажа' : 'Character media library',
     desc: ru
-      ? 'Фото и видео для AI-компаньона. Бот ищет по смыслу (теги + описание) и не шлёт одно и то же дважды.'
-      : 'Photos and videos for the AI companion. Semantic search; no repeats per fan.',
+      ? 'Paid media ⭐: цена на один файл («⭐ ОДИН ФАЙЛ») или на весь пак (вкладка «Паки»).'
+      : 'Paid media ⭐: per single file or per whole pack (Packs tab).',
     upload: ru ? 'Загрузить' : 'Upload',
     fromStudio: ru ? 'Импорт из студии' : 'From studio',
     tabAssets: ru ? 'Файлы' : 'Assets',
     tabPacks: ru ? 'Паки' : 'Packs',
     tabSearch: ru ? 'Тест поиска' : 'Search test',
     fPrice: ru ? 'ЦЕНА, $' : 'PRICE, $',
+    fPriceStars: ru ? '⭐ ОДИН ФАЙЛ' : '⭐ SINGLE FILE',
     save: ru ? 'Сохранить' : 'Save',
     del: ru ? 'Удалить' : 'Delete',
     reindex: ru ? 'Пересчитать embeddings' : 'Reindex embeddings',
@@ -116,6 +117,13 @@ export default function TabMedia() {
 
   const selected = assets.find((a) => Number(a.id) === Number(selId)) || null;
 
+  /** Пак выбранного файла — цена ⭐ задаётся на пак, не на отдельный asset. */
+  const draftPack = useMemo(() => {
+    const pid = draft?.pack_id ? Number(draft.pack_id) : NaN;
+    if (!Number.isFinite(pid) || pid <= 0) return null;
+    return packs.find((p) => Number(p.id) === pid) || null;
+  }, [draft?.pack_id, packs]);
+
   // Черновик только при выборе другого файла, не при фоновом reload списка.
   useEffect(() => {
     if (!selId) {
@@ -130,6 +138,7 @@ export default function TabMedia() {
       tags: (row.tags || []).join(', '),
       tier: row.tier || 'teaser',
       priceUsd: row.price_usd_cents ? (row.price_usd_cents / 100).toFixed(row.price_usd_cents % 100 ? 2 : 0) : '0',
+      priceStars: String(row.price_stars ?? 0),
       pack_id: row.pack_id || '',
     });
   }, [selId]);
@@ -173,6 +182,7 @@ export default function TabMedia() {
         tags: draft.tags.split(',').map((t) => t.trim()).filter(Boolean),
         tier: draft.tier,
         price_usd_cents: parseUsdToCents(draft.priceUsd),
+        price_stars: Math.max(0, Math.min(25000, parseInt(draft.priceStars, 10) || 0)),
         pack_id: draft.pack_id ? Number(draft.pack_id) : null,
       });
       await reload();
@@ -353,7 +363,9 @@ export default function TabMedia() {
                     <div style={{ padding: '9px 10px' }}>
                       <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35 }}>{a.title || `#${a.id}`}</div>
                       <div style={{ fontFamily: font.mono, fontSize: 8.5, color: color.textGhost, marginTop: 4 }}>
-                        {fmtUsdCents(a.price_usd_cents)} · {a.sent_count || 0} {ru ? 'отпр.' : 'sent'}
+                        {fmtUsdCents(a.price_usd_cents)}
+                        {(a.price_stars ?? 0) > 0 ? ` · ${a.price_stars} ⭐` : ''}
+                        {' · '}{a.sent_count || 0} {ru ? 'отпр.' : 'sent'}
                       </div>
                     </div>
                   </Hoverable>
@@ -367,7 +379,9 @@ export default function TabMedia() {
               <div>
                 <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 6 }}>{ru ? 'Выберите файл' : 'Select an asset'}</div>
                 <div style={{ fontSize: 11.5, color: color.textMuted, lineHeight: 1.55 }}>
-                  {ru ? 'Откройте карточку слева, чтобы редактировать описание, теги, тир и цену в $.' : 'Pick a card to edit description, tags, tier and USD price.'}
+                  {ru
+                    ? 'Описание, теги, тир и цена в $. Для Telegram ⭐ — привяжите пак и укажите звёзды (не в $).'
+                    : 'Description, tags, tier, USD price. For Telegram ⭐ — assign a pack and set stars (not $).'}
                 </div>
               </div>
             ) : (
@@ -383,12 +397,66 @@ export default function TabMedia() {
                     ))}
                   </div>
                 </div>
+                <div>
+                  <div style={fieldLbl}>{ru ? 'ПАК (серия для бота и ⭐ paid media)' : 'PACK (series + ⭐ paid media)'}</div>
+                  <select
+                    value={draft.pack_id ? String(draft.pack_id) : ''}
+                    onChange={(e) => setDraft({ ...draft, pack_id: e.target.value })}
+                    style={{ ...inputSt, width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+                  >
+                    <option value="">{ru ? '— без пака —' : '— no pack —'}</option>
+                    {packs.map((pk) => (
+                      <option key={pk.id} value={String(pk.id)}>
+                        {pk.name}
+                        {pk.price_stars > 0 ? ` · ${pk.price_stars} ⭐` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {!packs.length ? (
+                    <div style={{ fontSize: 10.5, color: color.orange, lineHeight: 1.45, marginBottom: 8 }}>
+                      {ru ? 'Сначала создайте пак во вкладке «Паки».' : 'Create a pack on the Packs tab first.'}
+                    </div>
+                  ) : null}
+                  {draftPack ? (
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={{ ...fieldLbl, marginBottom: 0 }}>
+                        {ru ? '⭐ ЦЕНА PAID MEDIA (на весь пак)' : '⭐ PAID MEDIA PRICE (whole pack)'}
+                      </span>
+                      <input
+                        defaultValue={String(draftPack.price_stars ?? 0)}
+                        key={`asset-pack-stars-${draftPack.id}-${draftPack.price_stars}`}
+                        onBlur={(e) => {
+                          const v = Math.max(0, Math.min(25000, parseInt(e.target.value, 10) || 0));
+                          if (v === (draftPack.price_stars ?? 0)) return;
+                          void updateCompanionMediaPack(draftPack.id, { price_stars: v }).then(reload);
+                        }}
+                        style={{ ...inputSt, width: 120, boxSizing: 'border-box' }}
+                      />
+                      <span style={{ fontSize: 10, color: color.textMuted, lineHeight: 1.45 }}>
+                        {ru
+                          ? 'Один раз на пак: все кадры из серии уходят за эту сумму ⭐ в Unibox.'
+                          : 'One price for the whole pack in Unibox paid media.'}
+                      </span>
+                    </label>
+                  ) : (
+                    <div style={{ fontSize: 10.5, color: color.textMuted, lineHeight: 1.45, marginBottom: 4 }}>
+                      {ru
+                        ? 'Цена в $ ниже — для других сценариев. Звёзды Telegram только через пак.'
+                        : 'USD below is for other flows. Telegram Stars only via a pack.'}
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <Field label={ru ? 'ПАК' : 'PACK'} value={draft.pack_id} onChange={(e) => setDraft({ ...draft, pack_id: e.target.value })} placeholder={ru ? 'ID пака' : 'Pack ID'} />
-                  </div>
-                  <div style={{ width: 88, flex: 'none' }}>
                     <Field label={ml.fPrice} value={draft.priceUsd} onChange={(e) => setDraft({ ...draft, priceUsd: e.target.value })} />
+                  </div>
+                  <div style={{ width: 100, flex: 'none' }}>
+                    <Field
+                      label={ml.fPriceStars}
+                      value={draft.priceStars}
+                      onChange={(e) => setDraft({ ...draft, priceStars: e.target.value })}
+                      placeholder="0"
+                    />
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, borderTop: `1px solid ${line.hair}`, paddingTop: 11 }}>
@@ -423,7 +491,9 @@ export default function TabMedia() {
       {subTab === 'packs' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 760 }}>
           <div style={{ fontSize: 11.5, color: color.textMuted, lineHeight: 1.55 }}>
-            {ru ? 'Пак — серия 3–4 кадра. При совпадении бот дошлёт остальные по порядку.' : 'Pack = 3–4 frames; on match the bot sends the rest in order.'}
+            {ru
+              ? 'Пак — серия кадров для бота и для paid media в чате (⭐). Одна цена ⭐ на весь пак, не на каждый файл.'
+              : 'Pack = frame series for bot and chat paid media (⭐). One ⭐ price per pack, not per file.'}
           </div>
           {packs.map((pk) => (
             <Panel key={pk.id} style={{ padding: 14, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -434,8 +504,8 @@ export default function TabMedia() {
                   {pk.price_stars > 0 ? ` · ${pk.price_stars} ⭐` : ''}
                 </div>
               </div>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 9, color: color.textGhost }}>
-                {ru ? '⭐ НА ПАК' : '⭐ PACK'}
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 9, color: color.lime, fontWeight: 700 }}>
+                {ru ? '⭐ ЦЕНА НА ВЕСЬ ПАК' : '⭐ PRICE PER PACK'}
                 <input
                   defaultValue={String(pk.price_stars ?? 0)}
                   key={`stars-${pk.id}-${pk.price_stars}`}
