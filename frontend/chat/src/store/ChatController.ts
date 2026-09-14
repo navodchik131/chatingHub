@@ -26,11 +26,7 @@ import {
 } from '../api/chatApi'
 import { connectRealtime, type RealtimeConnection } from '../api/realtime'
 import { apiFetch } from '../api/client'
-import {
-  avatarCacheKey,
-  getCachedObjectUrl,
-  mediaCacheKey,
-} from '../cache/blobCache'
+import { getCachedObjectUrl, mediaCacheKey } from '../cache/blobCache'
 import {
   loadConversationsCache,
   saveConversationsCache,
@@ -71,8 +67,6 @@ export class ChatController {
 
   /** Индекс первого непрочитанного в открытом треде (линия «Непрочитанные»). */
   unreadAnchor: Record<number, number> = {}
-  /** Object URL аватарок convId → url */
-  avatarUrls = new Map<number, string>()
   /** Object URL медиа mediaKey → url */
   mediaUrls = new Map<string, string>()
 
@@ -124,7 +118,6 @@ export class ChatController {
       this.folders = folds
       this.setConversationsFromApi(convs)
       await saveConversationsCache(convs)
-      void this.prefetchAvatars(convs)
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e)
       if (!this.chats.length) throw e
@@ -174,49 +167,6 @@ export class ChatController {
     })
   }
 
-  private async prefetchAvatars(rows: ApiConversation[]): Promise<void> {
-    const slice = rows.slice(0, 40)
-    const other = slice.filter((c) => c.platform !== 'telegram_user')
-    const tgUser = slice.filter((c) => c.platform === 'telegram_user')
-    // telegram_user аватар = MTProto; не душим worker пачкой из 40 запросов.
-    await this.prefetchAvatarsLimited(other, 4)
-    if (tgUser.length) {
-      window.setTimeout(() => void this.prefetchAvatarsLimited(tgUser, 2), 10_000)
-    }
-  }
-
-  private async prefetchAvatarsLimited(rows: ApiConversation[], concurrency: number): Promise<void> {
-    const queue = [...rows]
-    const worker = async (): Promise<void> => {
-      while (queue.length) {
-        const c = queue.shift()
-        if (!c) break
-        const tryAvatar = c.avatar_url
-          || (c.platform === 'telegram_user' ? `/api/conversations/${c.id}/avatar` : null)
-        if (!tryAvatar && !c.has_avatar) continue
-        await this.resolveAvatar(c.id, tryAvatar)
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.max(1, concurrency) }, () => worker()),
-    )
-  }
-
-  async resolveAvatar(convId: number, url?: string | null): Promise<string | null> {
-    const cached = this.avatarUrls.get(convId)
-    if (cached) return cached
-    const chat = this.chats.find((c) => c.id === convId)
-    const fetchUrl = url || chat?.avatarUrl || chat?.raw.avatar_url
-    if (!fetchUrl) return null
-    const key = avatarCacheKey(convId)
-    const objectUrl = await getCachedObjectUrl(key, () => apiFetch(fetchUrl), 'avatar')
-    if (objectUrl) {
-      this.avatarUrls.set(convId, objectUrl)
-      this.emit() // перерисовать список — иначе остаются инициалы до следующего события
-    }
-    return objectUrl
-  }
-
   async resolveMedia(mediaKey: string, url: string): Promise<string | null> {
     const cached = this.mediaUrls.get(mediaKey)
     if (cached) return cached
@@ -247,7 +197,6 @@ export class ChatController {
     }
 
     void this.syncThread(convId, { markRead: true })
-    void this.resolveAvatar(convId)
     void this.loadNotes(convId)
   }
 

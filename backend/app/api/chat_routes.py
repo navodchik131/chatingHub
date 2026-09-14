@@ -187,19 +187,12 @@ async def _conversation_out(
         u = await session.get(User, conv.assigned_user_id)
         if u:
             assignee_login = u.member_login or None
-    # telegram / telegram_user / instagram: avatar endpoint подтягивает фото on-demand
-    expose_avatar = conv.has_avatar or conv.platform in (
-        Platform.telegram,
-        Platform.telegram_user,
-        Platform.instagram,
-    )
     return base.model_copy(
         update={
             "effective_companion_mode": mode.value if mode else None,
             "assigned_member_login": assignee_login,
-            "has_avatar": expose_avatar,
             "avatar_url": conversation_avatar_url(owner_id=owner_id, conversation_id=conv.id)
-            if expose_avatar
+            if conv.has_avatar
             else None,
         }
     )

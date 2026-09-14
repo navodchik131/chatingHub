@@ -404,12 +404,8 @@ export class UniboxApp {
 
   private avaHtml(c: UiChat, sm = false): string {
     const pm = platformMeta(c.raw.platform)
-    const avUrl = this.ctrl.avatarUrls.get(c.id)
-    const inner = avUrl
-      ? `<img src="${avUrl}" alt="">`
-      : esc(initials(c.name))
-    const cls = avUrl ? `has-photo ${sm ? 'sm' : ''}` : sm ? 'sm' : ''
-    return `<div class="ava ${cls}" style="${avUrl ? '' : avatarGradient(c.g)}">${inner}
+    const cls = sm ? 'sm' : ''
+    return `<div class="ava ${cls}" style="${avatarGradient(c.g)}">${esc(initials(c.name))}
       <span class="src-b" style="background:${pm.color}" title="${esc(pm.name)}">${platformIconImg(c.raw.platform, 11)}</span></div>`
   }
 
