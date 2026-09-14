@@ -460,6 +460,7 @@ async def init_db() -> None:
         await conn.run_sync(_migrate_conversation_peer_avatar_url)
         await conn.run_sync(_migrate_connection_companion_columns)
         await conn.run_sync(_migrate_companion_media_library)
+        await conn.run_sync(_migrate_stars_business_unibox)
         await conn.run_sync(_migrate_creator_references)
         await conn.run_sync(_migrate_platform_news)
         await conn.run_sync(_migrate_auth_token_version)
@@ -1118,6 +1119,46 @@ def _migrate_companion_media_library(sync_conn) -> None:
                     "ADD COLUMN price_usd_cents INTEGER NOT NULL DEFAULT 0"
                 )
             )
+
+    # Stars Unibox: цена ⭐ на весь пак (Alembic 20260314_stars_unibox; дублируем для prod без alembic).
+    if insp.has_table("companion_media_packs"):
+        pack_cols = {c["name"] for c in insp.get_columns("companion_media_packs")}
+        if "price_stars" not in pack_cols:
+            sync_conn.execute(
+                text(
+                    "ALTER TABLE companion_media_packs "
+                    "ADD COLUMN price_stars INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+
+
+def _migrate_stars_business_unibox(sync_conn) -> None:
+    """Колонки Stars Business + Unibox, если Alembic не доехал до head."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(sync_conn)
+
+    if insp.has_table("stars_business_connections"):
+        cols = {c["name"] for c in insp.get_columns("stars_business_connections")}
+        if "user_id" not in cols:
+            sync_conn.execute(
+                text("ALTER TABLE stars_business_connections ADD COLUMN user_id INTEGER")
+            )
+
+    if insp.has_table("stars_business_orders"):
+        cols = {c["name"] for c in insp.get_columns("stars_business_orders")}
+        order_cols: list[tuple[str, str]] = [
+            ("conversation_id", "INTEGER"),
+            ("pack_id", "INTEGER"),
+            ("asset_id", "INTEGER"),
+            ("created_by_user_id", "INTEGER"),
+            ("unibox_message_id", "INTEGER"),
+        ]
+        for name, sql_type in order_cols:
+            if name not in cols:
+                sync_conn.execute(
+                    text(f"ALTER TABLE stars_business_orders ADD COLUMN {name} {sql_type}")
+                )
 
 
 def _migrate_creator_references(sync_conn) -> None:
