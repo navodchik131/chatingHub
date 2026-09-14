@@ -56,6 +56,7 @@ async def _stars_business_webhook_handler(request: Request) -> dict:
     from app.connectors.telegram.stars_business.handlers_business import (
         apply_business_connection,
         apply_business_message_cache,
+        collect_business_inbox_messages,
     )
 
     if upd.business_connection is not None:
@@ -63,16 +64,11 @@ async def _stars_business_webhook_handler(request: Request) -> dict:
             await apply_business_connection(upd.business_connection)
         except Exception:
             log.exception("stars business apply_business_connection failed")
-    if upd.business_message is not None:
+    for biz_msg in collect_business_inbox_messages(upd):
         try:
-            await apply_business_message_cache(upd.business_message)
+            await apply_business_message_cache(biz_msg)
         except Exception:
-            log.exception("stars business apply_business_message failed")
-    if upd.edited_business_message is not None:
-        try:
-            await apply_business_message_cache(upd.edited_business_message)
-        except Exception:
-            log.exception("stars business apply_edited_business_message failed")
+            log.exception("stars business apply_business_message failed msg_id=%s", biz_msg.message_id)
 
     bot = create_stars_business_bot()
     await stars_business_dp.feed_update(bot, upd)

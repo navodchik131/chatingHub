@@ -46,9 +46,22 @@ def confirm_send_kb(order_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def format_fan_list(chats: list[StarsBusinessFanChat]) -> str:
+def format_fan_list(chats: list[StarsBusinessFanChat], *, owner_linked: bool = True) -> str:
     if not chats:
-        return "Пока нет кэша диалогов. Дождитесь входящих business_message или перешлите сообщение фана."
+        if not owner_linked:
+            return (
+                "OWNER ещё не подключён к боту в Telegram Business (нет записи на сервере).\n"
+                "OWNER: Настройки → Business → Chatbots → подключите этого бота."
+            )
+        return (
+            "Кэш пуст: сервер не получал <b>business_message</b> от Telegram.\n\n"
+            "Проверьте:\n"
+            "• Фаны пишут <b>OWNER в личку</b> (личный @username), не боту в личку;\n"
+            "• Business → Chatbots: Manage Messages — включите <b>Reply</b> (can_reply);\n"
+            "• Gifts and Stars — включено для paid media;\n"
+            "• После смены прав — отключите и снова подключите бота.\n\n"
+            "Обход: в /paid на шаге 3 — пересылка сообщения фана или его числовой id."
+        )
     lines = ["<b>Недавние диалоги OWNER ↔ фан</b>\n"]
     for c in chats[:15]:
         open_ = chat_window_open(c.last_inbound_at)

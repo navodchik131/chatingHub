@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 from aiogram import Router
-from aiogram.types import BusinessConnection, Message, PaidMediaPurchased
+from aiogram.types import BusinessConnection, Message, PaidMediaPurchased, Update
 
 from app.connectors.telegram.stars_business.repo import (
     get_active_connection,
@@ -21,6 +21,29 @@ from app.db.session import SessionLocal
 log = logging.getLogger(__name__)
 
 router = Router(name="stars_business_updates")
+
+
+def collect_business_inbox_messages(upd: Update) -> list[Message]:
+    """Все варианты апдейта с business_connection_id (на случай другого поля в Update)."""
+    candidates: list[Message | None] = [
+        upd.business_message,
+        upd.edited_business_message,
+        upd.message if upd.message and (upd.message.business_connection_id or "").strip() else None,
+        upd.edited_message
+        if upd.edited_message and (upd.edited_message.business_connection_id or "").strip()
+        else None,
+    ]
+    seen: set[int] = set()
+    out: list[Message] = []
+    for msg in candidates:
+        if msg is None:
+            continue
+        mid = int(msg.message_id)
+        if mid in seen:
+            continue
+        seen.add(mid)
+        out.append(msg)
+    return out
 
 
 async def apply_business_connection(connection: BusinessConnection) -> None:
@@ -38,11 +61,13 @@ async def apply_business_connection(connection: BusinessConnection) -> None:
             owner_user_chat_id=int(connection.user_chat_id),
         )
         await session.commit()
+    rights = connection.rights
     log.info(
-        "stars business connection owner=%s enabled=%s connection_id=%s",
+        "stars business connection owner=%s enabled=%s connection_id=%s rights=%s",
         owner.id,
         connection.is_enabled,
         connection.id,
+        rights.model_dump(exclude_none=True) if rights is not None else None,
     )
 
 
@@ -71,8 +96,8 @@ async def apply_business_message_cache(message: Message) -> None:
         return
     if message.from_user.is_bot:
         return
-    # Исходящие с аккаунта OWNER не считаем «входящим от фана» для окна 24ч.
-    if message.out:
+    # Bot API Message не имеет out; исходящие от OWNER через бота — sender_business_bot.
+    if getattr(message, "sender_business_bot", None) is not None:
         return
     fan_chat_id = int(message.chat.id)
     name = " ".join(
@@ -107,6 +132,8 @@ async def apply_business_message_cache(message: Message) -> None:
             return
         if not conn_row.is_enabled:
             log.warning("stars business message skip: business disabled owner=%s", conn_row.owner_tg_user_id)
+            return
+        if int(message.from_user.id) == int(conn_row.owner_tg_user_id):
             return
         await upsert_fan_inbound(
             session,

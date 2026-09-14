@@ -120,8 +120,9 @@ async def cmd_chats(event: Message | CallbackQuery) -> None:
             await event.answer("Нет доступа.")
         return
     async with SessionLocal() as session:
+        conn = await get_active_connection(session)
         chats = await list_fan_chats(session, owner_id)
-    text = format_fan_list(chats)
+    text = format_fan_list(chats, owner_linked=conn is not None and conn.is_enabled)
     if isinstance(event, CallbackQuery):
         await event.answer()
         if event.message:
