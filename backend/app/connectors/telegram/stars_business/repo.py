@@ -204,6 +204,30 @@ async def list_fan_chats(
     return list(rows)
 
 
+async def resolve_connection_for_workspace(
+    session: AsyncSession,
+    workspace_owner_user_id: int,
+) -> StarsBusinessConnection | None:
+    """
+    Business OWNER для Unibox: явная user_id или автопривязка по users.telegram_id.
+    Бот /paid работает по owner_tg_user_id; кабинет — по users.id workspace owner.
+    """
+    conn = await get_connection_for_workspace_user(session, workspace_owner_user_id)
+    if conn:
+        return conn
+    owner_user = await session.get(User, workspace_owner_user_id)
+    tg_id = int(owner_user.telegram_id) if owner_user and owner_user.telegram_id else None
+    if tg_id:
+        linked = await link_connection_to_workspace_user(
+            session,
+            workspace_owner_user_id=workspace_owner_user_id,
+            owner_tg_user_id=tg_id,
+        )
+        if linked and linked.is_enabled:
+            return linked
+    return None
+
+
 async def link_connection_to_workspace_user(
     session: AsyncSession,
     *,

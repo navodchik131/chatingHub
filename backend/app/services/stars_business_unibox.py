@@ -14,9 +14,10 @@ from app.connectors.telegram.stars_business.bot import create_stars_business_bot
 from app.connectors.telegram.stars_business.media_storage import encode_media_paths
 from app.connectors.telegram.stars_business.repo import (
     create_order,
-    get_connection_for_workspace_user,
+    get_active_connection,
     mark_order_failed,
     mark_order_sent,
+    resolve_connection_for_workspace,
 )
 from app.connectors.telegram.stars_business.send import send_paid_media_order
 from app.db.models import (
@@ -131,11 +132,20 @@ async def _assert_conv_and_conn(
     oid = workspace_owner_id(viewer)
     if conv.user_id != oid:
         raise HTTPException(status_code=404, detail="conversation not found")
-    conn = await get_connection_for_workspace_user(session, oid)
+    conn = await resolve_connection_for_workspace(session, oid)
     if not conn or not conn.is_enabled:
+        active = await get_active_connection(session)
+        hint = ""
+        if active:
+            hint = (
+                f" Business OWNER в Telegram: {active.owner_tg_user_id}. "
+                "Привяжите тот же Telegram к аккаунту кабинета (вход через Telegram) "
+                "или POST /api/integrations/stars-business/link с owner_tg_user_id."
+            )
         raise HTTPException(
             status_code=503,
-            detail="Подключите Stars Business: OWNER должен добавить бота в Telegram Business",
+            detail="Подключите Stars Business: OWNER добавляет бота в Telegram → Business → Chatbots."
+            + hint,
         )
     return oid, conn
 

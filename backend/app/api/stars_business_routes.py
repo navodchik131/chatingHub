@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import get_current_user
 from app.config import settings
 from app.connectors.telegram.stars_business.repo import (
-    get_connection_for_workspace_user,
+    get_active_connection,
     link_connection_to_workspace_user,
+    resolve_connection_for_workspace,
 )
-from app.db.models import Conversation, User
-from app.db.session import get_session
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CompanionMediaAsset
+from app.db.models import CompanionMediaAsset, Conversation, User
+from app.db.session import get_session
 from app.schemas import (
     CompanionMediaPackOut,
     MessageOut,
@@ -43,7 +43,7 @@ async def stars_business_status(
 ) -> StarsBusinessStatusOut:
     configured = settings.stars_business_configured
     oid = workspace_owner_id(user)
-    conn = await get_connection_for_workspace_user(session, oid) if configured else None
+    conn = await resolve_connection_for_workspace(session, oid) if configured else None
     owner_user = await session.get(User, oid)
     tg_hint = int(owner_user.telegram_id) if owner_user and owner_user.telegram_id else None
     return StarsBusinessStatusOut(
