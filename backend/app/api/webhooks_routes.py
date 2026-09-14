@@ -30,6 +30,30 @@ from app.services.fanvue_connection import (
 
 log = logging.getLogger(__name__)
 
+
+async def _stars_business_webhook_handler(request: Request) -> dict:
+    from app.config import settings
+    from app.connectors.telegram.stars_business.bot import create_stars_business_bot
+    from app.connectors.telegram.stars_business.setup import stars_business_dp
+
+    secret = (settings.stars_business_webhook_secret or "").strip()
+    if not secret or not settings.stars_business_configured:
+        raise HTTPException(status_code=404, detail="stars business disabled")
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="invalid json") from e
+
+    try:
+        upd = Update.model_validate(body)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="invalid telegram update") from e
+
+    bot = create_stars_business_bot()
+    await stars_business_dp.feed_update(bot, upd)
+    return {"ok": True}
+
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
@@ -75,6 +99,19 @@ async def _process_fanvue_webhook(
             raise HTTPException(status_code=500, detail="ingest failed") from None
 
     raise HTTPException(status_code=400, detail="unsupported fanvue webhook payload")
+
+
+@router.post("/telegram-stars/{secret}")
+async def telegram_stars_business_webhook(
+    secret: str,
+    request: Request,
+) -> dict:
+    from app.config import settings
+
+    expected = (settings.stars_business_webhook_secret or "").strip()
+    if not expected or secret != expected:
+        raise HTTPException(status_code=404, detail="unknown webhook")
+    return await _stars_business_webhook_handler(request)
 
 
 @router.post("/telegram/{secret}")

@@ -2101,3 +2101,89 @@ class PartnerPayoutRequest(Base):
     commissions: Mapped[list[PartnerCommission]] = relationship(
         "PartnerCommission", back_populates="payout_request"
     )
+
+
+class StarsBusinessConnection(Base):
+    """Business-бот OWNER: подключение Secretary Mode (connected bot)."""
+
+    __tablename__ = "stars_business_connections"
+
+    owner_tg_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    connection_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    owner_user_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class StarsBusinessOperator(Base):
+    """OPERATOR: whitelist по telegram user id внутри OWNER."""
+
+    __tablename__ = "stars_business_operators"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_tg_user_id",
+            "operator_tg_user_id",
+            name="uq_stars_business_operator_owner_op",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_tg_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("stars_business_connections.owner_tg_user_id", ondelete="CASCADE"), index=True
+    )
+    operator_tg_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class StarsBusinessFanChat(Base):
+    """Кэш диалогов OWNER↔фан из business_message (для выбора получателя)."""
+
+    __tablename__ = "stars_business_fan_chats"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_tg_user_id",
+            "fan_chat_id",
+            name="uq_stars_business_fan_chat",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_tg_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("stars_business_connections.owner_tg_user_id", ondelete="CASCADE"), index=True
+    )
+    fan_chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    fan_display_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    last_inbound_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class StarsBusinessOrder(Base):
+    """Заказ paid media (payload в Telegram = str(id))."""
+
+    __tablename__ = "stars_business_orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_tg_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("stars_business_connections.owner_tg_user_id", ondelete="CASCADE"), index=True
+    )
+    operator_tg_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    fan_chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    star_count: Mapped[int] = mapped_column(Integer)
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_relative_path: Mapped[str] = mapped_column(String(512))
+    media_type: Mapped[str] = mapped_column(String(16), default="photo", server_default="photo")
+    status: Mapped[str] = mapped_column(String(16), default="draft", server_default="draft", index=True)
+    platform_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

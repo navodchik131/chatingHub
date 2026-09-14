@@ -132,6 +132,7 @@ async def lifespan(app: FastAPI):
     exif_bot_polling_task: asyncio.Task[None] | None = None
     ig_bot_polling_task: asyncio.Task[None] | None = None
     login_bot_polling_task: asyncio.Task[None] | None = None
+    stars_business_polling_task: asyncio.Task[None] | None = None
     telegram_user_worker_task: asyncio.Task[None] | None = None
     legacy_tok = settings.legacy_bot_token.strip()
     legacy_uid = settings.legacy_user_id
@@ -235,6 +236,23 @@ async def lifespan(app: FastAPI):
         await refresh_registered_telegram_webhooks()
     except Exception:
         log.exception("Telegram webhook refresh on startup failed")
+    if settings.stars_business_configured:
+        if settings.stars_business_polling:
+            from app.connectors.telegram.stars_business.bot import run_stars_business_polling
+
+            stars_business_polling_task = asyncio.create_task(run_stars_business_polling())
+            log.info("Stars Business bot polling enabled")
+        else:
+            stars_business_polling_task = None
+            try:
+                from app.connectors.telegram.stars_business.bot import setup_stars_business_webhook
+
+                await setup_stars_business_webhook()
+            except Exception:
+                log.exception("Stars Business webhook setup failed")
+    else:
+        stars_business_polling_task = None
+        log.info("Stars Business bot disabled (STARS_BUSINESS_BOT_TOKEN)")
     if settings.app_role_normalized in ("api", "all"):
         asyncio.create_task(_deferred_recover_studio_jobs_on_startup())
     redis_bridge = None
@@ -292,6 +310,12 @@ async def lifespan(app: FastAPI):
         login_bot_polling_task.cancel()
         try:
             await login_bot_polling_task
+        except asyncio.CancelledError:
+            pass
+    if stars_business_polling_task:
+        stars_business_polling_task.cancel()
+        try:
+            await stars_business_polling_task
         except asyncio.CancelledError:
             pass
     if telegram_user_worker_task:

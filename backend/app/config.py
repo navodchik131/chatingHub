@@ -720,7 +720,48 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("TELEGRAM_LOGIN_NEWS_CHANNEL_LABEL"),
     )
 
-    # --- EXIF Telegram bot (отдельный бот, не SaaS-чат) ---
+    # --- Stars Business bot (paid media от имени OWNER через Secretary Mode) ---
+    stars_business_bot_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("STARS_BUSINESS_BOT_TOKEN"),
+    )
+    stars_business_webhook_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("STARS_BUSINESS_WEBHOOK_SECRET"),
+        description="Секрет в URL /api/webhooks/telegram-stars/{secret}",
+    )
+    stars_business_polling: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("STARS_BUSINESS_POLLING"),
+        description="Локальная отладка без HTTPS webhook.",
+    )
+    stars_business_operator_telegram_ids: str = Field(
+        default="",
+        validation_alias=AliasChoices("STARS_BUSINESS_OPERATOR_TELEGRAM_IDS"),
+        description="OPERATOR whitelist (telegram user id через запятую), привязка к OWNER при business_connection.",
+    )
+
+    @property
+    def stars_business_configured(self) -> bool:
+        return bool((self.stars_business_bot_token or "").strip())
+
+    @property
+    def stars_business_operator_ids(self) -> list[int]:
+        raw = (self.stars_business_operator_telegram_ids or "").strip()
+        if not raw:
+            return []
+        out: list[int] = []
+        for part in raw.replace(";", ",").split(","):
+            p = part.strip()
+            if not p:
+                continue
+            try:
+                out.append(int(p))
+            except ValueError:
+                continue
+        return out
+
+    # --- EXIF Telegram bot (отдельный бot, не SaaS-чат) ---
     exif_bot_token: str = Field(
         default="",
         validation_alias=AliasChoices("EXIF_BOT_TOKEN"),
