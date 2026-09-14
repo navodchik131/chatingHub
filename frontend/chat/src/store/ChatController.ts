@@ -77,12 +77,8 @@ export class ChatController {
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private threadLoads = new Map<number, Promise<void>>()
   private apiMessages = new Map<number, ApiMessage[]>()
-  /** WS жив — poll реже и без лишнего sync треда. */
-  private wsConnected = false
-  /** Последняя сигнатура списка — не дергаем UI без изменений. */
+  /** Последняя сигнатура списка — не дергаем UI без изменений (только фоновый refresh). */
   private lastConversationsSig = ''
-  /** Сигнатура сообщений открытого треда. */
-  private lastThreadSig: Record<number, string> = {}
   /** Есть ли ещё сообщения старше текущей порции. */
   hasMoreMessages: Record<number, boolean> = {}
   /** Идёт подгрузка истории вверх. */
@@ -121,32 +117,12 @@ export class ChatController {
       .join('|')
   }
 
-  private threadSignature(convId: number): string {
-    const chat = this.chats.find((c) => c.id === convId)
-    if (!chat) return ''
-    return chat.msgs
-      .map((m) => `${m.id}:${m.pending ? 'p' : ''}:${m.text.length}:${m.ru?.length ?? 0}`)
-      .join(',')
-  }
-
-  /** emit только если данные реально изменились (меньше «мигания»). */
-  private emitIfChanged(kind: 'list' | 'thread' | 'any', convId?: number): void {
-    let changed = false
-    if (kind === 'list' || kind === 'any') {
-      const sig = this.conversationsSignature()
-      if (sig !== this.lastConversationsSig) {
-        changed = true
-        this.lastConversationsSig = sig
-      } else if (kind === 'list') return
-    }
-    if (convId != null && (kind === 'thread' || kind === 'any')) {
-      const ts = this.threadSignature(convId)
-      if (ts !== this.lastThreadSig[convId]) {
-        changed = true
-        this.lastThreadSig[convId] = ts
-      } else if (kind === 'thread') return
-    }
-    if (changed) this.emit()
+  /** emit для фонового refresh списка — без лишнего кадра, если метаданные те же. */
+  private emitListIfChanged(): void {
+    const sig = this.conversationsSignature()
+    if (sig === this.lastConversationsSig) return
+    this.lastConversationsSig = sig
+    this.emit()
   }
 
   async init(): Promise<void> {
@@ -183,7 +159,6 @@ export class ChatController {
     this.ws = connectRealtime(
       (msg) => this.onRealtime(msg),
       () => {
-        this.wsConnected = true
         void this.refreshConversations()
         if (this.activeChatId != null) void this.syncThread(this.activeChatId)
       },
@@ -205,11 +180,9 @@ export class ChatController {
     this.pollTimer = setInterval(() => {
       if (document.visibilityState !== 'visible') return
       void this.refreshConversations()
-      // При живом WS тред и так приходит по событиям — не дёргаем API каждые N сек.
-      if (!this.wsConnected && this.activeChatId != null) {
-        void this.syncThread(this.activeChatId)
-      }
-    }, 25_000)
+      // Страховка: WS иногда не шлёт message (gap) — тред открытого чата всё равно подтягиваем.
+      if (this.activeChatId != null) void this.syncThread(this.activeChatId)
+    }, 12_000)
   }
 
   private setConversationsFromApi(rows: ApiConversation[]): void {
@@ -222,6 +195,15 @@ export class ChatController {
       if (kept?.length && c.id === this.activeChatId) ui.msgs = kept
       return ui
     })
+    // После пересборки списка — восстановить тред из apiMessages (WS мог обновить между fetch и map).
+    const activeId = this.activeChatId
+    if (activeId != null) {
+      const chat = this.chats.find((c) => c.id === activeId)
+      const api = this.apiMessages.get(activeId)
+      if (chat && api?.length) {
+        chat.msgs = mapApiMessages(api, chat)
+      }
+    }
   }
 
   async resolveMedia(mediaKey: string, url: string): Promise<string | null> {
@@ -271,7 +253,8 @@ export class ChatController {
         this.apiMessages.set(convId, merged)
         await saveThreadCache(convId, merged)
         chat.msgs = mapApiMessages(merged, chat)
-        this.emitIfChanged('any', convId)
+        this.lastConversationsSig = this.conversationsSignature()
+        this.emit()
         if (opts.markRead) this.scheduleMarkRead(convId)
       } catch (e) {
         this.error = e instanceof Error ? e.message : String(e)
@@ -328,7 +311,7 @@ export class ChatController {
       const c = this.chats.find((x) => x.id === convId)
       if (c) c.unread = 0
       delete this.unreadAnchor[convId]
-      this.emitIfChanged('list')
+      this.emitListIfChanged()
     }, 350)
   }
 
@@ -337,7 +320,7 @@ export class ChatController {
       const convs = await fetchConversations()
       this.setConversationsFromApi(convs)
       await saveConversationsCache(convs)
-      this.emitIfChanged('list')
+      this.emitListIfChanged()
     } catch {
       /* ignore background refresh errors */
     }
@@ -371,7 +354,8 @@ export class ChatController {
       chat.unread = (chat.unread || 0) + 1
     }
 
-    this.emitIfChanged('any', convId)
+    this.lastConversationsSig = this.conversationsSignature()
+    this.emit()
   }
 
   private onRealtime(ev: RealtimeEvent): void {
@@ -405,7 +389,7 @@ export class ChatController {
       if (chat) {
         chat.unread = 0
         if (this.activeChatId === readId) delete this.unreadAnchor[readId]
-        this.emitIfChanged('list')
+        this.emitListIfChanged()
       }
     }
   }
