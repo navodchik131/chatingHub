@@ -152,7 +152,7 @@ export class ChatController {
       if (document.visibilityState !== 'visible') return
       void this.refreshConversations()
       if (this.activeChatId != null) void this.syncThread(this.activeChatId)
-    }, 20_000)
+    }, 8_000)
   }
 
   private setConversationsFromApi(rows: ApiConversation[]): void {

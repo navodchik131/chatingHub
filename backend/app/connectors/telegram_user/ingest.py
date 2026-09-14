@@ -16,10 +16,43 @@ from app.db.models import Conversation, Message, MessageDirection, Platform
 from app.db.repo import get_or_create_conversation, get_user_with_billing
 from app.db.session import SessionLocal
 from app.services.chat_ingest import persist_inbound_chat_message
+from app.services.chat_messages import message_to_out
 from app.services.companion_bot.schedule import schedule_companion_reply
+from app.services.realtime import hub
 from app.services.translation import translate_to_russian
 
 log = logging.getLogger(__name__)
+
+
+async def _defer_inbound_translation(
+    *,
+    owner_user_id: int,
+    conv_id: int,
+    message_id: int,
+    text: str,
+) -> None:
+    """Перевод после broadcast — сообщение видно в Unibox сразу с оригиналом."""
+    try:
+        translated, src_lang = await asyncio.wait_for(translate_to_russian(text), timeout=15.0)
+    except Exception:
+        log.warning("telegram_user deferred translate failed msg=%s", message_id)
+        return
+    async with SessionLocal() as session:
+        row = await session.get(Message, message_id)
+        conv = await session.get(Conversation, conv_id)
+        if not row or not conv:
+            return
+        row.text_translated = translated or None
+        if src_lang and src_lang != "unknown":
+            conv.user_lang = src_lang
+        await session.commit()
+        await session.refresh(row)
+        await session.refresh(row, attribute_names=["attachments"])
+        payload = message_to_out(row, owner_id=owner_user_id).model_dump(mode="json")
+    await hub.broadcast_user(
+        owner_user_id,
+        {"type": "message_updated", "conversation_id": conv_id, "message": payload},
+    )
 
 
 def _display_name(user: TlUser | None) -> str:
@@ -97,6 +130,7 @@ async def ingest_telegram_user_dm(
     if not text and not image_bytes:
         return
 
+    defer_translate = False
     async with SessionLocal() as session:
         user = await get_user_with_billing(session, owner_user_id)
         if not user:
@@ -114,17 +148,8 @@ async def ingest_telegram_user_dm(
             studio_model_id=studio_model_id,
         )
 
-        if text and not conv.auto_translate_disabled:
-            try:
-                translated, src_lang = await asyncio.wait_for(
-                    translate_to_russian(text),
-                    timeout=6.0,
-                )
-            except asyncio.TimeoutError:
-                log.warning("telegram_user translate timeout conv=%s", conv.id)
-                translated, src_lang = "", None
-        else:
-            translated, src_lang = "", None
+        defer_translate = bool(text and not conv.auto_translate_disabled)
+        translated, src_lang = "", None
 
         reply_to_message_id: int | None = None
         if message.reply_to and getattr(message.reply_to, "reply_to_msg_id", None):
@@ -164,7 +189,7 @@ async def ingest_telegram_user_dm(
             conv=conv,
             display=display,
             text_original=text,
-            text_translated=translated if text and not conv.auto_translate_disabled else None,
+            text_translated=translated if translated else None,
             src_lang=src_lang,
             meta=meta,
             image_bytes=image_bytes,
@@ -177,6 +202,16 @@ async def ingest_telegram_user_dm(
             return
         trigger_message_id = int(payload["id"])
         await session.commit()
+
+    if defer_translate:
+        asyncio.create_task(
+            _defer_inbound_translation(
+                owner_user_id=owner_user_id,
+                conv_id=conv_id,
+                message_id=trigger_message_id,
+                text=text,
+            )
+        )
 
     schedule_companion_reply(
         owner_user_id=owner_user_id,

@@ -24,6 +24,7 @@ _TELEGRAM_USER_LEASE_KEY = "telegram_user_worker"
 _worker_refresh = asyncio.Event()
 _running_clients: dict[int, object] = {}
 _running_tasks: dict[int, asyncio.Task[None]] = {}
+_heartbeat_tasks: dict[int, asyncio.Task[None]] = {}
 # Сессии в процессе login — worker не должен держать тот же auth key
 _login_blocked: set[int] = set()
 
@@ -68,6 +69,13 @@ async def _load_active_sessions() -> list[TelegramUserSession]:
 
 
 async def _stop_client(session_id: int) -> None:
+    hb = _heartbeat_tasks.pop(session_id, None)
+    if hb is not None:
+        hb.cancel()
+        try:
+            await hb
+        except asyncio.CancelledError:
+            pass
     task = _running_tasks.pop(session_id, None)
     client = _running_clients.pop(session_id, None)
     if client is not None:
@@ -81,6 +89,38 @@ async def _stop_client(session_id: int) -> None:
             await task
         except asyncio.CancelledError:
             pass
+
+
+async def _heartbeat_loop(session_id: int, client) -> None:
+    """Пинг + catch_up: ловим «зомби»-соединения и пропущенные апдейты без 5‑мин задержки."""
+    ticks = 0
+    try:
+        while session_id in _running_clients and _running_clients.get(session_id) is client:
+            await asyncio.sleep(25)
+            if session_id not in _running_clients:
+                return
+            if not getattr(client, "is_connected", lambda: False)():
+                log.warning("telegram_user heartbeat: disconnected session=%s", session_id)
+                break
+            try:
+                await asyncio.wait_for(client.get_me(), timeout=20)
+            except Exception:
+                log.warning("telegram_user heartbeat: ping failed session=%s", session_id)
+                break
+            ticks += 1
+            if ticks >= 2:
+                ticks = 0
+                try:
+                    await asyncio.wait_for(client.catch_up(), timeout=40)
+                except Exception:
+                    log.warning("telegram_user heartbeat: catch_up failed session=%s", session_id)
+    except asyncio.CancelledError:
+        raise
+    finally:
+        if session_id in _running_clients:
+            log.warning("telegram_user heartbeat: forcing reconnect session=%s", session_id)
+            asyncio.create_task(_stop_client(session_id))
+            request_telegram_user_worker_refresh()
 
 
 async def _start_client(row: TelegramUserSession) -> None:
@@ -157,6 +197,7 @@ async def _start_client(row: TelegramUserSession) -> None:
                 request_telegram_user_worker_refresh()
 
         _running_tasks[session_id] = asyncio.create_task(_pump())
+        _heartbeat_tasks[session_id] = asyncio.create_task(_heartbeat_loop(session_id, client))
 
         async with SessionLocal() as session:
             db_row = await session.get(TelegramUserSession, session_id)
@@ -249,8 +290,11 @@ async def telegram_user_worker_loop() -> None:
                 await _sync_clients()
         except Exception:
             log.exception("telegram_user worker sync failed")
+        active_rows = await _load_active_sessions()
+        connected = sum(1 for row in active_rows if get_worker_client(row.id) is not None)
+        wait_s = 2.0 if connected < len(active_rows) else 5.0
         try:
-            await asyncio.wait_for(_worker_refresh.wait(), timeout=5.0)
+            await asyncio.wait_for(_worker_refresh.wait(), timeout=wait_s)
             _worker_refresh.clear()
         except asyncio.TimeoutError:
             pass
