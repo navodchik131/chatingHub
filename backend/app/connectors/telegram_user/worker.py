@@ -40,6 +40,7 @@ async def block_telegram_user_worker_session(session_id: int) -> None:
 
 def unblock_telegram_user_worker_session(session_id: int) -> None:
     _login_blocked.discard(session_id)
+    request_telegram_user_worker_refresh()
 
 
 def get_worker_client(session_id: int):
@@ -136,6 +137,11 @@ async def _start_client(row: TelegramUserSession) -> None:
 
         _running_clients[session_id] = client
         me = await client.get_me()
+        # Подтянуть апдейты, пропущенные пока worker был offline.
+        try:
+            await client.catch_up()
+        except Exception:
+            log.exception("telegram_user worker catch_up failed session=%s", session_id)
 
         async def _pump() -> None:
             try:
@@ -216,7 +222,7 @@ async def telegram_user_worker_loop() -> None:
         except Exception:
             log.exception("telegram_user worker sync failed")
         try:
-            await asyncio.wait_for(_worker_refresh.wait(), timeout=20.0)
+            await asyncio.wait_for(_worker_refresh.wait(), timeout=5.0)
             _worker_refresh.clear()
         except asyncio.TimeoutError:
             pass

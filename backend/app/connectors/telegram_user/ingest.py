@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -78,7 +79,14 @@ async def ingest_telegram_user_dm(
     from app.db.models import MessageAttachmentKind
 
     if has_media and client is not None:
-        media = await download_telegram_user_media(message, client)
+        try:
+            media = await asyncio.wait_for(
+                download_telegram_user_media(message, client),
+                timeout=12.0,
+            )
+        except asyncio.TimeoutError:
+            log.warning("telegram_user media download timeout msg=%s", message.id)
+            media = None
         if media:
             image_bytes, image_mime, is_video_note = media
             if is_video_note:
@@ -107,7 +115,14 @@ async def ingest_telegram_user_dm(
         )
 
         if text and not conv.auto_translate_disabled:
-            translated, src_lang = await translate_to_russian(text)
+            try:
+                translated, src_lang = await asyncio.wait_for(
+                    translate_to_russian(text),
+                    timeout=6.0,
+                )
+            except asyncio.TimeoutError:
+                log.warning("telegram_user translate timeout conv=%s", conv.id)
+                translated, src_lang = "", None
         else:
             translated, src_lang = "", None
 

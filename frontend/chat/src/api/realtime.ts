@@ -5,7 +5,10 @@ export type RealtimeConnection = {
   close: () => void
 }
 
-export function connectRealtime(onEvent: (ev: RealtimeEvent) => void): RealtimeConnection {
+export function connectRealtime(
+  onEvent: (ev: RealtimeEvent) => void,
+  onOpen?: () => void,
+): RealtimeConnection {
   const token = getToken()
   if (!token) return { close: () => {} }
 
@@ -19,6 +22,7 @@ export function connectRealtime(onEvent: (ev: RealtimeEvent) => void): RealtimeC
     ws = new WebSocket(`${proto}://${window.location.host}/api/ws?token=${encodeURIComponent(token)}`)
     ws.addEventListener('open', () => {
       retryMs = 1500
+      onOpen?.()
     })
     ws.addEventListener('message', (ev) => {
       try {

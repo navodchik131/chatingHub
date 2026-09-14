@@ -79,6 +79,8 @@ export class ChatController {
   private listeners = new Set<ChatListener>()
   private ws: RealtimeConnection | null = null
   private readTimer: ReturnType<typeof setTimeout> | null = null
+  /** Fallback если WS пропустил new_message. */
+  private pollTimer: ReturnType<typeof setInterval> | null = null
   private threadLoads = new Map<number, Promise<void>>()
   private apiMessages = new Map<number, ApiMessage[]>()
   /** Есть ли ещё сообщения старше текущей порции. */
@@ -132,13 +134,32 @@ export class ChatController {
     }
 
     this.ws?.close()
-    this.ws = connectRealtime((msg) => this.onRealtime(msg))
+    this.ws = connectRealtime(
+      (msg) => this.onRealtime(msg),
+      () => {
+        void this.refreshConversations()
+        if (this.activeChatId != null) void this.syncThread(this.activeChatId)
+      },
+    )
+    this.startPollFallback()
   }
 
   destroy(): void {
     this.ws?.close()
     this.ws = null
     if (this.readTimer) clearTimeout(this.readTimer)
+    if (this.pollTimer) clearInterval(this.pollTimer)
+    this.pollTimer = null
+  }
+
+  /** Периодическая подтяжка списка/треда — страховка при обрыве WS или MTProto gap. */
+  private startPollFallback(): void {
+    if (this.pollTimer) clearInterval(this.pollTimer)
+    this.pollTimer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void this.refreshConversations()
+      if (this.activeChatId != null) void this.syncThread(this.activeChatId)
+    }, 20_000)
   }
 
   private setConversationsFromApi(rows: ApiConversation[]): void {
@@ -154,13 +175,31 @@ export class ChatController {
   }
 
   private async prefetchAvatars(rows: ApiConversation[]): Promise<void> {
-    for (const c of rows.slice(0, 40)) {
-      // telegram_user: аватар качается on-demand с MTProto — URL есть даже без has_avatar
-      const tryAvatar = c.avatar_url
-        || (c.platform === 'telegram_user' ? `/api/conversations/${c.id}/avatar` : null)
-      if (!tryAvatar && !c.has_avatar) continue
-      void this.resolveAvatar(c.id, tryAvatar)
+    const slice = rows.slice(0, 40)
+    const other = slice.filter((c) => c.platform !== 'telegram_user')
+    const tgUser = slice.filter((c) => c.platform === 'telegram_user')
+    // telegram_user аватар = MTProto; не душим worker пачкой из 40 запросов.
+    await this.prefetchAvatarsLimited(other, 4)
+    if (tgUser.length) {
+      window.setTimeout(() => void this.prefetchAvatarsLimited(tgUser, 2), 10_000)
     }
+  }
+
+  private async prefetchAvatarsLimited(rows: ApiConversation[], concurrency: number): Promise<void> {
+    const queue = [...rows]
+    const worker = async (): Promise<void> => {
+      while (queue.length) {
+        const c = queue.shift()
+        if (!c) break
+        const tryAvatar = c.avatar_url
+          || (c.platform === 'telegram_user' ? `/api/conversations/${c.id}/avatar` : null)
+        if (!tryAvatar && !c.has_avatar) continue
+        await this.resolveAvatar(c.id, tryAvatar)
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.max(1, concurrency) }, () => worker()),
+    )
   }
 
   async resolveAvatar(convId: number, url?: string | null): Promise<string | null> {
