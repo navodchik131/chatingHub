@@ -26,6 +26,8 @@ STARS_BUSINESS_OPERATOR_TELEGRAM_IDS=123456789,987654321
 
 Webhook: `POST /api/webhooks/telegram-stars/{STARS_BUSINESS_WEBHOOK_SECRET}`
 
+`allowed_updates` включает `callback_query` (кнопки мастера /paid).
+
 ## OPERATOR
 
 - `/paid` — фото/видео → цена ⭐ → выбор фана (список или пересылка сообщения) → подтверждение.

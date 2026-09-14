@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 
 STARS_BUSINESS_ALLOWED_UPDATES = [
     "message",
+    "callback_query",  # inline-кнопки OPERATOR (/paid, подтверждение)
     "business_connection",
     "business_message",
     "edited_business_message",

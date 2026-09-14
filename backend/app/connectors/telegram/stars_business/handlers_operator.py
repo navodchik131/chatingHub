@@ -233,8 +233,12 @@ async def paid_got_stars(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(OperatorPaidStates.waiting_recipient, F.data.startswith("sb:fan:"))
 async def paid_pick_fan(callback: CallbackQuery, state: FSMContext) -> None:
-    fan_id = int((callback.data or "").split(":")[-1])
-    await _goto_confirm(callback, state, fan_chat_id=fan_id)
+    try:
+        fan_id = int((callback.data or "").split(":")[-1])
+        await _goto_confirm(callback, state, fan_chat_id=fan_id)
+    except Exception:
+        log.exception("stars business paid_pick_fan failed")
+        await callback.answer("Ошибка выбора фана. Попробуйте /paid снова.", show_alert=True)
 
 
 @router.message(OperatorPaidStates.waiting_recipient, F.text)
