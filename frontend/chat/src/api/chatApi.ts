@@ -171,12 +171,16 @@ export async function fetchPaidMediaOptions(convId: number): Promise<PaidMediaOp
 
 export async function sendPaidMediaUpload(
   convId: number,
-  file: File,
+  files: File[],
   starCount: number,
   caption?: string,
 ): Promise<ApiMessage> {
+  const list = files.slice(0, 10)
+  if (!list.length) throw new Error('Выберите файл')
   const fd = new FormData()
-  fd.append('media', file, file.name || 'media')
+  for (const file of list) {
+    fd.append('media', file, file.name || 'media')
+  }
   fd.append('star_count', String(Math.max(1, Math.min(25000, starCount))))
   if (caption?.trim()) fd.append('caption', caption.trim())
   const res = await apiFetch(`/api/conversations/${convId}/send-paid-media-upload`, {

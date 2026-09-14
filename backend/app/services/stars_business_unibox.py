@@ -43,6 +43,7 @@ log = logging.getLogger(__name__)
 # operator_tg_user_id=0 — заказ из кабинета, не из Telegram-бота оператора
 UNIBOX_OPERATOR_TG_ID = 0
 _MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+_MAX_ALBUM_PHOTOS = 10
 
 
 @dataclass
@@ -270,6 +271,26 @@ def _ext_for_upload(mime: str | None, filename: str | None) -> tuple[str, str]:
     raise HTTPException(status_code=400, detail="Поддерживаются только фото или видео")
 
 
+def _save_upload_part(
+    *,
+    owner_tg_user_id: int,
+    raw: bytes,
+    content_type: str | None,
+    filename: str | None,
+) -> tuple[str, str]:
+    """Сохраняет один upload на диск; возвращает (relative_path, media_type)."""
+    if not raw:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 20 МБ)")
+    media_type, ext = _ext_for_upload(content_type, filename)
+    fname = f"{uuid.uuid4().hex}{ext}"
+    dest: Path = owner_media_dir(owner_tg_user_id) / fname
+    dest.write_bytes(raw)
+    rel = relative_media_path(owner_tg_user_id, fname)
+    return rel, media_type
+
+
 async def send_unibox_paid_upload(
     session: AsyncSession,
     *,
@@ -277,30 +298,49 @@ async def send_unibox_paid_upload(
     conv: Conversation,
     caption: str | None,
     star_count: int,
-    raw: bytes,
-    content_type: str | None,
-    filename: str | None,
+    uploads: list[tuple[bytes, str | None, str | None]],
 ) -> tuple[int, int]:
-    """Paid media с диска оператора (не из медиатеки)."""
+    """Paid media с диска: одно видео или альбом до 10 фото."""
     oid, conn = await _assert_conv_and_conn(session, viewer=viewer, conv=conv)
     stars = max(1, min(25_000, int(star_count)))
-    if not raw:
-        raise HTTPException(status_code=400, detail="Пустой файл")
-    if len(raw) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 20 МБ)")
+    if not uploads:
+        raise HTTPException(status_code=400, detail="Нужен хотя бы один файл")
+    if len(uploads) > _MAX_ALBUM_PHOTOS:
+        raise HTTPException(status_code=400, detail=f"Не больше {_MAX_ALBUM_PHOTOS} фото в альбоме")
 
-    media_type, ext = _ext_for_upload(content_type, filename)
-    fname = f"{uuid.uuid4().hex}{ext}"
-    dest: Path = owner_media_dir(int(conn.owner_tg_user_id)) / fname
-    dest.write_bytes(raw)
-    rel = relative_media_path(int(conn.owner_tg_user_id), fname)
+    owner_tg = int(conn.owner_tg_user_id)
+    rel_paths: list[str] = []
+    types: list[str] = []
+
+    for raw, content_type, filename in uploads:
+        rel, media_type = _save_upload_part(
+            owner_tg_user_id=owner_tg,
+            raw=raw,
+            content_type=content_type,
+            filename=filename,
+        )
+        rel_paths.append(rel)
+        types.append(media_type)
+
+    if len(rel_paths) > 1:
+        if any(t != "photo" for t in types):
+            raise HTTPException(
+                status_code=400,
+                detail="Альбом paid media — только фото (до 10). Видео отправляйте одним файлом.",
+            )
+        label = f"Альбом · {len(rel_paths)} фото"
+        media_type = "photo"
+    else:
+        media_type = types[0]
+        fn = (uploads[0][2] or "Файл").strip()[:64] or "Файл"
+        label = fn
 
     media = ResolvedPaidMedia(
-        relative_paths=[rel],
+        relative_paths=rel_paths,
         media_type=media_type,
         asset_ids=[],
         star_count=stars,
-        label_name=(filename or "Файл").strip()[:64] or "Файл",
+        label_name=label,
         pack_id=None,
         asset_id=None,
     )

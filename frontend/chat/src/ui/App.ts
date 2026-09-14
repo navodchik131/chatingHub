@@ -933,7 +933,8 @@ export class UniboxApp {
     const body = `<p class="tr-hint">Подпись — из поля ввода${captionHint ? `: «${esc(captionHint.slice(0, 80))}»` : ''}.</p>
       <div class="paid-upload-block">
         <div class="dr-lab" style="padding:4px 0 8px;font-size:11px;color:var(--txt-2)">С устройства</div>
-        <input type="file" id="paidUploadFile" accept="image/*,video/*" class="paid-upload-inp" />
+        <input type="file" id="paidUploadFile" accept="image/*,video/*" multiple class="paid-upload-inp" />
+        <div class="tr-hint" style="margin-top:6px;font-size:11px">До 10 фото одним альбомом или одно видео</div>
         <div class="paid-upload-row">
           <input type="number" id="paidUploadStars" class="paid-upload-inp" min="1" max="25000" placeholder="Цена ⭐" />
           <button type="button" class="paid-upload-send" id="paidUploadSend">Отправить</button>
@@ -956,10 +957,19 @@ export class UniboxApp {
       wrap.querySelector('#paidUploadSend')?.addEventListener('click', () => {
         const fileInp = wrap.querySelector('#paidUploadFile') as HTMLInputElement | null
         const starsInp = wrap.querySelector('#paidUploadStars') as HTMLInputElement | null
-        const file = fileInp?.files?.[0]
+        const picked = fileInp?.files ? [...fileInp.files] : []
         const stars = Math.max(1, Math.min(25000, parseInt(starsInp?.value || '0', 10) || 0))
-        if (!file) {
+        if (!picked.length) {
           this.toast('Выберите фото или видео')
+          return
+        }
+        if (picked.length > 10) {
+          this.toast('Не больше 10 фото в альбоме')
+          return
+        }
+        const hasVideo = picked.some((f) => (f.type || '').startsWith('video/'))
+        if (picked.length > 1 && hasVideo) {
+          this.toast('Альбом — только фото. Видео — одним файлом.')
           return
         }
         if (!starsInp?.value || stars < 1) {
@@ -968,7 +978,7 @@ export class UniboxApp {
         }
         wrap.remove()
         void this.ctrl
-          .sendPaidMediaUploadMessage(c.id, file, stars, captionHint || undefined)
+          .sendPaidMediaUploadMessage(c.id, picked, stars, captionHint || undefined)
           .then(afterSend)
           .catch((e) => this.toast(e instanceof Error ? e.message : String(e)))
       })

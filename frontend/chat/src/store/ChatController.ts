@@ -435,13 +435,13 @@ export class ChatController {
   /** Paid media с устройства (цена ⭐ в форме). */
   async sendPaidMediaUploadMessage(
     convId: number,
-    file: File,
+    files: File[],
     starCount: number,
     caption?: string,
   ): Promise<void> {
     const chat = this.chats.find((c) => c.id === convId)
     if (!chat) return
-    const sent = await sendPaidMediaUpload(convId, file, starCount, caption)
+    const sent = await sendPaidMediaUpload(convId, files, starCount, caption)
     const merged = mergeApiMessages(this.apiMessages.get(convId) || [], [sent])
     this.apiMessages.set(convId, merged)
     chat.msgs = mapApiMessages(merged, chat)

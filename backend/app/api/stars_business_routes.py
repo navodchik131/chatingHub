@@ -219,11 +219,11 @@ async def conversation_send_paid_media_upload(
     conv_id: int,
     star_count: int = Form(..., ge=1, le=25_000),
     caption: str | None = Form(default=None),
-    media: UploadFile = File(...),
+    media: list[UploadFile] = File(...),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MessageOut:
-    """Фото/видео с устройства + цена ⭐ (без медиатеки)."""
+    """Фото/видео с устройства + цена ⭐; до 10 фото одним альбомом."""
     assert_permission(user, PERM_CHAT)
     oid = workspace_owner_id(user)
     conv = await session.get(Conversation, conv_id)
@@ -231,16 +231,19 @@ async def conversation_send_paid_media_upload(
         raise HTTPException(status_code=404, detail="conversation not found")
     await require_conversation_chat_access(session, user, conv_id, oid)
 
-    raw = await media.read()
+    if not media:
+        raise HTTPException(status_code=400, detail="Нужен хотя бы один файл")
+    uploads: list[tuple[bytes, str | None, str | None]] = []
+    for part in media:
+        raw = await part.read()
+        uploads.append((raw, part.content_type, part.filename))
     msg_id, _order_id = await send_unibox_paid_upload(
         session,
         viewer=user,
         conv=conv,
         caption=caption,
         star_count=star_count,
-        raw=raw,
-        content_type=media.content_type,
-        filename=media.filename,
+        uploads=uploads,
     )
     await session.commit()
     from app.db.models import Message
