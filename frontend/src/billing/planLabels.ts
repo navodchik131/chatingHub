@@ -32,18 +32,34 @@ export function companionAllowedForPlan(me: BillingMeLike): boolean {
   const plan = normalizeBillingPlan(me.billing_plan)
   if (plan !== 'standard' && plan !== 'pro') return false
   if ((me.plan_tier || '').toLowerCase() !== 'studio') return false
-  return (me.subscription_status || '').toLowerCase() === 'active'
+  return subscriptionPaidActive(me)
+}
+
+export function subscriptionPeriodExpired(me: BillingMeLike | null | undefined): boolean {
+  if (!me?.subscription_period_end) return false
+  const end = new Date(me.subscription_period_end).getTime()
+  return !Number.isNaN(end) && end < Date.now()
+}
+
+/** UI: active | trialing | expired | inactive (согласовано с public_subscription_status на API). */
+export function subscriptionUiState(me: BillingMeLike | null | undefined): 'active' | 'trialing' | 'expired' | 'inactive' {
+  if (!me) return 'inactive'
+  const st = (me.subscription_status || '').toLowerCase()
+  if (st === 'expired') return 'expired'
+  if (st === 'active') return subscriptionPeriodExpired(me) ? 'expired' : 'active'
+  if (st === 'trialing') return subscriptionPeriodExpired(me) ? 'expired' : 'trialing'
+  return 'inactive'
+}
+
+/** Оплаченная подписка, период не истёк (как subscription_is_paid_active на сервере). */
+export function subscriptionPaidActive(me: BillingMeLike | null | undefined): boolean {
+  return subscriptionUiState(me) === 'active'
 }
 
 /** Соответствует серверной subscription_active: active/trialing и период не истёк. */
 export function subscriptionCoversStudioAccess(me: BillingMeLike): boolean {
-  const st = (me.subscription_status || '').toLowerCase()
-  if (st !== 'active' && st !== 'trialing') return false
-  if (me.subscription_period_end) {
-    const end = new Date(me.subscription_period_end).getTime()
-    if (!Number.isNaN(end) && end < Date.now()) return false
-  }
-  return true
+  const s = subscriptionUiState(me)
+  return s === 'active' || s === 'trialing'
 }
 
 export function planDisplayShort(me: BillingMeLike | null | undefined): string {
@@ -83,7 +99,25 @@ export function studioAccessAllowed(me: BillingMeLike): boolean {
 /** Покупка кредитов — только при активной оплаченной подписке. */
 export function canPurchaseCredits(me: BillingMeLike | null | undefined): boolean {
   if (!me) return false
-  return (me.subscription_status || '').toLowerCase() === 'active'
+  return subscriptionPaidActive(me)
+}
+
+/** Бейдж статуса подписки в кабинете. */
+export function subscriptionBadgeProps(
+  me: BillingMeLike | null | undefined,
+  lang: 'ru' | 'en',
+): { tone: 'active' | 'warn' | 'dim'; text: string } {
+  const state = subscriptionUiState(me)
+  if (state === 'active') {
+    return { tone: 'active', text: lang === 'ru' ? 'АКТИВНА' : 'ACTIVE' }
+  }
+  if (state === 'trialing') {
+    return { tone: 'warn', text: lang === 'ru' ? 'ПРОБНЫЙ ПЕРИОД' : 'TRIAL' }
+  }
+  if (state === 'expired') {
+    return { tone: 'warn', text: lang === 'ru' ? 'ИСТЕКЛА' : 'EXPIRED' }
+  }
+  return { tone: 'warn', text: lang === 'ru' ? 'НЕТ ПОДПИСКИ' : 'NO SUB' }
 }
 
 export function billingPlanKindLabel(plan: CreditsPlanKind | string): string {

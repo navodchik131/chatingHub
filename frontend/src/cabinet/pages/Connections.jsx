@@ -13,6 +13,7 @@ import { copyText } from '../utils/clipboard';
 import { isPlausibleTelegramBotToken } from '../api/helpers';
 import * as actions from '../api/actions';
 import { goToAdmin } from '../../marketing/workspaceEntry';
+import { companionAllowedForPlan } from '../../billing/planLabels';
 
 const connIcons = { tg: IcoTg, wave: IcoWave, heart: IcoHeart, gift: IcoGift, cam: IcoCam, bell: IcoBell };
 
@@ -94,10 +95,7 @@ function CompanionConnectionEditor({
   );
   const [goalText, setGoalText] = useState(raw?.companion_goal_text || '');
   const [goalLink, setGoalLink] = useState(raw?.companion_goal_link || '');
-  const companionAllowed = cabinet?.me?.companion_allowed === true
-    || (cabinet?.me?.companion_allowed == null
-      && String(cabinet?.me?.plan_tier || '').toLowerCase() === 'studio'
-      && String(cabinet?.me?.subscription_status || '').toLowerCase() === 'active');
+  const companionAllowed = companionAllowedForPlan(cabinet?.me || {});
 
   if (!raw) return null;
 

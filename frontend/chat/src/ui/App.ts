@@ -7,7 +7,7 @@ import type { PersonaFilter } from '../cache/threadCache'
 import type { StudioModel, UiChat, UiMessage } from '../types'
 import { esc, initials, avatarGradient, plural } from '../lib/format'
 import { platformMeta, platformIconImg, SOURCE_TABS } from '../lib/platforms'
-import { outboundLangOptions, replyLangDisplay, translationLineLabel } from '../lib/lang'
+import { outboundLangOptions, outboundLangUiValue, replyLangDisplay, translationLineLabel } from '../lib/lang'
 import { previewText, chatSubTitle, chatListPreview, chatListTime } from '../lib/mapMessage'
 import { REACTION_EMOJIS } from '../lib/reactions'
 import { loadUiSettings, saveUiSettings } from '../cache/threadCache'
@@ -1000,7 +1000,7 @@ export class UniboxApp {
 
   private openTranslation(c: UiChat): void {
     const auto = !c.raw.auto_translate_disabled
-    const outboundVal = (c.raw.outbound_lang || '').trim() ? String(c.raw.outbound_lang).trim().toLowerCase() : 'auto'
+    const outboundVal = outboundLangUiValue(c.raw.outbound_lang)
     const langOpts = outboundLangOptions(c.raw.user_lang)
     const body = `
       <div class="f-row" data-tr="toggle"><div class="mid"><b>Автоперевод</b>
@@ -1011,7 +1011,7 @@ export class UniboxApp {
         <select class="f-in tr-lang-sel" id="outLangSel">
           ${langOpts.map((o) => `<option value="${esc(o.value)}" ${o.value === outboundVal ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
         </select>
-        <p class="tr-hint">«Авто» — по языку последних сообщений фана (${esc(replyLangDisplay(c.raw))})</p>
+        <p class="tr-hint">По умолчанию English. «Авто» — по языку фана (${esc(replyLangDisplay({ user_lang: c.raw.user_lang, outbound_lang: 'auto' }))}).</p>
       ` : ''}`
     this.modal('Перевод', body, (el) => {
       el.querySelector('[data-tr="toggle"]')?.addEventListener('click', () => {
@@ -1024,9 +1024,12 @@ export class UniboxApp {
       })
       el.querySelector('#outLangSel')?.addEventListener('change', (ev) => {
         const v = (ev.target as HTMLSelectElement).value
-        void this.ctrl.updateTranslation(c.id, { outbound_lang: v === 'auto' ? null : v })
-        c.raw.outbound_lang = v === 'auto' ? null : v
-        this.renderChat()
+        const apiVal = v === 'en' ? null : v
+        void this.ctrl.updateTranslation(c.id, { outbound_lang: apiVal }).then(() => {
+          const chat = this.ctrl.chats.find((x) => x.id === c.id)
+          if (chat) c.raw = chat.raw
+          this.renderAll()
+        })
       })
     })
   }

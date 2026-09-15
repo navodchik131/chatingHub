@@ -43,7 +43,13 @@ from app.services.creator_donations import (
     update_creator_donation_link,
     upload_creator_donation_cover,
 )
-from app.services.workspace import is_workspace_owner, workspace_owner_id
+from app.services.workspace import (
+    PERM_BILLING,
+    PERM_CHAT,
+    has_permission,
+    is_workspace_owner,
+    workspace_owner_id,
+)
 
 router = APIRouter(prefix="/creator-donations", tags=["creator-donations"])
 
@@ -53,12 +59,21 @@ def _assert_owner(user: User) -> None:
         raise HTTPException(status_code=403, detail="owner only")
 
 
+def _assert_donation_read(user: User) -> None:
+    """Просмотр донатов workspace: владелец или оператор с «Чат» / «Финансы»."""
+    if is_workspace_owner(user):
+        return
+    if has_permission(user, PERM_CHAT) or has_permission(user, PERM_BILLING):
+        return
+    raise HTTPException(status_code=403, detail="Недостаточно прав для просмотра донатов")
+
+
 @router.get("", response_model=list[CreatorDonationLinkOut])
 async def creator_donations_list(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[CreatorDonationLinkOut]:
-    _assert_owner(user)
+    _assert_donation_read(user)
     rows = await list_creator_donation_links(session, viewer=user)
     return [CreatorDonationLinkOut.model_validate(r) for r in rows]
 
@@ -81,7 +96,7 @@ async def creator_donations_events(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[CreatorDonationEventOut]:
-    _assert_owner(user)
+    _assert_donation_read(user)
     rows = await list_creator_donation_events(session, viewer=user, link_id=link_id, limit=limit)
     return [CreatorDonationEventOut.model_validate(r) for r in rows]
 
@@ -91,7 +106,7 @@ async def creator_donations_overview(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CreatorDonationOverviewOut:
-    _assert_owner(user)
+    _assert_donation_read(user)
     data = await creator_donation_overview(session, user_id=workspace_owner_id(user))
     return CreatorDonationOverviewOut.model_validate(data)
 
@@ -171,7 +186,7 @@ async def creator_donations_get(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CreatorDonationLinkOut:
-    _assert_owner(user)
+    _assert_donation_read(user)
     row = await get_creator_donation_link(session, viewer=user, link_id=link_id)
     totals = await aggregate_donation_totals(session, link_ids=[row.id])
     return CreatorDonationLinkOut.model_validate(_link_dict(row, totals=totals.get(row.id)))

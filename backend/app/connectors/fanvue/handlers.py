@@ -179,10 +179,9 @@ async def ingest_fanvue_message_received(
 
             reactions_json = reactions_to_json(parsed)
 
-    if not conv.user_lang:
-        conv.user_lang = src_lang
-    elif src_lang and src_lang != "unknown":
-        conv.user_lang = src_lang
+    from app.services.conversation_outbound_lang import maybe_update_detected_user_lang
+
+    maybe_update_detected_user_lang(conv, src_lang)
     conv.updated_at = datetime.now(timezone.utc)
 
     meta_obj: dict[str, Any] = {

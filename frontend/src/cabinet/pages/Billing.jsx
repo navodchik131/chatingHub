@@ -16,7 +16,7 @@ import {
 import { copyText } from '../utils/clipboard';
 import { fetchUsdRate, formatPlanPrice, formatCreditOneLiner, fillPriceTemplate, getCachedRubPerUsd } from '../utils/money';
 import { cabinetPlanFeatures } from '../utils/planFeatures';
-import { canPurchaseCredits } from '../../billing/planLabels';
+import { canPurchaseCredits, subscriptionBadgeProps } from '../../billing/planLabels';
 
 function normalizePlan(raw) {
   const p = String(raw || 'standard').toLowerCase();
@@ -79,7 +79,7 @@ export default function Billing() {
   const demoGrant = demoGenerationsGrant(me);
   const demoLabel = formatDemoCounterLong(lang, demoRemaining, demoGrant);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
-  const subscriptionActive = String(me?.subscription_status || '').toLowerCase() === 'active';
+  const subBadge = subscriptionBadgeProps(me, lang === 'en' ? 'en' : 'ru');
   const canBuyCredits = canPurchaseCredits(me) && (yookassaAvailable || tributeAvailable);
   const usageBars = mapUsageBars(me, lang);
   const historyRows = mapCreditHistory(creditHistory, lang);
@@ -140,7 +140,7 @@ export default function Billing() {
           <Eyebrow size={9} style={{ marginBottom: 10 }}>{t.currentPlan}</Eyebrow>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{ fontFamily: font.display, fontWeight: 600, fontSize: 18 }}>{planName}</span>
-            <StatusChip tone={subscriptionActive ? 'active' : 'warn'}>{subscriptionActive ? t.active : (lang === 'ru' ? 'НЕТ ПОДПИСКИ' : 'NO SUB')}</StatusChip>
+            <StatusChip tone={subBadge.tone}>{subBadge.text}</StatusChip>
           </div>
           <div style={{ fontSize: 11.5, color: color.textDim, marginBottom: 14 }}>
             {me?.subscription_period_end ? `${t.until} ${new Date(me.subscription_period_end).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-GB')}` : '—'}

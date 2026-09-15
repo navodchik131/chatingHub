@@ -366,31 +366,49 @@ async def list_creator_donation_events(
 ) -> list[dict[str, Any]]:
     owner_id = workspace_owner_id(viewer)
     stmt = (
-        select(CreatorDonationEvent)
+        select(CreatorDonationEvent, CreatorDonationLink.title)
+        .join(
+            CreatorDonationLink,
+            CreatorDonationLink.id == CreatorDonationEvent.creator_donation_link_id,
+        )
         .where(CreatorDonationEvent.user_id == owner_id)
         .order_by(CreatorDonationEvent.occurred_at.desc())
         .limit(max(1, min(limit, 500)))
     )
     if link_id is not None:
         stmt = stmt.where(CreatorDonationEvent.creator_donation_link_id == link_id)
-    rows = (await session.scalars(stmt)).all()
-    return [
-        {
-            "id": r.id,
-            "creator_donation_link_id": r.creator_donation_link_id,
-            "studio_model_id": r.studio_model_id,
-            "event_name": r.event_name,
-            "amount_minor": r.amount_minor,
-            "currency": r.currency,
-            "payer_telegram_user_id": r.payer_telegram_user_id,
-            "payout_status": r.payout_status,
-            "occurred_at": r.occurred_at,
-        }
-        for r in rows
-    ]
+    rows = (await session.execute(stmt)).all()
+    out: list[dict[str, Any]] = []
+    for ev, link_title in rows:
+        donor_label: str | None = None
+        if ev.payer_telegram_user_id:
+            donor_label = f"TG {ev.payer_telegram_user_id}"
+        out.append(
+            {
+                "id": ev.id,
+                "creator_donation_link_id": ev.creator_donation_link_id,
+                "studio_model_id": ev.studio_model_id,
+                "event_name": ev.event_name,
+                "amount_minor": ev.amount_minor,
+                "currency": ev.currency,
+                "payer_telegram_user_id": ev.payer_telegram_user_id,
+                "payout_status": ev.payout_status,
+                "occurred_at": ev.occurred_at,
+                "link_title": link_title,
+                "donor_label": donor_label,
+            }
+        )
+    return out
 
 
-def _donation_event_dict(event: CreatorDonationEvent) -> dict[str, Any]:
+def _donation_event_dict(
+    event: CreatorDonationEvent,
+    *,
+    link_title: str | None = None,
+) -> dict[str, Any]:
+    donor_label: str | None = None
+    if event.payer_telegram_user_id:
+        donor_label = f"TG {event.payer_telegram_user_id}"
     return {
         "id": event.id,
         "creator_donation_link_id": event.creator_donation_link_id,
@@ -401,6 +419,8 @@ def _donation_event_dict(event: CreatorDonationEvent) -> dict[str, Any]:
         "payer_telegram_user_id": event.payer_telegram_user_id,
         "payout_status": event.payout_status,
         "occurred_at": event.occurred_at,
+        "link_title": link_title,
+        "donor_label": donor_label,
     }
 
 
@@ -432,26 +452,26 @@ async def creator_donation_overview(
                     pending_payout_by_currency.get(str(cur), 0) + int(amt)
                 )
 
-    latest = await session.scalar(
-        select(CreatorDonationEvent)
+    ev_base = (
+        select(CreatorDonationEvent, CreatorDonationLink.title)
+        .join(
+            CreatorDonationLink,
+            CreatorDonationLink.id == CreatorDonationEvent.creator_donation_link_id,
+        )
         .where(
             CreatorDonationEvent.user_id == user_id,
             CreatorDonationEvent.amount_minor > 0,
         )
-        .order_by(CreatorDonationEvent.id.desc())
-        .limit(1)
     )
+    latest_row = (
+        await session.execute(ev_base.order_by(CreatorDonationEvent.id.desc()).limit(1))
+    ).first()
     recent_rows = (
-        await session.scalars(
-            select(CreatorDonationEvent)
-            .where(
-                CreatorDonationEvent.user_id == user_id,
-                CreatorDonationEvent.amount_minor > 0,
-            )
-            .order_by(CreatorDonationEvent.occurred_at.desc())
-            .limit(5)
-        )
+        await session.execute(ev_base.order_by(CreatorDonationEvent.occurred_at.desc()).limit(5))
     ).all()
+
+    latest_ev = latest_row[0] if latest_row else None
+    latest_title = latest_row[1] if latest_row else None
 
     return {
         "donations_count": donations_count,
@@ -459,9 +479,13 @@ async def creator_donation_overview(
         "has_donation_setup": len(links) > 0,
         "totals_by_currency": totals_by_currency,
         "pending_payout_by_currency": pending_payout_by_currency,
-        "latest_event_id": latest.id if latest else None,
-        "latest_event": _donation_event_dict(latest) if latest else None,
-        "recent_events": [_donation_event_dict(row) for row in recent_rows],
+        "latest_event_id": latest_ev.id if latest_ev else None,
+        "latest_event": (
+            _donation_event_dict(latest_ev, link_title=latest_title) if latest_ev else None
+        ),
+        "recent_events": [
+            _donation_event_dict(ev, link_title=title) for ev, title in recent_rows
+        ],
     }
 
 

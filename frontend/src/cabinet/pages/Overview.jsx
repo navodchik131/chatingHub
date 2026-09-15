@@ -16,6 +16,8 @@ import { mapDialogRow } from '../api/mappers';
 import { sumOutboundMessages } from '../api/studioHelpers';
 import { archiveThumbUrl } from '../api/actions';
 import TelegramAccountLink from '../components/TelegramAccountLink';
+import { subscriptionBadgeProps } from '../../billing/planLabels';
+import { stActive, stWarn } from '../styles/mixins';
 
 const KpiCard = ({ children, onClick, accent }) => (
   <Hoverable
@@ -47,6 +49,8 @@ export default function Overview() {
   const demoGrant = demoGenerationsGrant(me);
   const demoLabel = formatDemoCounterLong(lang, demoRemaining, demoGrant);
   const planName = me?.plan_display_name || me?.plan_tier || '—';
+  const subBadge = subscriptionBadgeProps(me, lang === 'en' ? 'en' : 'ru');
+  const subBadgeStyle = subBadge.tone === 'active' ? stActive : stWarn;
   const recentDialogs = conversations.slice(0, 4).map((c, i) => mapDialogRow(c, i));
   const recentFrames = archiveImages.slice(0, 4);
   const donationBalances = resolveDonationBalances(donationOverview, donationEvents)
@@ -181,11 +185,11 @@ export default function Overview() {
             <span
               style={{
                 fontFamily: font.mono, fontSize: 9, letterSpacing: '1px',
-                background: 'rgba(74,222,128,.12)', color: color.green,
-                border: '1px solid rgba(74,222,128,.3)', padding: '2px 8px', borderRadius: 20,
+                padding: '2px 8px', borderRadius: 20,
+                ...subBadgeStyle,
               }}
             >
-              {t.active}
+              {subBadge.text}
             </span>
           </div>
           <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 6 }}>

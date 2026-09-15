@@ -37,6 +37,7 @@ from app.services.rate_limit import enforce_rate_limit
 from app.services.auth_provision import provision_workspace_owner
 from app.services.billing_plan import normalize_billing_plan
 from app.services.plan_catalog import normalize_plan_tier, plan_display_name
+from app.services.entitlements import public_subscription_status
 from app.services.plan_entitlements import (
     chat_allowed_for_subscription,
     companion_allowed_for_subscription,
@@ -415,7 +416,7 @@ async def me(
     return UserMeOut(
         id=user.id,
         email=user.email,
-        subscription_status=sub.status.value if sub else SubscriptionStatus.none.value,
+        subscription_status=public_subscription_status(sub),
         credits_balance=cr.balance if cr else 0,
         billing_plan=billing_plan,
         plan_tier=tier,

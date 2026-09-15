@@ -6,7 +6,7 @@ import { IcoClip, IcoSendArrow, IcoVideoNote } from '../components/Icons';
 import { Fade, PageTitle, Avatar } from '../components/ui';
 import { useApp } from '../hooks/useApp';
 import { color, line, font, avG } from '../styles/tokens';
-import { LANG_MAP, REACT_CHOICES, EMOJI_CHOICES, outboundLangOptions, replyLangDisplay, dialogSettingsSummary, normalizeLangCode } from '../api/helpers';
+import { LANG_MAP, REACT_CHOICES, EMOJI_CHOICES, outboundLangOptions, outboundLangUiValue, replyLangDisplay, dialogSettingsSummary, normalizeLangCode } from '../api/helpers';
 import { mapDialogRow, mapMessage, mapNote, modelNameById } from '../api/mappers';
 import { videoNoteSendPayload } from '../../studioArchive';
 import { inputSt, borderHoverOff } from '../styles/mixins';
@@ -685,7 +685,7 @@ function Thread() {
   const langMap = LANG_MAP;
   const translateOn = !rawConv?.auto_translate_disabled;
   const companionMode = rawConv?.companion_mode_override ?? rawConv?.effective_companion_mode ?? 'off';
-  const outboundLangValue = (rawConv?.outbound_lang || '').trim() ? normalizeLangCode(rawConv.outbound_lang) : 'auto';
+  const outboundLangValue = outboundLangUiValue(rawConv?.outbound_lang);
   const settingsSummary = rawConv ? dialogSettingsSummary(rawConv, lang) : '';
   const langOptions = outboundLangOptions(lang, rawConv?.user_lang);
   const modeOptions = [
@@ -1016,7 +1016,7 @@ function Thread() {
                 value={outboundLangValue}
                 onChange={(e) => {
                   const v = e.target.value;
-                  patchSettings({ outbound_lang: v === 'auto' ? null : v });
+                  patchSettings({ outbound_lang: v === 'en' ? null : v });
                 }}
                 style={{
                   width: '100%', background: color.bgDeep, border: `1px solid ${line.mid}`,

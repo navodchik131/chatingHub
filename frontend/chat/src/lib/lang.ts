@@ -17,16 +17,25 @@ export function normalizeLangCode(raw: unknown): string {
   return String(raw || '').trim().toLowerCase().replace('*', '')
 }
 
-/** Текущий язык исходящих: принудительный или авто по user_lang. */
+export function outboundLangUiValue(outboundLang?: string | null): string {
+  const forced = normalizeLangCode(outboundLang)
+  if (forced === 'auto') return 'auto'
+  return forced || 'en'
+}
+
+/** Текущий язык исходящих: EN по умолчанию, «auto» — детекция по фану. */
 export function replyLangDisplay(conv: {
   outbound_lang?: string | null
   user_lang?: string | null
 }): string {
   const forced = normalizeLangCode(conv?.outbound_lang)
+  if (forced === 'auto') {
+    const detected = normalizeLangCode(conv?.user_lang)
+    const name = detected ? (LANG_MAP[detected] || detected.toUpperCase()) : 'English'
+    return `Авто · ${name}`
+  }
   if (forced) return LANG_MAP[forced] || forced.toUpperCase()
-  const detected = normalizeLangCode(conv?.user_lang)
-  if (detected) return LANG_MAP[detected] || detected.toUpperCase()
-  return 'Авто'
+  return LANG_MAP.en || 'English'
 }
 
 export function outboundLangOptions(detectedCode?: string | null): Array<{ value: string; label: string }> {
@@ -47,7 +56,13 @@ export function translationLineLabel(outbound: boolean, conv: {
   tr?: { lang?: string }
 }): string {
   if (outbound) {
-    const code = normalizeLangCode(conv.outbound_lang) || normalizeLangCode(conv.user_lang) || normalizeLangCode(conv.tr?.lang) || 'en'
+    const forced = normalizeLangCode(conv.outbound_lang)
+    let code = 'en'
+    if (forced === 'auto') {
+      code = normalizeLangCode(conv.user_lang) || normalizeLangCode(conv.tr?.lang) || 'en'
+    } else if (forced) {
+      code = forced
+    }
     return code.toUpperCase()
   }
   return 'RU'

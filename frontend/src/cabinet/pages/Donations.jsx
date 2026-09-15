@@ -16,6 +16,7 @@ const payoutAssets = ['USDT', 'TON'];
 
 function DonOverview() {
   const { t, lang, cabinet } = useApp();
+  const canManage = Boolean(cabinet.me?.is_workspace_owner);
   const ps = cabinet.payoutSettings;
   const [wallet, setWallet] = useState('');
   const [asset, setAsset] = useState('USDT');
@@ -61,6 +62,11 @@ function DonOverview() {
 
   return (
     <div>
+      {cabinet.donationsLoadError ? (
+        <div style={{ fontSize: 12, color: '#FB923C', marginBottom: 12 }}>
+          {cabinet.donationsLoadError}
+        </div>
+      ) : null}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 16 }}>
         {donStatsData.map((ds) => (
           <Panel key={ds.label} style={{ borderRadius: 14, padding: '14px 16px' }}>
@@ -71,7 +77,8 @@ function DonOverview() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12 }}>
-        {/* payout */}
+        {/* payout — только владелец workspace */}
+        {canManage ? (
         <div
           style={{
             background: 'linear-gradient(140deg,rgba(240,168,200,.1),rgba(240,168,200,.02))',
@@ -132,6 +139,7 @@ function DonOverview() {
             {t.holdPolicy} <a href="#policy">Wiki →</a>
           </div>
         </div>
+        ) : null}
 
         {/* links */}
         <Panel style={{ padding: '16px 18px' }}>
@@ -388,7 +396,9 @@ function DonCreate() {
 }
 
 export default function Donations() {
-  const { t, s, setS } = useApp();
+  const { t, s, setS, cabinet } = useApp();
+  const canManage = Boolean(cabinet.me?.is_workspace_owner);
+  const tab = !canManage || s.donTab !== 'create' ? 'overview' : 'create';
 
   return (
     <Fade data-screen-label="Донаты">
@@ -397,13 +407,15 @@ export default function Donations() {
           <PageTitle style={{ marginBottom: 5 }}>{t.navDonations}</PageTitle>
           <div style={{ fontSize: 12.5, color: color.textDim }}>{t.donationsDesc}</div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <Chip on={s.donTab === 'overview'} onClick={() => setS({ donTab: 'overview' })}>{t.donTabOverview}</Chip>
-          <Chip on={s.donTab === 'create'} onClick={() => setS({ donTab: 'create' })}>{t.donTabCreate}</Chip>
-        </div>
+        {canManage ? (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Chip on={tab === 'overview'} onClick={() => setS({ donTab: 'overview' })}>{t.donTabOverview}</Chip>
+            <Chip on={tab === 'create'} onClick={() => setS({ donTab: 'create' })}>{t.donTabCreate}</Chip>
+          </div>
+        ) : null}
       </div>
 
-      {s.donTab === 'overview' ? <DonOverview /> : <DonCreate />}
+      {tab === 'overview' ? <DonOverview /> : <DonCreate />}
     </Fade>
   );
 }

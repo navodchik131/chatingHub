@@ -78,7 +78,7 @@ class ConversationOut(BaseModel):
     external_topic_id: str
     user_display_name: str | None
     user_lang: str | None
-    """Если задан — ответы переводим в этот язык; иначе по user_lang (детекция с последних входящих)."""
+    """Язык ответов клиенту: код ISO, «auto» — детекция; NULL — English."""
     outbound_lang: str | None = None
     """Модель студии для доступа операторов; только владелец назначает."""
     studio_model_id: int | None = None
@@ -895,6 +895,8 @@ class CreatorDonationEventOut(BaseModel):
     payer_telegram_user_id: int | None = None
     payout_status: str
     occurred_at: datetime
+    link_title: str | None = None
+    donor_label: str | None = None
 
 
 class CreatorDonationOverviewOut(BaseModel):

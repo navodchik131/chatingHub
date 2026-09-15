@@ -43,8 +43,9 @@ async def _defer_inbound_translation(
         if not row or not conv:
             return
         row.text_translated = translated or None
-        if src_lang and src_lang != "unknown":
-            conv.user_lang = src_lang
+        from app.services.conversation_outbound_lang import maybe_update_detected_user_lang
+
+        maybe_update_detected_user_lang(conv, src_lang)
         await session.commit()
         await session.refresh(row)
         await session.refresh(row, attribute_names=["attachments"])

@@ -587,9 +587,12 @@ export class ChatController {
         chat.tr.out = on
       }
       if ('outbound_lang' in patch) {
-        // NULL outbound_lang = авто по user_lang (язык фана)
         const forced = normalizeLangCode(updated.outbound_lang)
-        chat.tr.lang = forced || normalizeLangCode(updated.user_lang) || chat.lang || 'en'
+        if (forced === 'auto') {
+          chat.tr.lang = normalizeLangCode(updated.user_lang) || 'en'
+        } else {
+          chat.tr.lang = forced || 'en'
+        }
       }
       if ('manual_category' in patch) {
         chat.pinned = updated.manual_category === 'vip'

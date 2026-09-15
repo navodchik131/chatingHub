@@ -1,5 +1,10 @@
 import { Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { outboundLangOptions, replyLangDisplay, type ConversationSettingsPatch } from '@/src/api/dialogSettings';
+import {
+  outboundLangOptions,
+  outboundLangUiValue,
+  replyLangDisplay,
+  type ConversationSettingsPatch,
+} from '@/src/api/dialogSettings';
 import { color, font } from '@/src/styles/tokens';
 import type { ConversationOut } from '@/src/api/types';
 
@@ -27,7 +32,7 @@ const COPY = {
     dlgAutoFull: 'Автоматически — AI отвечает сам',
     translateToggle: 'Переводить сообщения фану',
     translateLang: 'ЯЗЫК ПЕРЕВОДА',
-    translateHint: 'По умолчанию язык определяется автоматически по сообщениям фана. Можно закрепить вручную.',
+    translateHint: 'По умолчанию ответы клиенту на English. «Авто» — по языку фана.',
   },
   en: {
     title: 'Dialog settings',
@@ -37,7 +42,7 @@ const COPY = {
     dlgAutoFull: 'Automatic — AI replies on its own',
     translateToggle: 'Translate messages for the fan',
     translateLang: 'TRANSLATION LANGUAGE',
-    translateHint: 'By default the language is detected from the fan’s messages. You can pin it manually.',
+    translateHint: 'Replies to the fan default to English. «Auto» follows the fan’s language.',
   },
 };
 
@@ -53,9 +58,7 @@ export function DialogSettingsSheet({
   const t = COPY[lang];
   const translateOn = !conv.auto_translate_disabled;
   const companionMode = conv.companion_mode_override ?? conv.effective_companion_mode ?? 'off';
-  const outboundLangValue = (conv.outbound_lang || '').trim()
-    ? String(conv.outbound_lang).trim().toLowerCase().replace('*', '')
-    : 'auto';
+  const outboundLangValue = outboundLangUiValue(conv.outbound_lang);
   const langOptions = outboundLangOptions(lang, conv.user_lang);
 
   return (
@@ -118,7 +121,11 @@ export function DialogSettingsSheet({
                     <Pressable
                       key={opt.value}
                       style={[styles.langChip, active && styles.langChipActive]}
-                      onPress={() => onPatch({ outbound_lang: opt.value === 'auto' ? null : opt.value })}
+                      onPress={() => {
+                        const v = opt.value;
+                        const apiVal = v === 'en' ? null : v;
+                        onPatch({ outbound_lang: apiVal });
+                      }}
                     >
                       <Text style={[styles.langChipText, active && styles.langChipTextActive]}>{opt.label}</Text>
                     </Pressable>

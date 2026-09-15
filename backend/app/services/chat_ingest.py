@@ -14,6 +14,7 @@ from app.services.chat_messages import add_message_attachment, message_to_out
 from app.services.realtime import hub
 from app.services.expo_push import notify_inbound_message_mobile
 from app.services.webpush import notify_inbound_message
+from app.services.conversation_outbound_lang import maybe_update_detected_user_lang
 
 log = logging.getLogger(__name__)
 
@@ -39,10 +40,7 @@ async def persist_inbound_chat_message(
         log.info("inbound ignored: conversation %s is blocked", conv.id)
         return conv.id, None
 
-    if src_lang and not conv.user_lang:
-        conv.user_lang = src_lang
-    elif src_lang and src_lang != "unknown":
-        conv.user_lang = src_lang
+    maybe_update_detected_user_lang(conv, src_lang)
     conv.updated_at = datetime.now(timezone.utc)
 
     row = await add_message(

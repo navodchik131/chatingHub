@@ -75,9 +75,12 @@ export function mapApiMessages(rows: ApiMessage[], conv: Pick<UiChat, 'tr' | 'la
 
 export function mapApiConversation(c: ApiConversation, index: number): UiChat {
   const name = (c.user_display_name || c.external_chat_id || `#${c.id}`).trim()
-  const lang = (c.user_lang || 'ru').toLowerCase()
-  const outbound = (c.outbound_lang || '').trim().toLowerCase()
+  const outboundRaw = (c.outbound_lang || '').trim().toLowerCase()
   const translateOn = !c.auto_translate_disabled
+  const trLang =
+    outboundRaw === 'auto'
+      ? (c.user_lang || 'en').toLowerCase()
+      : outboundRaw || 'en'
   return {
     id: c.id,
     src: platformSrcId(c.platform),
@@ -85,12 +88,12 @@ export function mapApiConversation(c: ApiConversation, index: number): UiChat {
     name,
     g: index % 7,
     unread: c.unread_count || 0,
-    lang,
+    lang: trLang,
     handle: c.external_chat_id || '',
     tr: {
       in: translateOn,
       out: translateOn,
-      lang: outbound || lang || 'en',
+      lang: trLang,
     },
     draft: '',
     msgs: [],

@@ -114,6 +114,14 @@ function opRightsFromMe(me) {
   }
 }
 
+/** Просмотр platform-донатов workspace (ссылки, суммы, история). */
+function canViewCreatorDonations(me) {
+  if (!me) return false
+  if (me.is_workspace_owner) return true
+  const mask = me.permissions_mask ?? 0
+  return hasPerm(mask, PERM.CHAT) || hasPerm(mask, PERM.BILLING)
+}
+
 function reuseModelImageUrls(prevModels, nextModels) {
   if (!Array.isArray(prevModels) || !prevModels.length || !Array.isArray(nextModels) || !nextModels.length) {
     return Array.isArray(nextModels) ? nextModels : []
@@ -557,7 +565,7 @@ export function CabinetDataProvider({ children }) {
       setArchiveVideosSkip(Array.isArray(archiveVid?.items) ? archiveVid.items.length : 0)
       setArchiveSeedanceVideosSkip(Array.isArray(archiveSeedance?.items) ? archiveSeedance.items.length : 0)
       setIntegrations(integrationsData)
-      if (meData?.is_workspace_owner) {
+      if (canViewCreatorDonations(meData)) {
         if (donationOv) {
           setDonationOverview(donationOv)
           setDonationsLoadError(null)
@@ -565,7 +573,7 @@ export function CabinetDataProvider({ children }) {
           setDonationsLoadError('Не удалось загрузить донаты')
         }
       } else {
-        setDonationOverview(donationOv)
+        setDonationOverview(null)
         setDonationsLoadError(null)
       }
       setDonations(Array.isArray(dons) ? dons : [])
@@ -1713,7 +1721,7 @@ export function CabinetDataProvider({ children }) {
   }, [ready, pendingArchiveActive, refreshArchivePending])
 
   const refreshDonationOverview = useCallback(async (opts = {}) => {
-    if (!me?.is_workspace_owner) return
+    if (!canViewCreatorDonations(me)) return
     const overview = await apiJsonOptional('/api/creator-donations/overview', {}, null)
     if (!overview) {
       setDonationsLoadError('Не удалось загрузить донаты')
@@ -1743,10 +1751,10 @@ export function CabinetDataProvider({ children }) {
     } else if (!latestId || latestId === prevLatestId) {
       setCreatorDonationAlert(null)
     }
-  }, [me?.is_workspace_owner])
+  }, [me])
 
   useEffect(() => {
-    if (!ready || !me?.is_workspace_owner) return
+    if (!ready || !canViewCreatorDonations(me)) return
     void refreshDonationOverview({ reloadPanels: true })
     const timer = window.setInterval(() => {
       void refreshDonationOverview({ reloadPanels: false })
@@ -1761,7 +1769,7 @@ export function CabinetDataProvider({ children }) {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [ready, me?.is_workspace_owner, refreshDonationOverview])
+  }, [ready, me, refreshDonationOverview])
 
   useEffect(() => {
     void refreshAll({ busy: true })

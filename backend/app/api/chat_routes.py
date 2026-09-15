@@ -888,8 +888,9 @@ async def api_reply(
     stored_original = text_ru
     stored_translated: str | None = None
     if text_ru and not no_translate:
-        forced = (conv.outbound_lang or "").strip().lower()
-        target_lang = forced if forced else (conv.user_lang or "en").strip().lower() or "en"
+        from app.services.conversation_outbound_lang import resolve_outbound_lang
+
+        target_lang = resolve_outbound_lang(conv)
         outgoing = await translate_from_russian(text_ru, target_lang)
         if not (outgoing or "").strip():
             outgoing = text_ru

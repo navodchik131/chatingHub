@@ -306,12 +306,24 @@ export function normalizeLangCode(raw) {
   return String(raw || '').trim().toLowerCase().replace('*', '')
 }
 
+/** Значение селекта языка: NULL → English, «auto» → авто-детекция. */
+export function outboundLangUiValue(outboundLang) {
+  const forced = normalizeLangCode(outboundLang)
+  if (forced === 'auto') return 'auto'
+  return forced || 'en'
+}
+
 export function replyLangDisplay(conv, lang = 'ru') {
   const forced = normalizeLangCode(conv?.outbound_lang)
+  if (forced === 'auto') {
+    const detected = normalizeLangCode(conv?.user_lang)
+    const name = detected
+      ? (LANG_MAP[detected] || detected.toUpperCase())
+      : (lang === 'ru' ? 'English' : 'English')
+    return `${lang === 'ru' ? 'Авто' : 'Auto'} · ${name}`
+  }
   if (forced) return LANG_MAP[forced] || LANG_MAP[`${forced}*`] || forced.toUpperCase()
-  const detected = normalizeLangCode(conv?.user_lang)
-  if (detected) return LANG_MAP[detected] || LANG_MAP[`${detected}*`] || detected.toUpperCase()
-  return lang === 'ru' ? 'Авто' : 'Auto'
+  return LANG_MAP.en || 'English'
 }
 
 export function outboundLangOptions(lang, detectedCode) {

@@ -23,19 +23,28 @@ export function normalizeLangCode(raw?: string | null) {
   return String(raw || '').trim().toLowerCase().replace('*', '');
 }
 
+export function outboundLangUiValue(outboundLang?: string | null) {
+  const forced = normalizeLangCode(outboundLang);
+  if (forced === 'auto') return 'auto';
+  return forced || 'en';
+}
+
 export function replyLangDisplay(
   conv: Pick<ConversationOut, 'outbound_lang' | 'user_lang'> | null | undefined,
   lang: 'ru' | 'en' = 'ru',
 ) {
   const forced = normalizeLangCode(conv?.outbound_lang);
+  if (forced === 'auto') {
+    const detected = normalizeLangCode(conv?.user_lang);
+    const name = detected ? (LANG_MAP[detected] || detected.toUpperCase()) : 'English';
+    return `${lang === 'ru' ? 'Авто' : 'Auto'} · ${name}`;
+  }
   if (forced) return LANG_MAP[forced] || forced.toUpperCase();
-  const detected = normalizeLangCode(conv?.user_lang);
-  if (detected) return LANG_MAP[detected] || detected.toUpperCase();
-  return lang === 'ru' ? 'Авто' : 'Auto';
+  return LANG_MAP.en || 'English';
 }
 
 export function outboundLangOptions(lang: 'ru' | 'en', detectedCode?: string | null) {
-  const autoLabel = `${lang === 'ru' ? 'Авто' : 'Auto'} · ${replyLangDisplay({ user_lang: detectedCode ?? undefined }, lang)}`;
+  const autoLabel = `${lang === 'ru' ? 'Авто' : 'Auto'} · ${replyLangDisplay({ outbound_lang: 'auto', user_lang: detectedCode ?? undefined }, lang)}`;
   return [
     { value: 'auto', label: autoLabel },
     ...OUTBOUND_LANG_CODES.map((code) => ({

@@ -58,7 +58,9 @@ const pages = {
 function DonationAlertBanner() {
   const { t, lang, go, cabinet } = useApp();
   const alert = cabinet.creatorDonationAlert;
-  if (!alert || !cabinet.me?.is_workspace_owner) return null;
+  const r = cabinet.opRights || {};
+  const canSee = cabinet.me?.is_workspace_owner || r.chat || r.billing;
+  if (!alert || !canSee) return null;
 
   const amount = alert.amount_minor != null
     ? fmtMoney(alert.amount_minor, alert.currency || 'RUB')

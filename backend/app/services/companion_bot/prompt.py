@@ -13,7 +13,6 @@ from app.db.models import Conversation, ConversationNote, ConversationNoteKind, 
 from app.services.companion_bot.goals import format_companion_goal_block, is_funnel_goal
 from app.services.companion_bot.persona import CompanionPersona, format_companion_persona_block
 from app.services.chat_message_meta import parse_reactions
-from app.services.translation import detect_lang
 
 PROMPT_VERSION = "v10-media-library"
 
@@ -412,14 +411,9 @@ def _voice_rules() -> str:
 
 
 def resolve_target_lang(conv: Conversation, *, last_fan_text: str | None = None) -> str:
-    forced = (conv.outbound_lang or "").strip().lower()
-    if forced:
-        return forced
-    if last_fan_text and last_fan_text.strip():
-        detected = detect_lang(last_fan_text).lower().strip()
-        if detected and detected != "unknown":
-            return detected[:2] if len(detected) > 2 else detected
-    return (conv.user_lang or "en").strip().lower() or "en"
+    from app.services.conversation_outbound_lang import resolve_outbound_lang
+
+    return resolve_outbound_lang(conv, last_fan_text=last_fan_text)
 
 
 def last_fan_message_text(messages: list[Message]) -> str | None:

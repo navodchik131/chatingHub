@@ -40,3 +40,14 @@ def subscription_is_paid_active(sub: Subscription | None) -> bool:
 def subscription_covers_usage(sub: Subscription | None) -> bool:
     """Устарело: не используется для списания кредитов студии."""
     return False
+
+
+def public_subscription_status(sub: Subscription | None) -> str:
+    """Статус для UI/API: active с прошедшим period_end → expired."""
+    if sub is None:
+        return SubscriptionStatus.none.value
+    if sub.status == SubscriptionStatus.active and not subscription_is_paid_active(sub):
+        return "expired"
+    if sub.status == SubscriptionStatus.trialing and not subscription_active(sub):
+        return "expired"
+    return sub.status.value
