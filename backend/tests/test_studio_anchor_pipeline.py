@@ -317,6 +317,19 @@ def test_dressed_body_cache_key_stable():
     assert a != c
 
 
+def test_finalize_nano_regular_mannequin_prefix():
+    out = finalize_anchor_mode_a_wavespeed_prompt(
+        "anchor body",
+        wave_profile="regular",
+        lock_model_hairstyle=True,
+        scene_first=False,
+        mannequin_scene=True,
+    )
+    assert "MANNEQUIN CANVAS" in out
+    assert "headless body + outfit" in out
+    assert "second** input (headless dressed MODEL)" in out
+
+
 def test_finalize_seedream_mannequin_scene_first_prefix():
     out = finalize_anchor_mode_a_wavespeed_prompt(
         "anchor body",

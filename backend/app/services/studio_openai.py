@@ -272,10 +272,11 @@ def finalize_anchor_mode_a_wavespeed_prompt(
         "they must fully replace the large face in the last scene image, including when a hand touches the lips."
     )
     if wp == "regular":
-        head = _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+        head = _nano_banana_face_swap_head_prefix(mannequin_scene=mannequin_scene)
         out = head.strip() if not p else head + p
         out = out.rstrip() + _nano_banana_pose_last_suffix(
-            lock_model_hairstyle=lock_model_hairstyle
+            lock_model_hairstyle=lock_model_hairstyle,
+            mannequin_scene=mannequin_scene,
         )
         if bust_portrait:
             out += bust_suffix_nano
@@ -693,13 +694,41 @@ _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX = (
     "Structured JSON + USER_TEXT below constrain mood; thumbnails win likeness over vague wording.\n\n"
 )
 
+_NANO_BANANA_FACE_SWAP_MANNEQUIN_PREFIX = (
+    "[MULTI_IMAGE_EDIT — FACE SWAP on MANNEQUIN CANVAS] Input order: (1) MODEL **face** — identity WHO; "
+    "(2) MODEL **headless body + outfit** prep — authoritative bust, waist, hips, limbs, skin tone, garments/nudity; "
+    "(3) **LAST** = gray mannequin pose canvas. "
+    "Replace all gray on LAST with photoreal MODEL from (1–2). "
+    "**Do not** take body build or final wardrobe from the mannequin — only pose, camera, framing, background, light. "
+    "Structured text below is the scene brief; **Image 2 wins body/outfit**, **Image 1 wins face**.\n\n"
+)
 
-def _nano_banana_pose_last_suffix(*, lock_model_hairstyle: bool) -> str:
+
+def _nano_banana_face_swap_head_prefix(*, mannequin_scene: bool) -> str:
+    return (
+        _NANO_BANANA_FACE_SWAP_MANNEQUIN_PREFIX
+        if mannequin_scene
+        else _NANO_BANANA_FACE_SWAP_IDENTITY_PREFIX
+    )
+
+
+def _nano_banana_pose_last_suffix(
+    *, lock_model_hairstyle: bool, mannequin_scene: bool = False
+) -> str:
     hair = (
         "**Hairstyle must follow the JSON brief (model identity), not the hair layout on this last image.** "
         if lock_model_hairstyle
         else "**Hairstyle may match the last (pose) image when the JSON says POSE_REFERENCE.** "
     )
+    if mannequin_scene:
+        return (
+            "\n\n[LAST_INPUT_IMAGE — MANNEQUIN CANVAS] The **last** image is a **gray mannequin** — "
+            "**pose geometry, head tilt, gaze, camera, framing, background, environmental lighting ONLY**. "
+            "**NOT** body proportions or outfit: bust/waist/hips and clothing come from the **second** input (headless dressed MODEL); "
+            "face from the **first**. Do **not** keep matte gray or simplified mannequin body mass in the output. "
+            + hair
+            + "One continuous MODEL identity skin in this lighting."
+        )
     return (
         "\n\n[LAST_INPUT_IMAGE] The **last** input image is the **only** source for **pose geometry, framing, camera geometry, "
         "outfit/body coverage, background, and environmental lighting** in this edit — **including head tilt/yaw and gaze vs lens** when the face is in frame. "
