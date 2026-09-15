@@ -594,10 +594,11 @@ def build_mode_a_prompt(
         )
     elif mannequin_scene:
         expr_rule = (
-            f"Structural facial features come only from Image {face_i}. Match head tilt, gaze direction, and "
-            f"overall expression mood from the pose on Image {scene_i} (mannequin canvas has no face to copy — "
-            "use head orientation and scene context only). Apply that mood on the MODEL bone structure from "
-            f"Image {face_i}; do not invent the original sitter's face or micro-expression from memory."
+            f"Structural identity (eye shape, nose, lips, face oval, jaw) comes only from Image {face_i}. "
+            f"Facial EXPRESSION is not identity — copy it exactly from Image {scene_i} gray mannequin head: "
+            "mouth opening width, lip parting, tongue position and visibility, teeth show/hide, eye open/closed/squint, "
+            "brow position, cheek tension, and head tilt. The mannequin head often keeps sculpted expression geometry — "
+            f"transfer that performance onto Image {face_i} bone structure. Do NOT default to neutral studio face."
         )
     else:
         expr_rule = (
@@ -610,10 +611,10 @@ def build_mode_a_prompt(
 
     if mannequin_scene:
         scene_intro = (
-            f"Image {scene_i} = gray mannequin pose canvas: matte gray featureless stand-in with the exact "
-            "pose, camera angle, framing, lighting, background, and garment-coverage silhouette from the "
-            "original photo. No human identity remains on this canvas — only geometry, light, and gray "
-            "clothing shapes.\n"
+            f"Image {scene_i} = gray mannequin pose canvas: matte gray stand-in with the exact pose, camera angle, "
+            "framing, lighting, background, and garment-coverage silhouette. The gray head still carries "
+            "expression geometry (mouth, tongue, eye state, brows) — copy that expression into the final face. "
+            "No skin identity or likeness on this canvas — only pose, light, gray clothing shapes, and performance.\n"
         )
         replace_line = (
             f"Replace every visible gray mannequin surface in Image {scene_i} (skin and gray fabric) with "
@@ -906,7 +907,7 @@ def mannequin_scene_cache_key(
     h = hashlib.sha256()
     wp = (wave_profile or "nsfw").strip().lower()
     family = "seedream" if face_swap_uses_seedream_prep_prompts(wave_model_id) else "default"
-    h.update(f"mannequin_v2|{wp}|{family}".encode())
+    h.update(f"mannequin_v3|{wp}|{family}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()
 
