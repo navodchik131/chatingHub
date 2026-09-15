@@ -38,6 +38,16 @@ GENERAL BUILD:
 """
 
 
+def test_seedream_mannequin_prompt_geometry_lock():
+    from app.services.studio_anchor_pipeline import load_face_swap_mannequin_prompt
+
+    t = load_face_swap_mannequin_prompt(
+        wave_profile="nsfw", wave_model_id="seedream-v5.0-pro"
+    )
+    assert "IN PLACE" in t
+    assert "geometry" in t.lower() or "silhouette" in t.lower()
+
+
 def test_mode_a_mannequin_scene_prompt():
     vis = AnchorVisibility()
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)

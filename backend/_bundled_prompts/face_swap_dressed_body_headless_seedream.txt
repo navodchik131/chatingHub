@@ -1,0 +1,10 @@
+Image 1 = the MODEL's body proportions reference (bust, waist, hips, limbs, height, skin tone family) — this is the ONLY body shape donor.
+Image 2 = wardrobe/coverage reference ONLY (what is worn or exposed — ignore the person wearing it, especially face, head, and body silhouette).
+
+Generate a photorealistic headless full-body image of the MODEL from Image 1 wearing or exposing exactly what Image 2 shows.
+
+CRITICAL for Seedream: Image 1's bust size, waist width, hip width, limb thickness, and overall build MUST appear unchanged in the output. Do NOT copy Image 2's body shape, weight, or proportions even if the clothes fit that person.
+
+Transfer from Image 2 ONLY: garment types, colors, patterns, materials, accessories, nudity level. Fit garments to Image 1's figure.
+
+HEADLESS: neck down only — no face, head, hair, or ears. Neutral studio background. Photorealistic.

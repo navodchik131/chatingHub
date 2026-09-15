@@ -1,0 +1,10 @@
+Edit the input photo IN PLACE on the same canvas. Do NOT reframe, recrop, zoom, or regenerate the background.
+
+Task: remove the person's identity by applying flat matte gray (#808080) on all visible skin and clothing — like a desaturation overlay — while keeping the EXACT body silhouette, limb lengths, joint angles, hand positions, bust/waist/hip width, and overall scale from the input photo.
+
+Head and face: matte gray, no eyes/nose/mouth/hair, no likeness to the original person.
+Clothing: same cut and drape as the input, only recolored to plain matte gray fabric (no logos/patterns).
+
+CRITICAL — geometry lock: do NOT fashion-mannequin-simplify the body. Do NOT slim, thicken, shorten legs, or change proportions. Every outer contour of the body must match the input photo.
+
+Preserve exactly: pose, camera angle, framing, lighting, shadows, background, composition.

@@ -188,22 +188,51 @@ def _read_first_nonempty_face_swap_prompt(filename: str) -> str | None:
     return None
 
 
-def load_face_swap_mannequin_prompt(*, wave_profile: str) -> str:
-    """SFW = regular; NSFW = усиленный recolor-only промпт для зоны пояс–колени."""
+def face_swap_uses_seedream_prep_prompts(wave_model_id: str) -> bool:
+    """Seedream агрессивно «упрощает» тело — отдельные промпты с geometry lock."""
+    model = (wave_model_id or "").strip().lower()
+    return model.startswith("seedream")
+
+
+def _face_swap_mannequin_filename(*, wave_profile: str, wave_model_id: str) -> str:
     wp = (wave_profile or "nsfw").strip().lower()
-    key = "mannequin_sfw" if wp == "regular" else "mannequin_nsfw"
-    text = _read_first_nonempty_face_swap_prompt(_FACE_SWAP_PROMPT_FILES[key])
+    base = "face_swap_mannequin_sfw" if wp == "regular" else "face_swap_mannequin_nsfw"
+    if face_swap_uses_seedream_prep_prompts(wave_model_id):
+        return f"{base}_seedream.txt"
+    return f"{base}.txt"
+
+
+def _face_swap_dressed_headless_filename(*, wave_model_id: str) -> str:
+    if face_swap_uses_seedream_prep_prompts(wave_model_id):
+        return "face_swap_dressed_body_headless_seedream.txt"
+    return "face_swap_dressed_body_headless.txt"
+
+
+def load_face_swap_mannequin_prompt(*, wave_profile: str, wave_model_id: str = "") -> str:
+    """SFW = regular; NSFW = recolor-only пояс–колени; Seedream — отдельные файлы *_seedream.txt."""
+    fname = _face_swap_mannequin_filename(wave_profile=wave_profile, wave_model_id=wave_model_id)
+    text = _read_first_nonempty_face_swap_prompt(fname)
     if text:
         return text
-    tried = ", ".join(str(p) for p in _face_swap_prompt_candidates(_FACE_SWAP_PROMPT_FILES[key]))
+    # Fallback на универсальный промпт, если seedream-файл не задеплоен.
+    wp = (wave_profile or "nsfw").strip().lower()
+    fallback = "face_swap_mannequin_sfw.txt" if wp == "regular" else "face_swap_mannequin_nsfw.txt"
+    text = _read_first_nonempty_face_swap_prompt(fallback)
+    if text:
+        return text
+    tried = ", ".join(str(p) for p in _face_swap_prompt_candidates(fname))
     raise RuntimeError(f"Face swap mannequin prompt not found (tried: {tried})")
 
 
-def load_face_swap_dressed_body_headless_prompt() -> str:
-    text = _read_first_nonempty_face_swap_prompt(_FACE_SWAP_PROMPT_FILES["dressed_headless"])
+def load_face_swap_dressed_body_headless_prompt(*, wave_model_id: str = "") -> str:
+    fname = _face_swap_dressed_headless_filename(wave_model_id=wave_model_id)
+    text = _read_first_nonempty_face_swap_prompt(fname)
     if text:
         return text
-    tried = ", ".join(str(p) for p in _face_swap_prompt_candidates(_FACE_SWAP_PROMPT_FILES["dressed_headless"]))
+    text = _read_first_nonempty_face_swap_prompt("face_swap_dressed_body_headless.txt")
+    if text:
+        return text
+    tried = ", ".join(str(p) for p in _face_swap_prompt_candidates(fname))
     raise RuntimeError(f"Face swap headless dress prompt not found (tried: {tried})")
 
 
@@ -829,20 +858,34 @@ def dressed_body_cache_key(
     scene_bytes: bytes,
     vis: AnchorVisibility,
     headless: bool = False,
+    wave_model_id: str = "",
 ) -> str:
     h = hashlib.sha256()
-    # v2 — усиленный headless dress (не копировать силуэт с scene donor).
-    tag = "dress_headless_v2" if headless else "dress"
+    # v2 + sd — headless dress; отдельный кэш для Seedream prep-промптов.
+    if headless:
+        tag = (
+            "dress_headless_v2_sd"
+            if face_swap_uses_seedream_prep_prompts(wave_model_id)
+            else "dress_headless_v2"
+        )
+    else:
+        tag = "dress"
     h.update(f"{tag}|m{model_id}|f{face_image_id}|b{body_image_id}|{vis.cache_key_part()}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()
 
 
-def mannequin_scene_cache_key(*, scene_bytes: bytes, wave_profile: str) -> str:
-    """Кэш шага 0: только hash сцены + SFW/NSFW профиль."""
+def mannequin_scene_cache_key(
+    *,
+    scene_bytes: bytes,
+    wave_profile: str,
+    wave_model_id: str = "",
+) -> str:
+    """Кэш шага 0: hash сцены + профиль + семейство prep-промпта (seedream/default)."""
     h = hashlib.sha256()
     wp = (wave_profile or "nsfw").strip().lower()
-    h.update(f"mannequin_v1|{wp}".encode())
+    family = "seedream" if face_swap_uses_seedream_prep_prompts(wave_model_id) else "default"
+    h.update(f"mannequin_v2|{wp}|{family}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()
 

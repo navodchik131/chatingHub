@@ -1,0 +1,12 @@
+Edit the input photo IN PLACE on the same canvas. Do NOT reframe, recrop, zoom, or regenerate the background.
+
+Task: remove human identity by painting flat matte gray (#808080) on visible skin and clothing while keeping 100% of the original body geometry — same silhouette, limb lengths, joint positions, bust/waist/hip width, buttocks contour, and scale as the input.
+
+Head/face/neck: matte gray, featureless, no hair, no facial identity.
+Upper torso and arms: matte gray cover; keep exact arm thickness, shoulder width, and torso outline from the input — no doll or store-mannequin proportions.
+Pelvis through knees (if visible): COLOR-ONLY gray — do NOT reshape, smooth, censor, or redesign genitals, buttocks, or folds. Preserve every crease, edge, and shadow boundary from the input; only change color to matte gray.
+Below knees: matte gray with the same pose; do not change leg length or thickness.
+
+FORBIDDEN: simplified mannequin body, Barbie proportions, plastic smoothing, genital redesign, blur/mosaic, beauty retouch, body slimming or enlargement.
+
+Preserve exactly: pose, hand placement, lighting, background, composition.

@@ -175,7 +175,10 @@ async def _mannequin_scene_via_wavespeed(
     wave_model_id: str,
     aspect_ratio: str = "9:16",
 ) -> bytes:
-    prompt = load_face_swap_mannequin_prompt(wave_profile=wave_profile)
+    prompt = load_face_swap_mannequin_prompt(
+        wave_profile=wave_profile,
+        wave_model_id=wave_model_id,
+    )
     return await _wavespeed_edit_bytes(
         api_key=api_key,
         image_urls=[scene_url],
@@ -282,8 +285,13 @@ async def run_anchor_pipeline(
         scene_bytes=scene_bytes,
         vis=vis,
         headless=dress_headless,
+        wave_model_id=wave_model_id,
     )
-    mannequin_key = mannequin_scene_cache_key(scene_bytes=scene_bytes, wave_profile=wave_profile)
+    mannequin_key = mannequin_scene_cache_key(
+        scene_bytes=scene_bytes,
+        wave_profile=wave_profile,
+        wave_model_id=wave_model_id,
+    )
 
     dressed_bytes: bytes | None = None
     from_cache = False
@@ -345,7 +353,7 @@ async def run_anchor_pipeline(
     skip_wardrobe = mode_n == "face_swap" and not use_mannequin
     if not face_closeup and not skip_wardrobe:
         dress_prompt = (
-            load_face_swap_dressed_body_headless_prompt()
+            load_face_swap_dressed_body_headless_prompt(wave_model_id=wave_model_id)
             if dress_headless
             else DRESS_BODY_PROMPT
         )
