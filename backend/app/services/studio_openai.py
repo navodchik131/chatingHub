@@ -186,12 +186,11 @@ def _wavespeed_face_swap_prefix_mannequin_dressed_first(*, lock_model_hairstyle:
         "Keep bust, waist, hips, limb thickness, and garment fit from Image 1. "
         "**Do NOT** rescale or slim the body to match gray silhouette on Image 3. "
         "**Image 2** = **MODEL face** (identity WHO). "
-        "**Image 3** = **gray mannequin** — pose, camera, framing, lighting, background; "
-        "ignore mannequin body mass. **Copy facial EXPRESSION from Image 3** (mouth/tongue/teeth/eye squint/brows) "
-        "onto Image 2 identity — not neutral. "
+        "**Image 3** = **gray mannequin** — pose, camera, framing, lighting, background ONLY; "
+        "ignore mannequin body mass and gray proportions. "
         "Re-pose the person from Images 1–2 to match limb articulation and head tilt on Image 3. "
         f"{hair_clause}"
-        "One continuous MODEL identity; Image 1 wins body/outfit, Image 3 wins pose + expression performance.\n\n"
+        "One continuous MODEL identity; Image 1 wins body/outfit, Image 3 wins pose topology.\n\n"
     )
 
 
@@ -241,12 +240,12 @@ def wavespeed_prompt_with_face_swap_first(
         else "Причёска может оставаться ближе к Image 3, если это явно нужно пользователю; "
     )
     scene3_label = (
-        "**Image 3** = **gray mannequin pose canvas** (pose/camera/light + **expression geometry** on gray head — mouth/tongue/eyes). "
+        "**Image 3** = **gray mannequin pose canvas** (matte gray stand-in — pose/camera/light/garment silhouette only, no human identity). "
         if mannequin_scene
         else "**Image 3** = **SOURCE snapshot** (scene + incidental sitter framing — pose/camera/light only). "
     )
     replace3 = (
-        "**Replace** gray on Image 3 with MODEL photoreal skin and wardrobe from Images 1–2; **keep Image 3 expression performance** on the MODEL face — "
+        "**Replace** every visible gray mannequin region on Image 3 with MODEL photoreal skin and wardrobe from Images 1–2 — "
         if mannequin_scene
         else "**Replace** recognizable face and every visible epidermis region of the Image 3 performer with MODEL identity continuously — "
     )
