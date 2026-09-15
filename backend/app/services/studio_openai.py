@@ -174,6 +174,26 @@ def _wavespeed_face_swap_prefix_face_hidden(*, lock_model_hairstyle: bool, scene
     )
 
 
+def _wavespeed_face_swap_prefix_mannequin_dressed_first(*, lock_model_hairstyle: bool) -> str:
+    """Seedream final: Image1=dressed body canvas, Image2=face, Image3=mannequin pose."""
+    hair_clause = (
+        "**Hairstyle** from Image 2 MODEL face / JSON brief — not from Image 3 mannequin. "
+        if lock_model_hairstyle
+        else "Hairstyle may follow Image 3 head layout when needed; color from Image 2. "
+    )
+    return (
+        f"{_FACE_SWAP_TAG} **Image 1** = **MODEL body + outfit** (headless dressed prep) — **primary edit canvas**. "
+        "Keep bust, waist, hips, limb thickness, and garment fit from Image 1. "
+        "**Do NOT** rescale or slim the body to match gray silhouette on Image 3. "
+        "**Image 2** = **MODEL face** (identity WHO). "
+        "**Image 3** = **gray mannequin** — pose, camera, framing, lighting, background ONLY; "
+        "ignore mannequin body mass and gray proportions. "
+        "Re-pose the person from Images 1–2 to match limb articulation and head tilt on Image 3. "
+        f"{hair_clause}"
+        "One continuous MODEL identity; Image 1 wins body/outfit, Image 3 wins pose topology.\n\n"
+    )
+
+
 def wavespeed_prompt_with_face_swap_first(
     refined_prompt: str,
     *,
@@ -181,6 +201,7 @@ def wavespeed_prompt_with_face_swap_first(
     pose_prefix_kind: str | None = None,
     scene_first: bool = False,
     mannequin_scene: bool = False,
+    mannequin_dressed_first: bool = False,
 ) -> str:
     """Face swap multi-ref edit: identity-first (WAN) or scene-first (Seedream)."""
     kind = (pose_prefix_kind or "face_visible").strip().lower()
@@ -188,6 +209,15 @@ def wavespeed_prompt_with_face_swap_first(
         prefix = _wavespeed_face_swap_prefix_face_hidden(
             lock_model_hairstyle=lock_model_hairstyle,
             scene_first=scene_first,
+        )
+        p = (refined_prompt or "").strip()
+        if not p:
+            return prefix.strip()
+        return prefix + p
+
+    if mannequin_scene and mannequin_dressed_first and not scene_first:
+        prefix = _wavespeed_face_swap_prefix_mannequin_dressed_first(
+            lock_model_hairstyle=lock_model_hairstyle,
         )
         p = (refined_prompt or "").strip()
         if not p:
@@ -257,6 +287,7 @@ def finalize_anchor_mode_a_wavespeed_prompt(
     scene_first: bool,
     bust_portrait: bool = False,
     mannequin_scene: bool = False,
+    mannequin_dressed_first: bool = False,
 ) -> str:
     """Префикс/суффикс как у обычного face_swap — anchor раньше их не получал."""
     from app.services.studio_prompt_bundle import strip_workflow_meta_from_wavespeed_prose
@@ -286,6 +317,7 @@ def finalize_anchor_mode_a_wavespeed_prompt(
         lock_model_hairstyle=lock_model_hairstyle,
         scene_first=scene_first,
         mannequin_scene=mannequin_scene,
+        mannequin_dressed_first=mannequin_dressed_first,
     )
     if bust_portrait:
         out += bust_suffix_identity_first

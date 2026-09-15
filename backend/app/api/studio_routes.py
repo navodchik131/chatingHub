@@ -6066,6 +6066,9 @@ async def _studio_job_execute_refine_prompt(
                         scene_first=anchor_result.scene_first,
                         bust_portrait=anchor_result.bust_portrait,
                         mannequin_scene=anchor_result.mannequin_scene,
+                        mannequin_dressed_first=bool(
+                            getattr(anchor_result, "mannequin_dressed_first", False)
+                        ),
                     )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
@@ -7270,6 +7273,9 @@ async def _studio_job_execute_motion_first_frame(
                     scene_first=anchor_result.scene_first,
                     bust_portrait=anchor_result.bust_portrait,
                     mannequin_scene=anchor_result.mannequin_scene,
+                    mannequin_dressed_first=bool(
+                        getattr(anchor_result, "mannequin_dressed_first", False)
+                    ),
                 )
             if workflow_first_frame:
                 from app.services.studio_model_bootstrap import (

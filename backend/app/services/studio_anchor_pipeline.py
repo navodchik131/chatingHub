@@ -194,6 +194,11 @@ def face_swap_uses_seedream_prep_prompts(wave_model_id: str) -> bool:
     return model.startswith("seedream")
 
 
+def mannequin_final_dressed_first(wave_model_id: str) -> bool:
+    """Финал face swap: dressed body = Image 1 (edit canvas), манекен последним — только pose."""
+    return face_swap_uses_seedream_prep_prompts(wave_model_id)
+
+
 def _face_swap_mannequin_filename(*, wave_profile: str, wave_model_id: str) -> str:
     wp = (wave_profile or "nsfw").strip().lower()
     base = "face_swap_mannequin_sfw" if wp == "regular" else "face_swap_mannequin_nsfw"
@@ -296,9 +301,15 @@ def order_mode_a_image_urls(
     scene_url: str,
     scene_first: bool = False,
     extra_face_copies: int = 0,
+    mannequin_dressed_first: bool = False,
 ) -> list[str]:
-    """Identity-first: face→body→scene. Seedream scene-first: scene→face(×N)→body."""
+    """Identity-first: face→body→scene. Mannequin+Seedream final: dressed→face→mannequin."""
     copies = max(0, min(int(extra_face_copies), 3))
+    if mannequin_dressed_first:
+        urls = [dressed_url, face_url]
+        urls.extend([face_url] * copies)
+        urls.append(scene_url)
+        return urls
     if scene_first:
         urls = [scene_url, face_url]
         urls.extend([face_url] * copies)
@@ -532,6 +543,7 @@ def build_mode_a_prompt(
     extra_face_copies: int = 0,
     raw_body_ref: bool = True,
     mannequin_scene: bool = False,
+    dressed_first: bool = False,
 ) -> str:
     """Face-swap WITH scene photo — Mode A: Image1=face/body/scene or scene/face/body (Seedream)."""
     exclusions = exclusion_notes(vis)
@@ -540,6 +552,10 @@ def build_mode_a_prompt(
         scene_i = 1
         face_i = 2
         body_i = 2 + face_count
+    elif dressed_first and mannequin_scene:
+        body_i = 1
+        face_i = 2
+        scene_i = 2 + face_count
     else:
         face_i = 1
         body_i = face_count + 1
@@ -606,8 +622,13 @@ def build_mode_a_prompt(
         no_preserve_line = (
             f"Do not leave final matte gray mannequin visible on skin or clothes. "
             f"Use Image {body_i} for bust size, waist width, hip width, and outfit/nudity level — "
-            f"not the simplified mannequin proportions.\n"
+            f"not the simplified mannequin proportions on Image {scene_i}.\n"
         )
+        if dressed_first:
+            no_preserve_line += (
+                f"Image {body_i} is the body/outfit canvas: do NOT rescale the figure to match gray body mass "
+                f"on Image {scene_i}. Only re-articulate limbs and head to match Image {scene_i} pose.\n"
+            )
     else:
         scene_intro = (
             f"Image {scene_i} = target scene: recreate this exact pose, camera angle, framing, and lighting. "

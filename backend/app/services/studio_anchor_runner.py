@@ -25,6 +25,7 @@ from app.services.studio_anchor_pipeline import (
     load_cached_dressed_body,
     load_face_swap_dressed_body_headless_prompt,
     load_face_swap_mannequin_prompt,
+    mannequin_final_dressed_first,
     mannequin_scene_cache_key,
     order_mode_a_face_closeup_urls,
     order_mode_a_image_urls,
@@ -64,6 +65,7 @@ class AnchorPipelineResult:
     mannequin_from_cache: bool = False
     mannequin_prep_ran: bool = False
     wardrobe_prep_ran: bool = False
+    mannequin_dressed_first: bool = False
 
 
 async def _analyze_scene_text(
@@ -277,6 +279,7 @@ async def run_anchor_pipeline(
         and face_swap_mannequin_prep_enabled()
     )
     dress_headless = use_mannequin
+    dressed_first_final = use_mannequin and mannequin_final_dressed_first(wave_model_id)
 
     cache_key = dressed_body_cache_key(
         model_id=model_id,
@@ -409,10 +412,14 @@ async def run_anchor_pipeline(
             wave_model_id=wave_model_id,
             mannequin_scene=use_mannequin,
         )
-        if use_mannequin and (wave_model_id or "").strip().lower().startswith("seedream"):
+        if dressed_first_final:
             log.info(
-                "anchor mannequin + seedream: identity-first URLs (face, dressed body, mannequin) — "
-                "not scene-first canvas"
+                "anchor mannequin + seedream final: dressed body first URL (canvas), "
+                "then face, mannequin last for pose"
+            )
+        elif use_mannequin and (wave_model_id or "").strip().lower().startswith("seedream"):
+            log.info(
+                "anchor mannequin + seedream: prep uses seedream prompts; final dressed-first when seedream"
             )
         if face_closeup:
             prompt = build_mode_a_face_closeup_prompt(
@@ -439,6 +446,7 @@ async def run_anchor_pipeline(
                 raw_body_ref=not use_mannequin,
                 mannequin_scene=use_mannequin,
                 scene_first=scene_first,
+                dressed_first=dressed_first_final,
             )
             urls = order_mode_a_image_urls(
                 face_url=face_url,
@@ -446,6 +454,7 @@ async def run_anchor_pipeline(
                 scene_url=scene_url,
                 scene_first=scene_first,
                 extra_face_copies=extra_faces,
+                mannequin_dressed_first=dressed_first_final,
             )
         out_mode = "A"
     else:
@@ -481,4 +490,5 @@ async def run_anchor_pipeline(
         mannequin_from_cache=mannequin_from_cache if use_mannequin else False,
         mannequin_prep_ran=mannequin_prep_ran,
         wardrobe_prep_ran=wardrobe_prep_ran,
+        mannequin_dressed_first=dressed_first_final,
     )

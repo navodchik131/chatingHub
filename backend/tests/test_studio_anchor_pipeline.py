@@ -110,10 +110,32 @@ def test_anchor_mode_a_scene_first_profile():
 
 
 def test_mannequin_face_swap_url_order_is_identity_first():
-    """Манекен последним: пропорции с Image 2 (dressed), не с canvas."""
+    """GPT/WAN: лицо → dressed → mannequin."""
     assert order_mode_a_image_urls(
         face_url="f", dressed_url="d", scene_url="m", scene_first=False
     ) == ["f", "d", "m"]
+
+
+def test_mannequin_seedream_final_dressed_first_url_order():
+    assert order_mode_a_image_urls(
+        face_url="f",
+        dressed_url="d",
+        scene_url="m",
+        mannequin_dressed_first=True,
+    ) == ["d", "f", "m"]
+
+
+def test_finalize_seedream_mannequin_dressed_first_prefix():
+    out = finalize_anchor_mode_a_wavespeed_prompt(
+        "body",
+        wave_profile="nsfw",
+        lock_model_hairstyle=True,
+        scene_first=False,
+        mannequin_scene=True,
+        mannequin_dressed_first=True,
+    )
+    assert "primary edit canvas" in out
+    assert "Image 1 wins body/outfit" in out
 
 
 def test_order_mode_a_image_urls_seedream_scene_first():
