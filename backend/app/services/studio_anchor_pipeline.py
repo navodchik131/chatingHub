@@ -343,10 +343,15 @@ BUST_PORTRAIT_FACE_BLOCK = (
 )
 
 
-def hairstyle_style_block(*, lock_hairstyle_style: bool) -> str:
+def hairstyle_style_block(
+    *,
+    lock_hairstyle_style: bool,
+    identity_face_image_label: str = "Image 1",
+) -> str:
     """Укладка/часть/длина — с модели или с рефа; цвет волос всегда с модели."""
+    face_ref = (identity_face_image_label or "Image 1").strip()
     color_rule = (
-        "Hair color always comes from the model identity (Image 1 + profile anchor) — "
+        f"Hair color always comes from the model identity ({face_ref} + profile anchor) — "
         "never from the scene donor."
     )
     if lock_hairstyle_style:
@@ -513,16 +518,31 @@ def build_mode_a_prompt(
             f"Do NOT copy outfit from this image — dress the model in the clothing visible in Image {scene_i}."
         )
     else:
-        body_line = (
-            f"Image {body_i} = body proportions and outfit reference. The person's body shape and the clothing "
-            "shown here should be transferred exactly as-is."
-        )
+        if mannequin_scene:
+            body_line = (
+                f"Image {body_i} = authoritative MODEL body proportions AND outfit (headless dressed prep). "
+                f"Transfer bust size, waist width, hip width, limb build, skin tone, and garments from Image {body_i} "
+                f"onto the pose from Image {scene_i}. Image {body_i} fully overrides the simplified gray body on "
+                f"Image {scene_i} — never copy the original sitter's figure from the mannequin canvas."
+            )
+        else:
+            body_line = (
+                f"Image {body_i} = body proportions and outfit reference. The person's body shape and the clothing "
+                "shown here should be transferred exactly as-is."
+            )
 
     if bust_portrait:
         expr_rule = (
             f"Copy expression MOOD from Image {scene_i} (smile intensity, lip parting, teeth visibility, "
             f"eye state, brow position, head tilt) but apply it ONLY on the MODEL bone structure from "
             "the face reference image(s) — never keep the scene sitter's face shape or likeness."
+        )
+    elif mannequin_scene:
+        expr_rule = (
+            f"Structural facial features come only from Image {face_i}. Match head tilt, gaze direction, and "
+            f"overall expression mood from the pose on Image {scene_i} (mannequin canvas has no face to copy — "
+            "use head orientation and scene context only). Apply that mood on the MODEL bone structure from "
+            f"Image {face_i}; do not invent the original sitter's face or micro-expression from memory."
         )
     else:
         expr_rule = (
@@ -584,7 +604,7 @@ def build_mode_a_prompt(
         prompt += f"\n\n{BUST_PORTRAIT_FACE_BLOCK}"
     prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
     prompt += f"\n\n{identity_marks_block(vis)}"
-    prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style)}"
+    prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style, identity_face_image_label=f'Image {face_i}')}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
     prompt += f"\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
@@ -801,7 +821,8 @@ def dressed_body_cache_key(
     headless: bool = False,
 ) -> str:
     h = hashlib.sha256()
-    tag = "dress_headless" if headless else "dress"
+    # v2 — усиленный headless dress (не копировать силуэт с scene donor).
+    tag = "dress_headless_v2" if headless else "dress"
     h.update(f"{tag}|m{model_id}|f{face_image_id}|b{body_image_id}|{vis.cache_key_part()}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()

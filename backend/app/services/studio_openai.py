@@ -102,18 +102,28 @@ def _wavespeed_face_swap_prefix_scene_first(
         if lock_model_hairstyle
         else "Hairstyle may follow Image 1 scene layout when explicitly needed; color from Image 2. "
     )
-    canvas = (
-        "gray mannequin pose canvas (matte gray — no identity to preserve)"
-        if mannequin_scene
-        else "scene canvas — preserve pose, camera, framing, lighting, outfit coverage"
-    )
-    replace_who = (
-        "Replace all visible gray mannequin skin and gray fabric on Image 1 with MODEL identity"
-        if mannequin_scene
-        else "Edit Image 1 in place — replace the performer with MODEL identity"
-    )
+    if mannequin_scene:
+        return (
+            f"{_FACE_SWAP_TAG} **Image 1** = **gray mannequin pose canvas** (matte gray — pose, camera, framing, "
+            "lighting, background ONLY). **Do NOT** take bust/waist/hip width, body build, skin tone, or final "
+            "garment colors from Image 1 — the gray mannequin is not the body donor. "
+            "**Image 2** = **MODEL face** (identity WHO). "
+            "**Image 3** = **MODEL body + outfit** (headless dressed prep on the model's proportions — "
+            "authoritative bust, waist, hips, limbs, skin tone family, garment types, colors, nudity level). "
+            "**Image 3 wins for all body proportions and wardrobe**; Image 1 wins only for pose geometry, "
+            "camera, and illumination. "
+            "**Replace** every gray region on Image 1 with photoreal MODEL from Images 2–3 — "
+            "same person, one continuous skin tone in this lighting. "
+            "**Harmonize** white balance cheeks→torso; **no** residual gray mannequin or stranger identity. "
+            "Preserve from Image 1: limb articulation, head tilt, gaze direction, shadows on environment — "
+            "**not** simplified mannequin body mass, **not** watermarks/captions/URLs. "
+            f"{hair_clause}"
+            "Image 2 = likeness; Image 3 = body/outfit; Image 1 = room + pose topology.\n\n"
+        )
+
     return (
-        f"{_FACE_SWAP_TAG} **Image 1** = **SOURCE snapshot** ({canvas}). **{replace_who}.** "
+        f"{_FACE_SWAP_TAG} **Image 1** = **SOURCE snapshot** (scene canvas — preserve pose, camera, framing, "
+        "lighting, outfit coverage). **Edit Image 1 in place** — replace the performer with MODEL identity. "
         "**Image 2** = **MODEL face** (identity WHO — never keep the scene sitter's face). "
         "**Image 3** = **MODEL body** proportions reference only (build, silhouette, limb proportions — **not** pose, **not** outfit). "
         "**Clothing and accessories stay from Image 1.** "
@@ -209,10 +219,20 @@ def wavespeed_prompt_with_face_swap_first(
         if mannequin_scene
         else "**Replace** recognizable face and every visible epidermis region of the Image 3 performer with MODEL identity continuously — "
     )
+    body2_line = (
+        "**Image 2** = **MODEL body + outfit** (headless dressed prep — authoritative proportions and wardrobe). "
+        if mannequin_scene
+        else "**Image 2** = **MODEL body** proportions reference only (build, silhouette, limb proportions — **not** outfit). "
+    )
+    clothes_line = (
+        "**Image 2 supplies body proportions and clothing; Image 3 supplies pose/light only.** "
+        if mannequin_scene
+        else "**Clothing and accessories come from Image 2** when Image 2 is a dressed body reference; otherwise from Image 3 scene. "
+    )
     prefix = (
         f"{_FACE_SWAP_TAG} **Image 1** = **MODEL face** (identity WHO). "
-        "**Image 2** = **MODEL body** proportions reference only (build, silhouette, limb proportions — **not** outfit). "
-        "**Clothing and accessories come from Image 2** when Image 2 is a dressed body reference; otherwise from Image 3 scene. "
+        f"{body2_line}"
+        f"{clothes_line}"
         f"{scene3_label}"
         f"{replace3}"
         "same underlying undertone and highlight texture **as one person** chin→neck→upper chest/decollete→arms/legs in **this** lighting. "

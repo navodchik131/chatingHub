@@ -317,6 +317,18 @@ def test_dressed_body_cache_key_stable():
     assert a != c
 
 
+def test_finalize_seedream_mannequin_scene_first_prefix():
+    out = finalize_anchor_mode_a_wavespeed_prompt(
+        "anchor body",
+        wave_profile="nsfw",
+        lock_model_hairstyle=True,
+        scene_first=True,
+        mannequin_scene=True,
+    )
+    assert "Image 3 wins for all body proportions and wardrobe" in out
+    assert "Clothing and accessories stay from Image 1" not in out
+
+
 def test_finalize_seedream_scene_first_prefix():
     out = finalize_anchor_mode_a_wavespeed_prompt(
         "Replace face in scene.",
