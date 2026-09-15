@@ -38,6 +38,16 @@ GENERAL BUILD:
 """
 
 
+def test_mode_a_mannequin_scene_prompt():
+    vis = AnchorVisibility()
+    filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
+    prompt = build_mode_a_prompt(
+        filtered_anchor=filtered, vis=vis, mannequin_scene=True, raw_body_ref=False
+    )
+    assert "gray mannequin pose canvas" in prompt
+    assert "Do not leave final matte gray mannequin visible" in prompt
+
+
 def test_mode_a_prompt_matches_html_contract():
     vis = AnchorVisibility(face=True, hair=True, upper=True, lower=True)
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)

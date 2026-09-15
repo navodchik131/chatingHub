@@ -302,6 +302,8 @@ class Settings(BaseSettings):
         default="data/prompts/female_character_appearance_template.json",
     )
     credit_cost_studio_model_profile_generate: int = Field(default=1)
+    # Face swap: реф → серый манекен + headless dressed body перед финальным swap (см. studio_anchor_runner).
+    studio_face_swap_mannequin_prep: bool = Field(default=True)
     # Локальная отладка: клиент может передать generate_wavespeed=0 и получить только refined_prompt без WaveSpeed
     studio_allow_prompt_only: bool = Field(default=False)
     credit_cost_studio_carousel_shot: int = Field(default=2)

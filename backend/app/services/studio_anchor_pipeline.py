@@ -2,7 +2,7 @@
 
 Used for Face Swap (Mode A: with scene photo) and From-reference (Mode B: scene as text).
 Image contract (единый порядок для всех профилей WaveSpeed):
-  Mode A face_swap: Image1=face, Image2=body (raw model), Image3=scene photo
+  Mode A face_swap: Image1=face, Image2=body (raw or headless dressed), Image3=scene or gray mannequin canvas
   Mode A model_scene: Image1=face, Image2=body+outfit (dressed), Image3=scene photo
   Mode B: Image1=face, Image2=body+outfit (dressed); scene described in text only
 """
@@ -154,6 +154,63 @@ Transfer from Image 2 only: garment types, colors, patterns, materials, silhouet
 Do not copy the face or identity of the person in Image 2.
 Do not copy skin marks, tattoos, scars, or body hair from Image 2 — those belong to the model identity only.
 Neutral clean background preferred. Photorealistic result."""
+
+# Face swap mannequin prep — тексты в data/prompts (и _bundled_prompts в образе).
+_FACE_SWAP_PROMPT_FILES = {
+    "mannequin_sfw": "face_swap_mannequin_sfw.txt",
+    "mannequin_nsfw": "face_swap_mannequin_nsfw.txt",
+    "dressed_headless": "face_swap_dressed_body_headless.txt",
+}
+
+
+def _face_swap_prompt_candidates(filename: str) -> list[Path]:
+    ordered = [
+        (BACKEND_DIR / "data" / "prompts" / filename).resolve(),
+        (BACKEND_DIR / "_bundled_prompts" / filename).resolve(),
+    ]
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for path in ordered:
+        if path in seen:
+            continue
+        seen.add(path)
+        out.append(path)
+    return out
+
+
+def _read_first_nonempty_face_swap_prompt(filename: str) -> str | None:
+    for path in _face_swap_prompt_candidates(filename):
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    return None
+
+
+def load_face_swap_mannequin_prompt(*, wave_profile: str) -> str:
+    """SFW = regular; NSFW = усиленный recolor-only промпт для зоны пояс–колени."""
+    wp = (wave_profile or "nsfw").strip().lower()
+    key = "mannequin_sfw" if wp == "regular" else "mannequin_nsfw"
+    text = _read_first_nonempty_face_swap_prompt(_FACE_SWAP_PROMPT_FILES[key])
+    if text:
+        return text
+    tried = ", ".join(str(p) for p in _face_swap_prompt_candidates(_FACE_SWAP_PROMPT_FILES[key]))
+    raise RuntimeError(f"Face swap mannequin prompt not found (tried: {tried})")
+
+
+def load_face_swap_dressed_body_headless_prompt() -> str:
+    text = _read_first_nonempty_face_swap_prompt(_FACE_SWAP_PROMPT_FILES["dressed_headless"])
+    if text:
+        return text
+    tried = ", ".join(str(p) for p in _face_swap_prompt_candidates(_FACE_SWAP_PROMPT_FILES["dressed_headless"]))
+    raise RuntimeError(f"Face swap headless dress prompt not found (tried: {tried})")
+
+
+def face_swap_mannequin_prep_enabled() -> bool:
+    from app.config import settings
+
+    return bool(getattr(settings, "studio_face_swap_mannequin_prep", True))
 
 # Родинки/тату/шрамы — только с модели, никогда с scene donor (Image 3 / текст сцены).
 IDENTITY_MARKS_BLOCK = (
@@ -430,6 +487,7 @@ def build_mode_a_prompt(
     bust_portrait: bool = False,
     extra_face_copies: int = 0,
     raw_body_ref: bool = True,
+    mannequin_scene: bool = False,
 ) -> str:
     """Face-swap WITH scene photo — Mode A: Image1=face/body/scene or scene/face/body (Seedream)."""
     exclusions = exclusion_notes(vis)
@@ -475,20 +533,47 @@ def build_mode_a_prompt(
             f"not part of identity — it must follow Image {scene_i}, not default to neutral."
         )
 
+    if mannequin_scene:
+        scene_intro = (
+            f"Image {scene_i} = gray mannequin pose canvas: matte gray featureless stand-in with the exact "
+            "pose, camera angle, framing, lighting, background, and garment-coverage silhouette from the "
+            "original photo. No human identity remains on this canvas — only geometry, light, and gray "
+            "clothing shapes.\n"
+        )
+        replace_line = (
+            f"Replace every visible gray mannequin surface in Image {scene_i} (skin and gray fabric) with "
+            f"the photoreal model identity from Image {face_i} and body proportions/outfit from Image {body_i}.\n"
+        )
+        no_preserve_line = (
+            f"Do not leave final matte gray mannequin visible on skin or clothes. "
+            f"Use Image {body_i} for bust size, waist width, hip width, and outfit/nudity level — "
+            f"not the simplified mannequin proportions.\n"
+        )
+    else:
+        scene_intro = (
+            f"Image {scene_i} = target scene: recreate this exact pose, camera angle, framing, and lighting. "
+            f"The scene reference donates geometry, light, and wardrobe coverage only — never the sitter's "
+            "tattoos, moles, scars, birthmarks, face, or body identity.\n"
+        )
+        replace_line = (
+            f"Replace the person in Image {scene_i} entirely with the identity from Image {face_i} "
+            f"and the body proportions from Image {body_i}.\n"
+        )
+        no_preserve_line = (
+            f"Do not preserve the body silhouette, bust size, waist width, hip width, face, or outfit of "
+            f"the person in Image {scene_i} — replace all of it with the model identity references.\n"
+        )
+
     prompt = (
-        f"Image {scene_i} = target scene: recreate this exact pose, camera angle, framing, and lighting. "
-        f"The scene reference donates geometry, light, and wardrobe coverage only — never the sitter's "
-        "tattoos, moles, scars, birthmarks, face, or body identity.\n"
-        f"{face_ref_label}Use this face, and only this face.\n"
+        scene_intro
+        + f"{face_ref_label}Use this face, and only this face.\n"
         f"{body_line}\n"
         "\n"
-        f"Replace the person in Image {scene_i} entirely with the identity from Image {face_i} "
-        f"and the body proportions from Image {body_i}.\n"
+        f"{replace_line}"
         "\n"
         f"{filtered_anchor}\n"
         "\n"
-        f"Do not preserve the body silhouette, bust size, waist width, hip width, face, or outfit of "
-        f"the person in Image {scene_i} — replace all of it with the model identity references.\n"
+        f"{no_preserve_line}"
         "\n"
         f"Preserve exactly from Image {scene_i}: pose, camera distance and angle, framing, lighting direction "
         "and color temperature, shadows, background.\n"
@@ -713,9 +798,20 @@ def dressed_body_cache_key(
     body_image_id: int | None,
     scene_bytes: bytes,
     vis: AnchorVisibility,
+    headless: bool = False,
 ) -> str:
     h = hashlib.sha256()
-    h.update(f"m{model_id}|f{face_image_id}|b{body_image_id}|{vis.cache_key_part()}".encode())
+    tag = "dress_headless" if headless else "dress"
+    h.update(f"{tag}|m{model_id}|f{face_image_id}|b{body_image_id}|{vis.cache_key_part()}".encode())
+    h.update(hashlib.sha256(scene_bytes).digest())
+    return h.hexdigest()
+
+
+def mannequin_scene_cache_key(*, scene_bytes: bytes, wave_profile: str) -> str:
+    """Кэш шага 0: только hash сцены + SFW/NSFW профиль."""
+    h = hashlib.sha256()
+    wp = (wave_profile or "nsfw").strip().lower()
+    h.update(f"mannequin_v1|{wp}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()
 

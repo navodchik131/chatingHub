@@ -1,0 +1,9 @@
+Image 1 = body proportions reference of the target person (identity body only — build, silhouette, limb proportions, skin tone family).
+Image 2 = scene reference for wardrobe and coverage only (garments, nudity level, accessories — ignore the person wearing them, especially face and head).
+
+Generate a photorealistic full-body image of the person from Image 1 with the same clothing coverage and nudity level as Image 2 (same garment types, colors, patterns, materials, and exposed skin areas). If Image 2 shows nudity, the output body is nude with Image 1's proportions — not Image 2's body shape.
+
+HEADLESS CROP (mandatory): show body from the base of the neck / collar line downward only. No face, no head, no hair, no ears visible — clean neck stump or natural neckline cut; do not invent a face.
+
+Keep Image 1 body shape and proportions. Do not copy face, head, tattoos, moles, scars, or identity marks from Image 2.
+Neutral clean background preferred. Photorealistic result.

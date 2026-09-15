@@ -62,6 +62,32 @@ def anchor_pipeline_eligible_from_params(
     return False
 
 
+def anchor_prep_edits_quoted(*, studio_mode: str) -> int:
+    """Сколько WaveSpeed prep-edit заложено в котировку (mannequin + dress для face_swap)."""
+    from app.services.studio_anchor_pipeline import face_swap_mannequin_prep_enabled
+
+    mode = normalize_studio_mode(str(studio_mode or ""))
+    if mode == "face_swap" and face_swap_mannequin_prep_enabled():
+        return 2
+    return 1
+
+
+def anchor_uncached_prep_edits(anchor_result: Any | None) -> int:
+    """Prep-edit, которые реально ушли в WaveSpeed (не из кэша)."""
+    if anchor_result is None:
+        return 0
+    n = 0
+    if bool(getattr(anchor_result, "mannequin_prep_ran", False)) and not bool(
+        getattr(anchor_result, "mannequin_from_cache", False)
+    ):
+        n += 1
+    if bool(getattr(anchor_result, "wardrobe_prep_ran", False)) and not bool(
+        getattr(anchor_result, "dressed_from_cache", False)
+    ):
+        n += 1
+    return n
+
+
 def refine_prompt_billing_quote(
     plan: str,
     *,
@@ -70,6 +96,7 @@ def refine_prompt_billing_quote(
     wan_tier_n: str,
     grok_pipeline: str,
     include_anchor_prep: bool = False,
+    anchor_prep_edits: int = 1,
 ) -> tuple[str, int, int]:
     """usage_kind, quoted_cost (с промптом), base_studio_credit для demo/reserve."""
     usage_kind = "studio_inpaint" if mask_bytes else STUDIO_IMAGE_USAGE_KIND
@@ -87,14 +114,16 @@ def refine_prompt_billing_quote(
     )
     if not mask_bytes:
         quoted_cost += studio_prompt_refine_credit_cost()
-    # Wardrobe prep (dress body) — отдельный WaveSpeed без Grok-compose.
+    # Wardrobe / mannequin prep — отдельные WaveSpeed edit без Grok-compose.
     if include_anchor_prep and not mask_bytes:
-        quoted_cost += resolve_image_credit_cost(
+        edits = max(1, int(anchor_prep_edits or 1))
+        prep_one = resolve_image_credit_cost(
             plan,
             wave_model_id=billing_wave_model,
             wan_edit_tier=wan_tier_n,
             grok_pipeline="none",
         )
+        quoted_cost += prep_one * edits
     return usage_kind, quoted_cost, base_studio_credit
 
 

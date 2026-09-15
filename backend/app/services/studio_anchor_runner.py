@@ -20,8 +20,12 @@ from app.services.studio_anchor_pipeline import (
     detect_bust_portrait_scene,
     detect_face_closeup_scene,
     dressed_body_cache_key,
+    face_swap_mannequin_prep_enabled,
     filter_anchor_by_visibility,
     load_cached_dressed_body,
+    load_face_swap_dressed_body_headless_prompt,
+    load_face_swap_mannequin_prompt,
+    mannequin_scene_cache_key,
     order_mode_a_face_closeup_urls,
     order_mode_a_image_urls,
     parse_visibility_from_scene_text,
@@ -56,6 +60,10 @@ class AnchorPipelineResult:
     scene_first: bool = False
     face_closeup: bool = False
     bust_portrait: bool = False
+    mannequin_scene: bool = False
+    mannequin_from_cache: bool = False
+    mannequin_prep_ran: bool = False
+    wardrobe_prep_ran: bool = False
 
 
 async def _analyze_scene_text(
@@ -102,11 +110,11 @@ async def _analyze_scene_text(
     return (text or "").strip()
 
 
-async def _dress_body_via_wavespeed(
+async def _wavespeed_edit_bytes(
     *,
     api_key: str,
-    body_url: str,
-    scene_url: str,
+    image_urls: list[str],
+    prompt: str,
     wave_profile: str,
     wan_edit_tier: str,
     wave_model_id: str,
@@ -121,19 +129,62 @@ async def _dress_body_via_wavespeed(
     result = await workflow_edit_image_url(
         api_key=api_key,
         wave_model_id=model,
-        image_urls=[body_url, scene_url],
-        prompt=DRESS_BODY_PROMPT,
+        image_urls=image_urls,
+        prompt=prompt,
         aspect_ratio=aspect_ratio or "9:16",
         wan_edit_tier=wan_edit_tier or "standard",
         wave_profile=wave_profile,
     )
     url = str(getattr(result, "url", "") or "").strip()
     if not url:
-        raise RuntimeError("wardrobe prep: empty WaveSpeed result URL")
+        raise RuntimeError("anchor prep edit: empty WaveSpeed result URL")
     raw = await _download_url_bytes(url)
     if not raw or len(raw) < 64:
-        raise RuntimeError("wardrobe prep: empty downloaded image")
+        raise RuntimeError("anchor prep edit: empty downloaded image")
     return raw
+
+
+async def _dress_body_via_wavespeed(
+    *,
+    api_key: str,
+    body_url: str,
+    scene_url: str,
+    wave_profile: str,
+    wan_edit_tier: str,
+    wave_model_id: str,
+    aspect_ratio: str = "9:16",
+    dress_prompt: str | None = None,
+) -> bytes:
+    return await _wavespeed_edit_bytes(
+        api_key=api_key,
+        image_urls=[body_url, scene_url],
+        prompt=dress_prompt or DRESS_BODY_PROMPT,
+        wave_profile=wave_profile,
+        wan_edit_tier=wan_edit_tier,
+        wave_model_id=wave_model_id,
+        aspect_ratio=aspect_ratio,
+    )
+
+
+async def _mannequin_scene_via_wavespeed(
+    *,
+    api_key: str,
+    scene_url: str,
+    wave_profile: str,
+    wan_edit_tier: str,
+    wave_model_id: str,
+    aspect_ratio: str = "9:16",
+) -> bytes:
+    prompt = load_face_swap_mannequin_prompt(wave_profile=wave_profile)
+    return await _wavespeed_edit_bytes(
+        api_key=api_key,
+        image_urls=[scene_url],
+        prompt=prompt,
+        wave_profile=wave_profile,
+        wan_edit_tier=wan_edit_tier,
+        wave_model_id=wave_model_id,
+        aspect_ratio=aspect_ratio,
+    )
 
 
 async def run_anchor_pipeline(
@@ -217,19 +268,34 @@ async def run_anchor_pipeline(
     # Только SCENE_DIRECTION / пользовательские заметки — без REFERENCE_CONTEXT из workflow.
     notes = extract_creative_notes_from_workflow_description(user_notes)
 
+    use_mannequin = (
+        mode_n == "face_swap"
+        and not face_closeup
+        and face_swap_mannequin_prep_enabled()
+    )
+    dress_headless = use_mannequin
+
     cache_key = dressed_body_cache_key(
         model_id=model_id,
         face_image_id=getattr(face_im, "id", None),
         body_image_id=getattr(body_im, "id", None),
         scene_bytes=scene_bytes,
         vis=vis,
+        headless=dress_headless,
     )
+    mannequin_key = mannequin_scene_cache_key(scene_bytes=scene_bytes, wave_profile=wave_profile)
 
     dressed_bytes: bytes | None = None
     from_cache = False
     if not force_redress:
         dressed_bytes = load_cached_dressed_body(cache_key)
         from_cache = dressed_bytes is not None
+
+    mannequin_bytes: bytes | None = None
+    mannequin_from_cache = False
+    if use_mannequin and not force_redress:
+        mannequin_bytes = load_cached_dressed_body(mannequin_key)
+        mannequin_from_cache = mannequin_bytes is not None
 
     face_tok = create_model_image_access_token(user_id=owner_id, image_id=int(face_im.id))
     body_tok = create_model_image_access_token(user_id=owner_id, image_id=int(body_im.id))
@@ -242,33 +308,72 @@ async def run_anchor_pipeline(
         content_type=scene_mime or "image/jpeg",
     )
     scene_tok = create_pose_reference_access_token(user_id=owner_id, file_id=scene_fid)
-    scene_url = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
+    scene_url_original = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
+    scene_url = scene_url_original
 
-    dressed_url = ""
-    # face_swap: Image 2 = сырое тело модели; одежда только из сцены (Image 3). Wardrobe-prep — только model_scene.
-    skip_wardrobe = mode_n == "face_swap"
-    if not face_closeup and not skip_wardrobe:
-        if dressed_bytes is None:
-            log.info(
-                "anchor wardrobe prep model=%s key=%s…",
-                model_id,
-                cache_key[:12],
-            )
-            dressed_bytes = await _dress_body_via_wavespeed(
+    mannequin_prep_ran = False
+    wardrobe_prep_ran = False
+
+    # Шаг 0: реф → серый манекен (один проход; NSFW — recolor-only пояс–колени в промпте).
+    if use_mannequin:
+        if mannequin_bytes is None:
+            log.info("anchor mannequin prep model=%s key=%s…", model_id, mannequin_key[:12])
+            mannequin_bytes = await _mannequin_scene_via_wavespeed(
                 api_key=wavespeed_api_key,
-                body_url=body_url,
-                scene_url=scene_url,
+                scene_url=scene_url_original,
                 wave_profile=wave_profile,
                 wan_edit_tier=wan_edit_tier,
                 wave_model_id=wave_model_id,
                 aspect_ratio=aspect_ratio,
             )
             save_cached_dressed_body(
+                mannequin_key,
+                mannequin_bytes,
+                meta={"mode": "mannequin", "wave_profile": wave_profile},
+            )
+        mannequin_prep_ran = True
+        mannequin_fid = save_pose_reference_bytes(
+            owner_id=owner_id,
+            raw=mannequin_bytes,
+            content_type="image/jpeg",
+        )
+        mannequin_tok = create_pose_reference_access_token(user_id=owner_id, file_id=mannequin_fid)
+        scene_url = f"{pub}/api/studio/public-pose-reference?t={quote(mannequin_tok, safe='')}"
+
+    dressed_url = ""
+    # face_swap без манекена: сырое тело; с манекеном — headless dressed body; model_scene — обычный dress.
+    skip_wardrobe = mode_n == "face_swap" and not use_mannequin
+    if not face_closeup and not skip_wardrobe:
+        dress_prompt = (
+            load_face_swap_dressed_body_headless_prompt()
+            if dress_headless
+            else DRESS_BODY_PROMPT
+        )
+        outfit_scene_url = scene_url_original if dress_headless else scene_url
+        if dressed_bytes is None:
+            log.info(
+                "anchor wardrobe prep model=%s key=%s… headless=%s",
+                model_id,
+                cache_key[:12],
+                dress_headless,
+            )
+            dressed_bytes = await _dress_body_via_wavespeed(
+                api_key=wavespeed_api_key,
+                body_url=body_url,
+                scene_url=outfit_scene_url,
+                wave_profile=wave_profile,
+                wan_edit_tier=wan_edit_tier,
+                wave_model_id=wave_model_id,
+                aspect_ratio=aspect_ratio,
+                dress_prompt=dress_prompt,
+            )
+            save_cached_dressed_body(
                 cache_key,
                 dressed_bytes,
-                meta={"model_id": model_id, "mode": mode_n},
+                meta={"model_id": model_id, "mode": mode_n, "headless": dress_headless},
             )
 
+        wardrobe_prep_ran = True
         dressed_fid = save_pose_reference_bytes(
             owner_id=owner_id,
             raw=dressed_bytes,
@@ -317,7 +422,8 @@ async def run_anchor_pipeline(
                 lock_hairstyle_style=lock_hairstyle_style,
                 bust_portrait=bust_portrait,
                 extra_face_copies=extra_faces,
-                raw_body_ref=True,
+                raw_body_ref=not use_mannequin,
+                mannequin_scene=use_mannequin,
                 scene_first=scene_first,
             )
             urls = order_mode_a_image_urls(
@@ -357,4 +463,8 @@ async def run_anchor_pipeline(
         scene_first=scene_first if mode_n == "face_swap" else False,
         face_closeup=face_closeup if mode_n == "face_swap" else False,
         bust_portrait=bust_portrait if mode_n == "face_swap" else False,
+        mannequin_scene=use_mannequin,
+        mannequin_from_cache=mannequin_from_cache if use_mannequin else False,
+        mannequin_prep_ran=mannequin_prep_ran,
+        wardrobe_prep_ran=wardrobe_prep_ran,
     )

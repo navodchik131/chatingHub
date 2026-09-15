@@ -63,6 +63,35 @@ def test_refine_billing_includes_anchor_prep():
     assert with_prep > base
 
 
+def test_refine_billing_face_swap_mannequin_two_prep_edits():
+    from app.services.studio_refine_billing import (
+        anchor_prep_edits_quoted,
+        refine_prompt_billing_quote,
+    )
+
+    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 2
+    assert anchor_prep_edits_quoted(studio_mode="model_scene") == 1
+    _, one_prep, _ = refine_prompt_billing_quote(
+        "credits",
+        mask_bytes=False,
+        billing_wave_model="wan-2.7",
+        wan_tier_n="standard",
+        grok_pipeline="standard",
+        include_anchor_prep=True,
+        anchor_prep_edits=1,
+    )
+    _, two_prep, _ = refine_prompt_billing_quote(
+        "credits",
+        mask_bytes=False,
+        billing_wave_model="wan-2.7",
+        wan_tier_n="standard",
+        grok_pipeline="standard",
+        include_anchor_prep=True,
+        anchor_prep_edits=2,
+    )
+    assert two_prep > one_prep
+
+
 def test_anchor_pipeline_eligible_params():
     from app.services.studio_refine_billing import anchor_pipeline_eligible_from_params
 

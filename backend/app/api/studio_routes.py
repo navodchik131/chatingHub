@@ -98,6 +98,8 @@ from app.services.studio_operation_pricing import (
 from app.services.studio_refine_billing import (
     anchor_pipeline_eligible_from_params,
     anchor_prep_credit_cost,
+    anchor_prep_edits_quoted,
+    anchor_uncached_prep_edits,
     refine_prompt_billing_quote,
 )
 from app.services.admin_access import user_is_platform_admin
@@ -958,6 +960,7 @@ async def _reserve_refine_prompt_billing_at_accept(
         wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
         include_anchor_prep=anchor_prep,
+        anchor_prep_edits=anchor_prep_edits_quoted(studio_mode=mode_n),
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
@@ -5286,6 +5289,7 @@ async def _studio_job_execute_refine_prompt(
         wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
         include_anchor_prep=anchor_eligible,
+        anchor_prep_edits=anchor_prep_edits_quoted(studio_mode=mode_n),
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
@@ -5718,11 +5722,11 @@ async def _studio_job_execute_refine_prompt(
             log.warning("anchor pipeline failed job=%s: %s — falling back", job.id, e)
             anchor_result = None
 
-    # Списание wardrobe prep только если prep реально выполнялся (не из кэша).
+    # Списание prep-edit (манекен + dress): только uncached шаги; остальное — возврат из quoted.
     anchor_prep_applied = bool(
         anchor_eligible
         and anchor_result is not None
-        and not anchor_result.dressed_from_cache
+        and anchor_uncached_prep_edits(anchor_result) > 0
     )
     if anchor_eligible and cost > 0 and not used_demo:
         prep_billed = apply_studio_credit_cost(
@@ -5733,8 +5737,11 @@ async def _studio_job_execute_refine_prompt(
                 wan_tier_n=wan_tier_n,
             ),
         )
-        if not anchor_prep_applied:
-            cost = max(0, cost - prep_billed)
+        prep_quoted = anchor_prep_edits_quoted(studio_mode=mode_n)
+        uncached = anchor_uncached_prep_edits(anchor_result) if anchor_result else 0
+        refund_edits = max(0, prep_quoted - uncached)
+        if refund_edits:
+            cost = max(0, cost - prep_billed * refund_edits)
 
     generated_image_url: str | None = None
     wavespeed_message: str | None = None
@@ -6058,6 +6065,7 @@ async def _studio_job_execute_refine_prompt(
                         lock_model_hairstyle=effective_lock_hairstyle,
                         scene_first=anchor_result.scene_first,
                         bust_portrait=anchor_result.bust_portrait,
+                        mannequin_scene=anchor_result.mannequin_scene,
                     )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
@@ -7149,16 +7157,13 @@ async def _studio_job_execute_motion_first_frame(
             wan_edit_tier=wan_tier_n,
             grok_pipeline=gp,
         )
-        # Wardrobe prep — отдельный WaveSpeed, если anchor реально генерил dress (не cache).
-        if (
-            anchor_result is not None
-            and not bool(getattr(anchor_result, "dressed_from_cache", True))
-        ):
-            quoted += anchor_prep_credit_cost(
-                plan,
-                billing_wave_model=billing_wave,
-                wan_tier_n=wan_tier_n,
-            )
+        # Prep-edit (манекен + dress): только uncached шаги.
+        prep_one = anchor_prep_credit_cost(
+            plan,
+            billing_wave_model=billing_wave,
+            wan_tier_n=wan_tier_n,
+        )
+        quoted += prep_one * anchor_uncached_prep_edits(anchor_result)
         billing_owner = await resolve_billing_user(session, user)
         billing, cost, used_demo = await prepare_studio_image_billing(
             session,
@@ -7264,6 +7269,7 @@ async def _studio_job_execute_motion_first_frame(
                     lock_model_hairstyle=effective_lock_hairstyle,
                     scene_first=anchor_result.scene_first,
                     bust_portrait=anchor_result.bust_portrait,
+                    mannequin_scene=anchor_result.mannequin_scene,
                 )
             if workflow_first_frame:
                 from app.services.studio_model_bootstrap import (

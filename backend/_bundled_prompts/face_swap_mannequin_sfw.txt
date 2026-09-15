@@ -1,0 +1,4 @@
+Edit the input photo. Replace the person with a smooth adult gray humanoid mannequin.
+The entire body, head and face must be featureless matte gray — no eyes, no nose, no mouth, no eyebrows, no hair, no skin texture, no facial resemblance to the original. Body proportions should be simplified and mannequin-like.
+If the original person is wearing clothes, convert the clothing to plain matte gray fabric of the same style, without patterns or logos. If there is any exposed skin, make it seamless matte gray.
+Preserve the exact pose, body position, scale, hand placement, lighting, background and composition. Remove every trace of the original person's identity.
