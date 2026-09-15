@@ -399,7 +399,13 @@ async def run_anchor_pipeline(
         scene_first = anchor_mode_a_scene_first(
             wave_profile=wave_profile,
             wave_model_id=wave_model_id,
+            mannequin_scene=use_mannequin,
         )
+        if use_mannequin and (wave_model_id or "").strip().lower().startswith("seedream"):
+            log.info(
+                "anchor mannequin + seedream: identity-first URLs (face, dressed body, mannequin) — "
+                "not scene-first canvas"
+            )
         if face_closeup:
             prompt = build_mode_a_face_closeup_prompt(
                 filtered_anchor=filtered or anchor,

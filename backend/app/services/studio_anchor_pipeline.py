@@ -243,9 +243,19 @@ FACE_IDENTITY_LOCK_BLOCK = (
 )
 
 
-def anchor_mode_a_scene_first(*, wave_profile: str, wave_model_id: str = "") -> bool:
-    """Seedream edit: сцена первой (edit canvas + aspect ratio). WAN/Nano — identity-first."""
+def anchor_mode_a_scene_first(
+    *,
+    wave_profile: str,
+    wave_model_id: str = "",
+    mannequin_scene: bool = False,
+) -> bool:
+    """Seedream edit: сцена первой (edit canvas). WAN/Nano — identity-first.
+
+    Манекен нельзя ставить первым: Seedream клеится к силуэту Image 1, серое тело «замораживает» пропорции.
+    """
     _ = wave_profile
+    if mannequin_scene:
+        return False
     model = (wave_model_id or "").strip().lower()
     return model.startswith("seedream")
 
