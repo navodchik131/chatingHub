@@ -38,6 +38,46 @@ GENERAL BUILD:
 """
 
 
+def test_extract_expression_block_from_scene_text():
+    from app.services.studio_anchor_pipeline import (
+        extract_expression_block_from_scene_text,
+        format_scene_expression_prompt_block,
+    )
+
+    scene = """POSE:
+- Head tilt: left
+
+EXPRESSION:
+- Mouth: open, tongue visible
+- Eyes: squinting
+- Overall expression descriptor: playful, laughing
+
+LIGHTING:
+- Soft window light
+"""
+    block = extract_expression_block_from_scene_text(scene)
+    assert "Mouth: open" in block
+    assert "LIGHTING" not in block
+    wrapped = format_scene_expression_prompt_block(block)
+    assert "SCENE_EXPRESSION" in wrapped
+
+
+def test_mode_a_mannequin_uses_grok_expression_block():
+    vis = AnchorVisibility()
+    filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
+    expr = "EXPRESSION:\n- Mouth: open, tongue out\n- Eyes: closed"
+    prompt = build_mode_a_prompt(
+        filtered_anchor=filtered,
+        vis=vis,
+        mannequin_scene=True,
+        raw_body_ref=False,
+        scene_expression_block=expr,
+    )
+    assert "SCENE_EXPRESSION" in prompt
+    assert "tongue out" in prompt
+    assert "Do NOT use a neutral studio face" in prompt
+
+
 def test_seedream_mannequin_prompt_geometry_lock():
     from app.services.studio_anchor_pipeline import load_face_swap_mannequin_prompt
 

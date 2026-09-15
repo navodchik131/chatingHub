@@ -493,6 +493,47 @@ def exclusion_notes(vis: AnchorVisibility) -> str:
     return " ".join(notes)
 
 
+def extract_expression_block_from_scene_text(text: str) -> str:
+    """Блок EXPRESSION из Grok scene analysis (оригинальный реф до mannequin)."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    section_header = re.compile(
+        r"^(ENVIRONMENT|CAMERA|POSE|EXPRESSION|LIGHTING|OUTFIT|MOOD|VISIBILITY|"
+        r"MOOD/STYLE|OVERLAYS):\s*$",
+        re.I,
+    )
+    lines = raw.split("\n")
+    out: list[str] = []
+    in_expr = False
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r"^EXPRESSION:\s*$", stripped, re.I):
+            in_expr = True
+            out.append("EXPRESSION:")
+            continue
+        if in_expr:
+            if section_header.match(stripped) and not stripped.upper().startswith("EXPRESSION"):
+                break
+            out.append(line)
+    block = "\n".join(out).strip()
+    if not block or not re.search(r"(?im)^\s*-\s+", block):
+        return ""
+    return block
+
+
+def format_scene_expression_prompt_block(expression_block: str) -> str:
+    """Вставка в финальный face swap — эмоция с исходного рефа (текст Grok), не с mannequin."""
+    block = (expression_block or "").strip()
+    if not block:
+        return ""
+    return (
+        "SCENE_EXPRESSION (from original reference photo — NOT part of identity; "
+        "apply on the MODEL face bone structure, do not default to neutral):\n"
+        f"{block}\n"
+    )
+
+
 def parse_visibility_from_scene_text(text: str) -> AnchorVisibility:
     vis = AnchorVisibility()
     t = (text or "").lower()
@@ -544,6 +585,7 @@ def build_mode_a_prompt(
     raw_body_ref: bool = True,
     mannequin_scene: bool = False,
     dressed_first: bool = False,
+    scene_expression_block: str = "",
 ) -> str:
     """Face-swap WITH scene photo — Mode A: Image1=face/body/scene or scene/face/body (Seedream)."""
     exclusions = exclusion_notes(vis)
@@ -593,12 +635,21 @@ def build_mode_a_prompt(
             "the face reference image(s) — never keep the scene sitter's face shape or likeness."
         )
     elif mannequin_scene:
-        expr_rule = (
-            f"Structural facial features come only from Image {face_i}. Match head tilt, gaze direction, and "
-            f"overall expression mood from the pose on Image {scene_i} (mannequin canvas has no face to copy — "
-            "use head orientation and scene context only). Apply that mood on the MODEL bone structure from "
-            f"Image {face_i}; do not invent the original sitter's face or micro-expression from memory."
-        )
+        if (scene_expression_block or "").strip():
+            expr_rule = (
+                f"Structural facial features (eye shape, nose, lips, jaw, face oval) come only from Image {face_i}. "
+                "Facial EXPRESSION is not identity — follow the SCENE_EXPRESSION block below exactly "
+                "(mouth, tongue, teeth, eye state, brows, overall mood from the original reference photo). "
+                f"Apply that performance on Image {face_i} bone structure. Match head tilt/gaze from Image {scene_i} pose. "
+                "Do NOT use a neutral studio face when SCENE_EXPRESSION is provided."
+            )
+        else:
+            expr_rule = (
+                f"Structural facial features come only from Image {face_i}. Match head tilt, gaze direction, and "
+                f"overall expression mood from the pose on Image {scene_i} (mannequin canvas has no face to copy — "
+                "use head orientation and scene context only). Apply that mood on the MODEL bone structure from "
+                f"Image {face_i}; do not invent the original sitter's face or micro-expression from memory."
+            )
     else:
         expr_rule = (
             f"Do not blend structural facial features — eye shape, nose shape, lip shape, face shape, "
@@ -665,6 +716,9 @@ def build_mode_a_prompt(
     prompt += f"\n\n{FACE_IDENTITY_LOCK_BLOCK}"
     prompt += f"\n\n{identity_marks_block(vis)}"
     prompt += f"\n\n{hairstyle_style_block(lock_hairstyle_style=lock_hairstyle_style, identity_face_image_label=f'Image {face_i}')}"
+    expr_from_grok = format_scene_expression_prompt_block(scene_expression_block)
+    if expr_from_grok:
+        prompt += f"\n\n{expr_from_grok}"
     if exclusions:
         prompt += f"\n\n{exclusions}"
     prompt += f"\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"

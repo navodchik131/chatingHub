@@ -189,6 +189,7 @@ def _wavespeed_face_swap_prefix_mannequin_dressed_first(*, lock_model_hairstyle:
         "**Image 3** = **gray mannequin** — pose, camera, framing, lighting, background ONLY; "
         "ignore mannequin body mass and gray proportions. "
         "Re-pose the person from Images 1–2 to match limb articulation and head tilt on Image 3. "
+        "Facial expression: follow the **SCENE_EXPRESSION** block in the prompt body (from original photo analysis). "
         f"{hair_clause}"
         "One continuous MODEL identity; Image 1 wins body/outfit, Image 3 wins pose topology.\n\n"
     )

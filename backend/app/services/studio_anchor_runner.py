@@ -20,6 +20,7 @@ from app.services.studio_anchor_pipeline import (
     detect_bust_portrait_scene,
     detect_face_closeup_scene,
     dressed_body_cache_key,
+    extract_expression_block_from_scene_text,
     face_swap_mannequin_prep_enabled,
     filter_anchor_by_visibility,
     load_cached_dressed_body,
@@ -436,6 +437,8 @@ async def run_anchor_pipeline(
             )
         else:
             extra_faces = 2 if bust_portrait else 0
+            # Эмоция с исходного рефа (Grok scene analysis) — mannequin canvas лица не несёт.
+            scene_expression_block = extract_expression_block_from_scene_text(scene_description)
             prompt = build_mode_a_prompt(
                 filtered_anchor=filtered or anchor,
                 vis=vis,
@@ -447,6 +450,7 @@ async def run_anchor_pipeline(
                 mannequin_scene=use_mannequin,
                 scene_first=scene_first,
                 dressed_first=dressed_first_final,
+                scene_expression_block=scene_expression_block if use_mannequin else "",
             )
             urls = order_mode_a_image_urls(
                 face_url=face_url,
