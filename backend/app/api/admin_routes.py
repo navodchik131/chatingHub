@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -31,6 +31,7 @@ from app.schemas import (
     AdminPartnerAttributionOut,
     AdminPartnerBackfillOut,
     AdminPasswordResetIn,
+    AdminPurchasesPageOut,
     AdminSegmentOut,
     AdminStatsOut,
     AdminSubscriptionPatchIn,
@@ -40,6 +41,7 @@ from app.schemas import (
     AdminUserRow,
 )
 from app.services.admin_analytics import build_admin_dashboard
+from app.services.admin_purchases import list_admin_purchases
 from app.services.funnel_analytics import build_activation_funnel
 from app.services.admin_segments import VALID_ADMIN_SEGMENTS, list_admin_segment
 from app.services.billing_plan import normalize_billing_plan
@@ -154,6 +156,29 @@ async def _user_row(
         studio_models_count=owner_models.get(oid, 0),
         studio_generations_count=owner_gens.get(oid, 0),
     )
+
+
+@router.get("/admin/purchases", response_model=AdminPurchasesPageOut)
+async def admin_purchases_list(
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_platform_admin),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+) -> AdminPurchasesPageOut:
+    """Платные покупки за период: подписки и пакеты кредитов (ЮKassa / Tribute)."""
+    try:
+        data = await list_admin_purchases(
+            session,
+            from_date=from_date,
+            to_date=to_date,
+            skip=skip,
+            limit=limit,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return AdminPurchasesPageOut.model_validate(data)
 
 
 @router.get("/admin/stats", response_model=AdminStatsOut)

@@ -6,6 +6,7 @@ import { resolveWorkspaceUrl, WORKSPACE_URL } from '../marketing/workspaceEntry'
 export type AdminTabId =
   | 'overview'
   | 'users'
+  | 'purchases'
   | 'email'
   | 'login_bot'
   | 'exif_bot'
@@ -48,6 +49,15 @@ const NAV_ICONS: Record<AdminTabId, ReactNode> = {
         <path d="M3.5 19.5c.6-2.9 2.9-4.6 5.5-4.6s4.9 1.7 5.5 4.6" />
         <circle cx="17" cy="10" r="2.5" />
         <path d="M16 15.2c2.3.2 4 1.7 4.5 4.3" />
+      </svg>
+    </NavIcon>
+  ),
+  purchases: (
+    <NavIcon>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3" y="6" width="18" height="14" rx="2" />
+        <path d="M3 10h18" />
+        <path d="M7 15h4" />
       </svg>
     </NavIcon>
   ),
@@ -156,6 +166,7 @@ export function AdminShell({
   const navItems: NavItem[] = [
     { id: 'overview', label: t('tabs.overview'), icon: NAV_ICONS.overview },
     { id: 'users', label: t('tabs.users'), icon: NAV_ICONS.users },
+    { id: 'purchases', label: t('tabs.purchases'), icon: NAV_ICONS.purchases },
     { id: 'email', label: t('tabs.email'), icon: NAV_ICONS.email },
     { id: 'login_bot', label: t('tabs.loginBot'), icon: NAV_ICONS.login_bot },
     { id: 'exif_bot', label: t('tabs.exifBot'), icon: NAV_ICONS.exif_bot },

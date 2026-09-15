@@ -19,6 +19,7 @@
     "live": "LIVE",
     "overviewTitle": "Platform overview",
     "usersTitle": "Users",
+    "purchasesTitle": "Platform purchases",
     "emailTitle": "Email campaigns",
     "loginBotTitle": "TG login bot",
     "exifBotTitle": "EXIF bot",
@@ -31,6 +32,7 @@
   "tabs": {
     "overview": "Overview",
     "users": "Users",
+    "purchases": "Purchases",
     "email": "Email campaigns",
     "loginBot": "TG login bot",
     "exifBot": "EXIF bot",
@@ -39,6 +41,37 @@
     "references": "References",
     "partners": "Partners",
     "tickets": "Support"
+  },
+  "purchases": {
+    "from": "From",
+    "to": "To",
+    "apply": "Show",
+    "empty": "No payments in this period.",
+    "loadFailed": "Could not load purchases.",
+    "loadMore": "Load more",
+    "summaryCount": "Payments",
+    "summaryAmount": "Total (₽)",
+    "summarySubscriptions": "Subscriptions / renewals",
+    "summaryCredits": "Credit packs",
+    "colDate": "Date",
+    "colUser": "User",
+    "colType": "Type",
+    "colProduct": "Plan / product",
+    "colProvider": "Provider",
+    "colAmount": "Amount",
+    "colCredits": "Credits",
+    "types": {
+      "subscription": "Subscription",
+      "credits": "Credits",
+      "subscription_renewal": "Renewal",
+      "other": "Other"
+    },
+    "providers": {
+      "yookassa": "YooKassa",
+      "tribute": "Tribute",
+      "credits": "Credits",
+      "unknown": "—"
+    }
   },
   "common": {
     "search": "Search",

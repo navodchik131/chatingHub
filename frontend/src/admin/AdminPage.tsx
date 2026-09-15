@@ -11,6 +11,7 @@ import { AdminExifBotTab } from './AdminExifBotTab'
 import { AdminIgBotTab } from './AdminIgBotTab'
 import { AdminLoginBotTab } from './AdminLoginBotTab'
 import { AdminOverview } from './AdminOverview'
+import { AdminPurchasesTab } from './AdminPurchasesTab'
 import { AdminPartnerPayoutsTab } from './AdminPartnerPayoutsTab'
 import { AdminSegmentDrill } from './AdminSegmentDrill'
 import { AdminShell, type AdminTabId } from './AdminShell'
@@ -32,6 +33,7 @@ interface UserMe {
 const TAB_TITLES: Record<AdminTabId, string> = {
   overview: 'overviewTitle',
   users: 'usersTitle',
+  purchases: 'purchasesTitle',
   email: 'emailTitle',
   login_bot: 'loginBotTitle',
   exif_bot: 'exifBotTitle',
@@ -263,6 +265,8 @@ export function AdminPage() {
         {tab === 'overview' && !stats && !busy ? (
           <p className="muted admin-fade-in">{error || t('gate.statsLoadFailed')}</p>
         ) : null}
+
+        {tab === 'purchases' ? <AdminPurchasesTab /> : null}
 
         {tab === 'users' ? (
           <div className={`admin-users admin-fade-in${selectedDetail ? ' admin-users--split' : ''}`}>

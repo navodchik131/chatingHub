@@ -1677,3 +1677,9 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+.admin-purchases__date-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

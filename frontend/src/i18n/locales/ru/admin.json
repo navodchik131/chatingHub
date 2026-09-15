@@ -19,6 +19,7 @@
     "live": "LIVE",
     "overviewTitle": "Обзор платформы",
     "usersTitle": "Пользователи",
+    "purchasesTitle": "Покупки на сервисе",
     "emailTitle": "Рассылки",
     "loginBotTitle": "TG login-бот",
     "exifBotTitle": "EXIF-бот",
@@ -31,6 +32,7 @@
   "tabs": {
     "overview": "Обзор",
     "users": "Пользователи",
+    "purchases": "Покупки",
     "email": "Рассылки",
     "loginBot": "TG login-бот",
     "exifBot": "EXIF-бот",
@@ -39,6 +41,37 @@
     "references": "Референсы",
     "partners": "Партнёры",
     "tickets": "Поддержка"
+  },
+  "purchases": {
+    "from": "С",
+    "to": "По",
+    "apply": "Показать",
+    "empty": "За выбранный период платежей нет.",
+    "loadFailed": "Не удалось загрузить покупки.",
+    "loadMore": "Ещё",
+    "summaryCount": "Платежей",
+    "summaryAmount": "Сумма (₽)",
+    "summarySubscriptions": "Подписки / продления",
+    "summaryCredits": "Пакеты кредитов",
+    "colDate": "Дата",
+    "colUser": "Пользователь",
+    "colType": "Тип",
+    "colProduct": "Тариф / продукт",
+    "colProvider": "Оплата",
+    "colAmount": "Сумма",
+    "colCredits": "Кредиты",
+    "types": {
+      "subscription": "Подписка",
+      "credits": "Кредиты",
+      "subscription_renewal": "Продление",
+      "other": "Другое"
+    },
+    "providers": {
+      "yookassa": "ЮKassa",
+      "tribute": "Tribute",
+      "credits": "Кредиты",
+      "unknown": "—"
+    }
   },
   "common": {
     "search": "Найти",

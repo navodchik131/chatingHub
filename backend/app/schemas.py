@@ -394,6 +394,38 @@ class AdminCreditHistoryPageOut(BaseModel):
     has_more: bool
 
 
+class AdminPurchaseOut(BaseModel):
+    id: int
+    user_id: int
+    user_email: str | None = None
+    created_at: datetime
+    kind: str
+    purchase_type: str
+    product_id: str | None = None
+    product_label: str
+    payment_provider: str
+    amount_rub: int = 0
+    credits_quantity: int | None = None
+    credits_granted: int | None = None
+    payment_ref: str | None = None
+
+
+class AdminPurchasesSummaryOut(BaseModel):
+    total_count: int = 0
+    total_amount_rub: int = 0
+    subscription_count: int = 0
+    credits_count: int = 0
+
+
+class AdminPurchasesPageOut(BaseModel):
+    from_date: date
+    to_date: date
+    skip: int = 0
+    has_more: bool = False
+    items: list[AdminPurchaseOut] = Field(default_factory=list)
+    summary: AdminPurchasesSummaryOut = Field(default_factory=AdminPurchasesSummaryOut)
+
+
 class StudioRefinePromptOut(BaseModel):
     """Результат refine: текст, URL картинки; generation_id — запись в архиве на диске, если успели сохранить."""
 
