@@ -89,6 +89,19 @@ def test_clay_prep_nsfw_template_placeholders():
     assert "abdomen" in t.lower()
 
 
+def test_clay_visibility_block_headless():
+    from app.services.studio_anchor_pipeline import (
+        AnchorVisibility,
+        clay_visibility_prompt_block,
+    )
+
+    vis = AnchorVisibility(face=False, hair=False, upper=True, lower=False)
+    block = clay_visibility_prompt_block(vis)
+    assert "Face visible in frame: no" in block
+    assert "Do NOT fill [FACE]" in block
+    assert "[INTIMATE]" in block or "lower body" in block.lower()
+
+
 def test_clay_final_nsfw_master_with_intimate():
     from app.services.studio_face_swap_clay import load_clay_to_model_master_template
 

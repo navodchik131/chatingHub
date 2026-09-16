@@ -122,6 +122,7 @@ async def compose_clay_prep_prompt(
     scene_bytes: bytes,
     scene_mime: str,
     body_image: Any | None = None,
+    visibility: Any | None = None,
 ) -> str:
     """Pass 1: реф → глина; NSFW — Image2=тело модели для [BODY]."""
     template = load_clay_prep_template(wave_profile=wave_profile)
@@ -129,10 +130,13 @@ async def compose_clay_prep_prompt(
     wp = (wave_profile or "nsfw").strip().lower()
     nsfw = wp != "regular"
 
+    from app.services.studio_anchor_pipeline import AnchorVisibility, clay_visibility_prompt_block
+
+    vis = visibility if isinstance(visibility, AnchorVisibility) else AnchorVisibility()
     profile = (model_profile_text or "").strip() or "(no profile — derive BODY from body photo only)"
     scene_txt = (scene_description or "").strip()
 
-    user_text = f"PREP TEMPLATE:\n{template}\n\nMODEL PROFILE:\n{profile}\n\n"
+    user_text = f"PREP TEMPLATE:\n{template}\n\n{clay_visibility_prompt_block(vis)}\n\nMODEL PROFILE:\n{profile}\n\n"
     if scene_txt:
         user_text += f"SCENE ANALYSIS:\n{scene_txt}\n\n"
     if nsfw:
@@ -179,11 +183,16 @@ async def compose_clay_to_model_prompt(
     from app.services.studio_anchor_pipeline import (
         SCENE_OVERLAY_EXCLUSION_BLOCK,
         AnchorVisibility,
+        clay_visibility_prompt_block,
+        exclusion_notes,
         identity_marks_block,
     )
 
-    with_intimate = intimate_image is not None and (
-        (wave_profile or "nsfw").strip().lower() != "regular"
+    vis = visibility if isinstance(visibility, AnchorVisibility) else AnchorVisibility()
+    with_intimate = (
+        intimate_image is not None
+        and (wave_profile or "nsfw").strip().lower() != "regular"
+        and vis.lower
     )
     template = load_clay_to_model_master_template(
         wave_profile=wave_profile,
@@ -195,7 +204,10 @@ async def compose_clay_to_model_prompt(
     scene_txt = (scene_description or "").strip()
     notes = (user_notes or "").strip()
 
-    user_text = f"FINAL TEMPLATE:\n{template}\n\nMODEL PROFILE:\n{profile}\n\n"
+    user_text = (
+        f"FINAL TEMPLATE:\n{template}\n\n{clay_visibility_prompt_block(vis)}\n\n"
+        f"MODEL PROFILE (only sections visible in frame):\n{profile}\n\n"
+    )
     if scene_txt:
         user_text += f"SCENE ANALYSIS (expression hints from original reference):\n{scene_txt}\n\n"
     if notes:
@@ -234,11 +246,13 @@ async def compose_clay_to_model_prompt(
         timeout_seconds=float(settings.grok_scene_compose_timeout_seconds or 120.0),
     )
     out = _warn_unfilled(_strip_code_fences(raw or "").strip(), "final")
-    vis = visibility if isinstance(visibility, AnchorVisibility) else AnchorVisibility()
     marks = identity_marks_block(vis)
     if "SKIN MARKS AND BODY MODS" not in out.upper():
         out = f"{out}\n\n{marks}"
     upper = out.upper()
     if "OVERLAYS_AND_TEXT" not in upper and "OVERLAYS AND TEXT" not in upper:
         out = f"{out}\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
+    excl = exclusion_notes(vis)
+    if excl and excl not in out:
+        out = f"{out}\n\n{excl}"
     return out

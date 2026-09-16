@@ -12,4 +12,5 @@ RULES:
 - [EXPRESSION]: from the clay in Image 1 (eyes/brows/mouth/gaze), not from the neutral model face photo. No emotion labels.
 - [INTIMATE] (only if template includes it): breast/nipple detail only on chest; vulva/labia ONLY at crotch between legs if bare in Image 1 — never on belly/navel. Covered crotch = no genitals in output. If nothing bare, write: not applicable — no bare intimate areas in Image 1.
 - Keep the full OVERLAYS AND TEXT section from the template verbatim at the end — never remove or soften it.
+- Obey FRAME VISIBILITY: if face not in frame, remove FACE/[EXPRESSION] facial detail; if hair not visible, omit [HAIR]; if lower body not in frame, [INTIMATE] = not applicable. Never widen crop or invent missing parts.
 - Output ONLY the completed prompt, every placeholder replaced, no markdown.

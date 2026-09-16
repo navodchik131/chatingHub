@@ -412,11 +412,12 @@ async def run_anchor_pipeline(
                     prep_prompt = await compose_clay_prep_prompt(
                         credentials=llm_credentials,
                         wave_profile=wave_profile,
-                        model_profile_text=model_profile_text,
+                        model_profile_text=filtered or model_profile_text,
                         scene_description=scene_description,
                         scene_bytes=scene_bytes,
                         scene_mime=scene_mime or "image/jpeg",
                         body_image=body_im if (wave_profile or "").lower() != "regular" else None,
+                        visibility=vis,
                     )
                 except Exception as e:
                     log.warning("clay prep grok failed model=%s: %s — static template", model_id, e)
@@ -510,18 +511,24 @@ async def run_anchor_pipeline(
                 clay_prompt = await compose_clay_to_model_prompt(
                     credentials=llm_credentials,
                     wave_profile=wave_profile,
-                    model_profile_text=model_profile_text,
+                    model_profile_text=filtered or model_profile_text,
                     scene_description=scene_description,
                     clay_bytes=mannequin_bytes,
                     clay_mime="image/jpeg",
                     face_image=face_im,
                     body_image=body_im,
-                    intimate_image=genitals_im if genitals_url else None,
+                    intimate_image=genitals_im
+                    if genitals_url and vis.lower
+                    else None,
                     user_notes=notes,
                     visibility=vis,
                 )
                 final_urls = [scene_url, face_url, body_url]
-                if genitals_url and (wave_profile or "").strip().lower() != "regular":
+                if (
+                    genitals_url
+                    and (wave_profile or "").strip().lower() != "regular"
+                    and vis.lower
+                ):
                     final_urls.append(genitals_url)
                 log.info(
                     "anchor clay final wave=%s model=%s urls=%s prompt_len=%s",

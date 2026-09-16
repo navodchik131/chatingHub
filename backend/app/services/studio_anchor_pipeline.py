@@ -473,6 +473,45 @@ def filter_anchor_by_visibility(text: str, vis: AnchorVisibility) -> str:
     return "\n\n".join(parts)
 
 
+def clay_visibility_prompt_block(vis: AnchorVisibility) -> str:
+    """Инструкции Grok clay prep/final: не описывать то, чего нет в кадре рефа."""
+    def yn(v: bool) -> str:
+        return "yes" if v else "no"
+
+    lines = [
+        "FRAME VISIBILITY (mandatory — match the reference crop exactly):",
+        f"- Face visible in frame: {yn(vis.face)}",
+        f"- Hair visible in frame: {yn(vis.hair)}",
+        f"- Upper body (torso, chest, arms) visible: {yn(vis.upper)}",
+        f"- Lower body (hips, legs, feet) visible: {yn(vis.lower)}",
+        "",
+        "PROMPT RULES FROM VISIBILITY:",
+    ]
+    if not vis.face:
+        lines.append(
+            "- Do NOT fill [FACE] or describe facial features, eyes, lips, or expression. "
+            "Do not turn the head or widen framing to reveal a face."
+        )
+    if not vis.hair:
+        lines.append(
+            "- Do NOT fill [HAIR] with color/style detail beyond what is already implied by the clay/scene mass."
+        )
+    if not vis.upper:
+        lines.append(
+            "- Do NOT describe bust, chest, waist, or arms in [BODY]/identity — upper body is out of frame."
+        )
+    if not vis.lower:
+        lines.append(
+            "- Do NOT describe hips, legs, feet, or crotch in [BODY]/[INTIMATE] — lower body is out of frame. "
+            "[INTIMATE] must be: not applicable — lower body not in frame."
+        )
+    ex = exclusion_notes(vis)
+    if ex:
+        lines.append("")
+        lines.append(ex)
+    return "\n".join(lines)
+
+
 def exclusion_notes(vis: AnchorVisibility) -> str:
     notes: list[str] = []
     if not vis.face:
