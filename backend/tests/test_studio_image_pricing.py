@@ -69,14 +69,14 @@ def test_refine_billing_face_swap_mannequin_two_prep_edits():
         refine_prompt_billing_quote,
     )
 
-    # Classic face swap по умолчанию — без mannequin/dress prep.
-    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 0
+    # По умолчанию clay prep (classic выключен) — один prep-edit.
+    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 1
     assert anchor_prep_edits_quoted(studio_mode="model_scene") == 1
     assert (
         anchor_prep_edits_quoted(
             studio_mode="face_swap", wave_model_id="nano-banana-pro"
         )
-        == 0
+        == 1
     )
     _, one_prep, _ = refine_prompt_billing_quote(
         "credits",
@@ -120,12 +120,13 @@ def test_effective_studio_image_edit_wave_model():
     )
 
 
-def test_mannequin_prep_off_when_face_swap_classic():
+def test_mannequin_prep_off_when_face_swap_classic(monkeypatch):
+    from app.config import settings
     from app.services.studio_anchor_pipeline import face_swap_mannequin_prep_enabled_for_model
 
+    monkeypatch.setattr(settings, "studio_face_swap_seedream_v5_classic", True)
     assert face_swap_mannequin_prep_enabled_for_model("seedream-v5.0-pro") is False
     assert face_swap_mannequin_prep_enabled_for_model("wan-2.7") is False
-    assert face_swap_mannequin_prep_enabled_for_model("nano-banana-pro") is False
 
 
 def test_classic_face_swap_prompt_appends_overlay_block():
@@ -149,7 +150,7 @@ def test_mannequin_prep_when_classic_disabled(monkeypatch):
 
     monkeypatch.setattr(settings, "studio_face_swap_seedream_v5_classic", False)
     assert face_swap_mannequin_prep_enabled_for_model("wan-2.7") is True
-    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 2
+    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 1
 
 
 def test_anchor_pipeline_eligible_params():

@@ -215,19 +215,11 @@ def _face_swap_dressed_headless_filename(*, wave_model_id: str) -> str:
 
 
 def load_face_swap_mannequin_prompt(*, wave_profile: str, wave_model_id: str = "") -> str:
-    """SFW = regular; NSFW = recolor-only пояс–колени; Seedream — отдельные файлы *_seedream.txt."""
-    fname = _face_swap_mannequin_filename(wave_profile=wave_profile, wave_model_id=wave_model_id)
-    text = _read_first_nonempty_face_swap_prompt(fname)
-    if text:
-        return text
-    # Fallback на универсальный промпт, если seedream-файл не задеплоен.
-    wp = (wave_profile or "nsfw").strip().lower()
-    fallback = "face_swap_mannequin_sfw.txt" if wp == "regular" else "face_swap_mannequin_nsfw.txt"
-    text = _read_first_nonempty_face_swap_prompt(fallback)
-    if text:
-        return text
-    tried = ", ".join(str(p) for p in _face_swap_prompt_candidates(fname))
-    raise RuntimeError(f"Face swap mannequin prompt not found (tried: {tried})")
+    """Pass 1 clay prep (SFW / NSFW templates)."""
+    from app.services.studio_face_swap_clay import load_clay_prep_template
+
+    _ = wave_model_id
+    return load_clay_prep_template(wave_profile=wave_profile)
 
 
 def load_face_swap_dressed_body_headless_prompt(*, wave_model_id: str = "") -> str:
@@ -965,13 +957,14 @@ def mannequin_scene_cache_key(
     scene_bytes: bytes,
     wave_profile: str,
     wave_model_id: str = "",
+    body_image_id: int | None = None,
 ) -> str:
-    """Кэш шага 0: hash сцены + профиль + семейство prep-промпта (seedream/default)."""
+    """Кэш pass 1 clay: сцена + профиль + тело модели (NSFW [BODY])."""
     h = hashlib.sha256()
     wp = (wave_profile or "nsfw").strip().lower()
-    family = "seedream" if face_swap_uses_seedream_prep_prompts(wave_model_id) else "default"
-    h.update(f"mannequin_v2|{wp}|{family}".encode())
+    h.update(f"clay_prep_v1|{wp}|b{body_image_id or 0}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
+    _ = wave_model_id
     return h.hexdigest()
 
 

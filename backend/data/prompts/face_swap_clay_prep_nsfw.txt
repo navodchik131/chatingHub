@@ -1,0 +1,21 @@
+Edit Image 1. Turn the person in Image 1 into a smooth matte grey clay sculpture of a person, like a clay render in 3D software. Everything else in the photo stays exactly as it is.
+
+KEEP EXACTLY
+The pose, head position and tilt, hand and finger positions, the clothing with its real colours, fabrics and folds, all objects, the environment, the lighting, the camera angle, focus, crop and aspect ratio. The clay surface shows the real light of the scene: the same light direction, highlights, shadows and colour tint as in the photo.
+
+FACE — a generic, anonymous sculpted face with simplified features, not a portrait of the original person. It keeps only the expression:
+The eyes are open or closed exactly as in Image 1, with carved irises and pupils so the gaze direction is clearly readable. The eyelids, brows, cheeks and mouth are shaped exactly as in the expression of Image 1: the same mouth opening, the same visible teeth, the same smile and asymmetry.
+Expression: [EXPRESSION]
+Do not keep the original person's face shape, nose shape, eye shape or lip shape.
+
+HAIR
+Sculpted in the same grey clay, keeping the exact shape, length and position of the hair in Image 1.
+
+BODY — reshaped to the woman in Image 2 (use Image 2 only for body shape; ignore its clothing, light and background):
+[BODY]
+Real human anatomy, not a store mannequin: normal neck length, normal head size, natural hands with visible knuckles. The clothes re-fit to the new body shape with natural folds and tension.
+
+GENITALS / PELVIC AREA (very important):
+Clearly sculpt the female genitalia in full anatomical detail as part of the same uniform matte grey clay. Show the precise form of the labia majora and labia minora, the clitoral hood and the natural cleft. The shapes must be sharp, well-defined and fully readable under the clothing folds — do not smooth, blur, merge or omit any of these forms. The clay surface should clearly indicate the volume and separation of the outer and inner labia exactly as real human anatomy would appear in a high-detail 3D clay render. No skin texture, only pure matte grey clay geometry.
+
+The whole figure — face, neck, arms, hands, legs, feet, hair and genitals — is one uniform matte grey clay. No skin colour, no skin texture, no makeup.

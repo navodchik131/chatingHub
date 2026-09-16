@@ -6086,10 +6086,12 @@ async def _studio_job_execute_refine_prompt(
                 user_pose_ref_prepended = False
                 wavespeed_prompt = (refined or "").strip()
                 if mode_n == "face_swap" and anchor_result.mode == "A":
-                    if getattr(anchor_result, "face_swap_classic", False) or getattr(
-                        anchor_result, "seedream_v5_classic", False
+                    if (
+                        getattr(anchor_result, "face_swap_clay_final", False)
+                        or getattr(anchor_result, "face_swap_classic", False)
+                        or getattr(anchor_result, "seedream_v5_classic", False)
                     ):
-                        # Grok уже отдал финальный master prompt — без префиксов mannequin/scene-first.
+                        # Grok master / clay final — без префиксов mannequin/scene-first.
                         wavespeed_prompt = strip_workflow_meta_from_wavespeed_prose(
                             wavespeed_prompt
                         )
@@ -7305,8 +7307,10 @@ async def _studio_job_execute_motion_first_frame(
             user_pose_ref_prepended = False
             wavespeed_prompt = (refined or "").strip()
             if mode_n == "face_swap" and anchor_result.mode == "A":
-                if getattr(anchor_result, "face_swap_classic", False) or getattr(
-                    anchor_result, "seedream_v5_classic", False
+                if (
+                    getattr(anchor_result, "face_swap_clay_final", False)
+                    or getattr(anchor_result, "face_swap_classic", False)
+                    or getattr(anchor_result, "seedream_v5_classic", False)
                 ):
                     wavespeed_prompt = strip_workflow_meta_from_wavespeed_prose(
                         wavespeed_prompt

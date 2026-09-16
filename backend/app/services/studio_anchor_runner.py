@@ -25,7 +25,6 @@ from app.services.studio_anchor_pipeline import (
     filter_anchor_by_visibility,
     load_cached_dressed_body,
     load_face_swap_dressed_body_headless_prompt,
-    load_face_swap_mannequin_prompt,
     mannequin_final_dressed_first,
     mannequin_scene_cache_key,
     order_mode_a_face_closeup_urls,
@@ -69,6 +68,7 @@ class AnchorPipelineResult:
     mannequin_dressed_first: bool = False
     face_swap_classic: bool = False
     seedream_v5_classic: bool = False  # deprecated alias, см. face_swap_classic
+    face_swap_clay_final: bool = False
 
 
 async def _analyze_scene_text(
@@ -171,22 +171,19 @@ async def _dress_body_via_wavespeed(
     )
 
 
-async def _mannequin_scene_via_wavespeed(
+async def _clay_prep_via_wavespeed(
     *,
     api_key: str,
-    scene_url: str,
+    image_urls: list[str],
+    prompt: str,
     wave_profile: str,
     wan_edit_tier: str,
     wave_model_id: str,
     aspect_ratio: str = "9:16",
 ) -> bytes:
-    prompt = load_face_swap_mannequin_prompt(
-        wave_profile=wave_profile,
-        wave_model_id=wave_model_id,
-    )
     return await _wavespeed_edit_bytes(
         api_key=api_key,
-        image_urls=[scene_url],
+        image_urls=image_urls,
         prompt=prompt,
         wave_profile=wave_profile,
         wan_edit_tier=wan_edit_tier,
@@ -281,19 +278,22 @@ async def run_anchor_pipeline(
         face_swap_classic_enabled,
     )
 
+    from app.services.studio_face_swap_clay import face_swap_clay_pipeline_enabled
+
     use_classic = (
         mode_n == "face_swap"
         and not face_closeup
         and face_swap_classic_enabled(wave_model_id)
     )
-    use_mannequin = (
+    use_clay = (
         mode_n == "face_swap"
         and not face_closeup
         and not use_classic
-        and face_swap_mannequin_prep_enabled_for_model(wave_model_id)
+        and face_swap_clay_pipeline_enabled()
     )
-    dress_headless = use_mannequin
-    dressed_first_final = use_mannequin and mannequin_final_dressed_first(wave_model_id)
+    use_mannequin = use_clay
+    dress_headless = False
+    dressed_first_final = False
 
     cache_key = dressed_body_cache_key(
         model_id=model_id,
@@ -308,6 +308,7 @@ async def run_anchor_pipeline(
         scene_bytes=scene_bytes,
         wave_profile=wave_profile,
         wave_model_id=wave_model_id,
+        body_image_id=getattr(body_im, "id", None),
     )
 
     dressed_bytes: bytes | None = None
@@ -388,13 +389,36 @@ async def run_anchor_pipeline(
     mannequin_prep_ran = False
     wardrobe_prep_ran = False
 
-    # Шаг 0: реф → серый манекен (один проход; NSFW — recolor-only пояс–колени в промпте).
+    # Pass 1: реф → глиняная фигура (Grok prep; NSFW — scene + body model).
     if use_mannequin:
         if mannequin_bytes is None:
-            log.info("anchor mannequin prep model=%s key=%s…", model_id, mannequin_key[:12])
-            mannequin_bytes = await _mannequin_scene_via_wavespeed(
+            from app.services.studio_face_swap_clay import (
+                compose_clay_prep_prompt,
+                load_clay_prep_template,
+            )
+
+            log.info("anchor clay prep model=%s key=%s…", model_id, mannequin_key[:12])
+            prep_prompt = load_clay_prep_template(wave_profile=wave_profile)
+            if llm_credentials is not None:
+                try:
+                    prep_prompt = await compose_clay_prep_prompt(
+                        credentials=llm_credentials,
+                        wave_profile=wave_profile,
+                        model_profile_text=model_profile_text,
+                        scene_description=scene_description,
+                        scene_bytes=scene_bytes,
+                        scene_mime=scene_mime or "image/jpeg",
+                        body_image=body_im if (wave_profile or "").lower() != "regular" else None,
+                    )
+                except Exception as e:
+                    log.warning("clay prep grok failed model=%s: %s — static template", model_id, e)
+            prep_urls = [scene_url_original]
+            if (wave_profile or "").strip().lower() != "regular":
+                prep_urls.append(body_url)
+            mannequin_bytes = await _clay_prep_via_wavespeed(
                 api_key=wavespeed_api_key,
-                scene_url=scene_url_original,
+                image_urls=prep_urls,
+                prompt=prep_prompt,
                 wave_profile=wave_profile,
                 wan_edit_tier=wan_edit_tier,
                 wave_model_id=wave_model_id,
@@ -403,7 +427,7 @@ async def run_anchor_pipeline(
             save_cached_dressed_body(
                 mannequin_key,
                 mannequin_bytes,
-                meta={"mode": "mannequin", "wave_profile": wave_profile},
+                meta={"mode": "clay", "wave_profile": wave_profile},
             )
         mannequin_prep_ran = True
         mannequin_fid = save_pose_reference_bytes(
@@ -416,7 +440,8 @@ async def run_anchor_pipeline(
 
     dressed_url = ""
     # face_swap без манекена: сырое тело; с манекеном — headless dressed body; model_scene — обычный dress.
-    skip_wardrobe = mode_n == "face_swap" and not use_mannequin
+    # Clay pipeline: одежда на глине с рефа; отдельный headless dress не нужен.
+    skip_wardrobe = mode_n == "face_swap" and (not use_mannequin or use_clay)
     if not face_closeup and not skip_wardrobe:
         dress_prompt = (
             load_face_swap_dressed_body_headless_prompt(wave_model_id=wave_model_id)
@@ -470,6 +495,53 @@ async def run_anchor_pipeline(
 
     scene_first = False
     if mode_n == "face_swap":
+        if use_clay and mannequin_bytes and llm_credentials is not None:
+            from app.services.studio_face_swap_clay import compose_clay_to_model_prompt
+
+            try:
+                clay_prompt = await compose_clay_to_model_prompt(
+                    credentials=llm_credentials,
+                    model_profile_text=model_profile_text,
+                    scene_description=scene_description,
+                    clay_bytes=mannequin_bytes,
+                    clay_mime="image/jpeg",
+                    face_image=face_im,
+                    body_image=body_im,
+                    user_notes=notes,
+                )
+                log.info(
+                    "anchor clay final wave=%s model=%s prompt_len=%s",
+                    wave_model_id,
+                    model_id,
+                    len(clay_prompt),
+                )
+                return AnchorPipelineResult(
+                    refined_prompt=clay_prompt,
+                    image_urls=[scene_url, face_url, body_url],
+                    mode="A",
+                    dressed_from_cache=False,
+                    scene_description=scene_description,
+                    visibility=vis,
+                    cache_key=cache_key,
+                    dressed_body_bytes=None,
+                    scene_first=True,
+                    face_closeup=False,
+                    bust_portrait=bust_portrait,
+                    mannequin_scene=True,
+                    mannequin_from_cache=mannequin_from_cache,
+                    mannequin_prep_ran=mannequin_prep_ran,
+                    wardrobe_prep_ran=False,
+                    mannequin_dressed_first=False,
+                    face_swap_clay_final=True,
+                )
+            except Exception as e:
+                log.warning(
+                    "clay final grok failed wave=%s model=%s: %s — fallback Mode A",
+                    wave_model_id,
+                    model_id,
+                    e,
+                )
+
         scene_first = anchor_mode_a_scene_first(
             wave_profile=wave_profile,
             wave_model_id=wave_model_id,

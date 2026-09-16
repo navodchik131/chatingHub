@@ -1,0 +1,15 @@
+Edit Image 1. Turn the person in Image 1 into a smooth matte grey clay sculpture of a person, like a clay render in 3D software. Everything else in the photo stays exactly as it is.
+
+KEEP EXACTLY
+The pose, head position and tilt, hand and finger positions, the clothing with its real colours, fabrics and folds, all objects, the environment, the lighting, the camera angle, focus, crop and aspect ratio. The clay surface shows the real light of the scene: the same light direction, highlights, shadows and colour tint as in the photo.
+
+FACE — a generic, anonymous sculpted face with simplified features, not a portrait of the original person. It keeps only the expression:
+The eyes are open or closed exactly as in Image 1, with carved irises and pupils so the gaze direction is clearly readable. The eyelids, brows, cheeks and mouth are shaped exactly as in the expression of Image 1: the same mouth opening, the same visible teeth, the same smile and asymmetry.
+Expression: [EXPRESSION]
+Do not keep the original person's face shape, nose shape, eye shape or lip shape.
+
+HAIR
+Sculpted in the same grey clay, keeping the exact shape, length and position of the hair in Image 1.
+
+BODY
+Keep the body silhouette and proportions of the pose in Image 1. Real human anatomy for the visible pose: normal neck length, normal head size, natural hands with visible knuckles. The clothes re-fit with natural folds and tension. The whole visible figure is one uniform matte grey clay — no skin colour, no skin texture, no makeup.

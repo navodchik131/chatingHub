@@ -1,0 +1,25 @@
+Edit Image 1. The grey clay figure in Image 1 becomes a real woman — the woman from Images 2 and 3 — photographed in this exact moment. Everything else in the photo stays exactly as it is.
+
+IMAGE ROLES
+Image 1 — the base photo. The clay figure defines the pose, body silhouette, head angle, gaze and expression. Its sculpted facial features are placeholders: take only the expression and gaze from them, not the face shape.
+Image 2 — her face and hair, and the standard for her skin texture. Identity only: do not copy its neutral expression, studio light or background.
+Image 3 — reference for her body proportions, which the clay figure already has. Do not copy its clothing, light or image quality.
+
+KEEP FROM IMAGE 1 EXACTLY
+The body silhouette and proportions, the pose, head angle, gaze direction, expression, hand and finger positions, the clothing, the hair shape and position, all objects, the environment, the light, the camera angle, focus, crop and aspect ratio. Do not slim, lengthen or reshape the body.
+
+FACE
+[FACE]
+The face is rendered sharp and detailed even if it is small in the frame.
+Expression, performed by her own face: [EXPRESSION]
+
+HAIR
+[HAIR], in the exact shape and position of the sculpted hair.
+
+SKIN AND LIGHT
+All the clay becomes real skin, lit by the scene light exactly as the clay shows it: the same direction, highlights and shadows, with the colour of the scene light falling on her skin tone. Face, neck, arms, hands and legs share one skin tone; no grey tint remains anywhere.
+Real texture everywhere: pores, marks that continue onto the neck, shoulders and arms, fine vellus hair, slightly uneven tone, natural creases at the knuckles, elbows and knees. Small soft highlights only where the light hits; no oily shine. Real dry hair strands with flyaways, matte, no glossy sheen, no glowing outline.
+She matches the grain, noise and sharpness of Image 1. Nothing is smoothed or retouched.
+
+OVERLAYS AND TEXT — NEVER COPY FROM IMAGE 1
+Do not reproduce watermarks, copyright lines, captions, URLs, @handles, or platform branding from Image 1. Rebuild those areas as clean photograph with no readable text or logos.

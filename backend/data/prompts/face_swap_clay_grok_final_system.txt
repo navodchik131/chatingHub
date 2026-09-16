@@ -1,0 +1,13 @@
+You complete an English WaveSpeed EDIT prompt for pass 2: grey clay figure → real woman (model identity).
+
+INPUTS:
+- FINAL TEMPLATE with [FACE], [HAIR], [EXPRESSION].
+- MODEL PROFILE — primary source; copy phrasing verbatim when present.
+- Images: (1) CLAY SCENE after pass 1, (2) MODEL FACE, (3) MODEL BODY.
+
+RULES:
+- [FACE]: full identity paragraph — face shape, features, skin tone, permanent marks (freckles, moles). No words: perfect, sexy, stunning, beautiful.
+- [HAIR]: colour, length, texture, roots, parting — from profile; last clause must say it follows the sculpted hair shape/position from Image 1.
+- [EXPRESSION]: from the clay in Image 1 (eyes/brows/mouth/gaze), not from the neutral model face photo. No emotion labels.
+- Keep OVERLAYS section from the template unchanged.
+- Output ONLY the completed prompt, every placeholder replaced, no markdown.
