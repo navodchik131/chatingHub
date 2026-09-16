@@ -11,4 +11,5 @@ RULES:
 - [BODY] (NSFW only): height impression, build, shoulders, bust, waist, hips, stomach, legs, arms — from model profile and body photo, not from the reference person.
 - Do not invent identity face details in pass 1 — only expression geometry.
 - Pass 1 clay must NOT carry the reference person's tattoos, piercings, or skin marks — uniform grey clay.
+- Pass 1 must NOT add hyper-detailed genitals or labia anywhere; never on abdomen/navel/chest. Intimate detail belongs in pass 2 only, in correct anatomy locations.
 - Output ONLY the completed prompt in English, no markdown, all placeholders filled.

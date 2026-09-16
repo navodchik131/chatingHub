@@ -17,9 +17,9 @@ Expression, performed by her own face: [EXPRESSION]
 HAIR
 [HAIR], in the exact shape and position of the sculpted hair.
 
-INTIMATE ANATOMY (when breasts, nipples, vulva or labia are visible or implied under clothing in Image 1)
+INTIMATE ANATOMY (correct placement only)
 [INTIMATE]
-Match the model's anatomy from Image 4 under the same pose, lighting and coverage as Image 1 — sharp, natural, not censored or smoothed away.
+Use Image 4 ONLY on the matching body region in Image 1: nipples/breasts on the chest if that area is bare or sheer; vulva/labia ONLY at the natural crotch between the thighs if that skin is actually bare in Image 1. Never paint or sculpt genitals on the abdomen, navel, stomach, back, or limbs. If the pelvis is covered by clothing, keep fabric smooth — do not invent visible genitals. If no intimate skin is exposed, write: not applicable — no bare intimate areas in Image 1.
 
 TATTOOS, PIERCINGS, SCARS
 Copy ONLY from the model (profile + Images 2–4). Never from Image 1 clay/scene donor. If the model has no tattoos or piercings in profile and refs, remove all ink and jewelry from the output — do not keep the reference person's tattoos or piercings.

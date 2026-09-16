@@ -15,8 +15,11 @@ BODY — reshaped to the woman in Image 2 (use Image 2 only for body shape; igno
 [BODY]
 Real human anatomy, not a store mannequin: normal neck length, normal head size, natural hands with visible knuckles. The clothes re-fit to the new body shape with natural folds and tension.
 
-GENITALS / PELVIC AREA (very important):
-Clearly sculpt the female genitalia in full anatomical detail as part of the same uniform matte grey clay. Show the precise form of the labia majora and labia minora, the clitoral hood and the natural cleft. The shapes must be sharp, well-defined and fully readable under the clothing folds — do not smooth, blur, merge or omit any of these forms. The clay surface should clearly indicate the volume and separation of the outer and inner labia exactly as real human anatomy would appear in a high-detail 3D clay render. No skin texture, only pure matte grey clay geometry.
+PELVIC SILHOUETTE (pass 1 — no explicit genital sculpt):
+Do NOT sculpt detailed vulva, labia, or genital anatomy on the clay. Do NOT place any genital-shaped geometry on the abdomen, stomach, navel, chest, back, arms, or face — only ever at the natural pelvis/crotch between the thighs, and only if that zone is actually bare in Image 1.
+If the midriff is bare, use a normal small navel dimple only — never genital shapes on the belly.
+Under clothing: smooth clay body mass and fabric folds only — no invented genitals under the shirt or pants.
+If the crotch is covered, leave it as smooth clay/cloth with no explicit genital carving.
 
-The whole figure — face, neck, arms, hands, legs, feet, hair and genitals — is one uniform matte grey clay. No skin colour, no skin texture, no makeup.
+The whole figure is one uniform matte grey clay. No skin colour, no skin texture, no makeup.
 Do not preserve the original person's tattoos, piercings, body jewelry, or distinctive skin marks on the clay — uniform matte clay only, except sculpted anatomy and expression.

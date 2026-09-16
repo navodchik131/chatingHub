@@ -972,7 +972,7 @@ def mannequin_scene_cache_key(
     """Кэш pass 1 clay: сцена + профиль + тело модели (NSFW [BODY])."""
     h = hashlib.sha256()
     wp = (wave_profile or "nsfw").strip().lower()
-    h.update(f"clay_prep_v1|{wp}|b{body_image_id or 0}".encode())
+    h.update(f"clay_prep_v2|{wp}|b{body_image_id or 0}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
     _ = wave_model_id
     return h.hexdigest()

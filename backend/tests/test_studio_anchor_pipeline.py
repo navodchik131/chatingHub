@@ -85,6 +85,8 @@ def test_clay_prep_nsfw_template_placeholders():
     assert "[EXPRESSION]" in t
     assert "[BODY]" in t
     assert "grey clay" in t.lower()
+    assert "Do NOT sculpt detailed vulva" in t
+    assert "abdomen" in t.lower()
 
 
 def test_clay_final_nsfw_master_with_intimate():
