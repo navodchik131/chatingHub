@@ -87,6 +87,16 @@ def test_clay_prep_nsfw_template_placeholders():
     assert "grey clay" in t.lower()
 
 
+def test_clay_final_nsfw_master_with_intimate():
+    from app.services.studio_face_swap_clay import load_clay_to_model_master_template
+
+    t = load_clay_to_model_master_template(wave_profile="nsfw", with_intimate_ref=True)
+    assert "Image 4" in t
+    assert "[INTIMATE]" in t
+    assert "OVERLAYS AND TEXT" in t
+    assert "OnlyFans" in t
+
+
 def test_mode_a_mannequin_scene_prompt():
     vis = AnchorVisibility()
     filtered = filter_anchor_by_visibility(SAMPLE_ANCHOR, vis)
@@ -107,7 +117,7 @@ def test_mode_a_prompt_matches_html_contract():
     assert "Image 3 = target scene" in prompt
     assert "CRITICAL FACE REPLACEMENT" in prompt
     assert "FACE:" in prompt
-    assert "NEVER copy marks, tattoos, or scars" in prompt
+    assert "NEVER copy tattoos, piercings, scars" in prompt
     assert "OVERLAYS_AND_TEXT" in prompt
     assert "OnlyFans" in prompt
     assert REALISM_BLOCK in prompt
@@ -208,7 +218,7 @@ def test_detect_face_closeup_scene():
 def test_identity_marks_block_upper_body():
     bust = identity_marks_block(AnchorVisibility(face=True, upper=True, lower=False))
     head = identity_marks_block(AnchorVisibility(face=True, upper=False, lower=False))
-    assert "NEVER copy marks, tattoos, or scars" in bust
+    assert "NEVER copy tattoos, piercings, scars" in bust
     assert "must NOT keep the sitter's tattoos" in bust
     assert "must NOT keep the sitter's tattoos" not in head
 
@@ -325,7 +335,7 @@ def test_mode_b_prompt_has_scene_text_not_image3():
     assert "HAIR:" not in filtered
     assert "LOWER BODY:" not in filtered
     assert "not clearly visible" in prompt or "Hair is not clearly visible" in prompt
-    assert "NEVER copy marks, tattoos, or scars" in prompt
+    assert "NEVER copy tattoos, piercings, scars" in prompt
     assert REALISM_BLOCK in prompt
 
 

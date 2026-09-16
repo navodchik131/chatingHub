@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 _PREP_SFW = "face_swap_clay_prep_sfw.txt"
 _PREP_NSFW = "face_swap_clay_prep_nsfw.txt"
 _FINAL_MASTER = "face_swap_clay_to_model_master.txt"
+_FINAL_MASTER_NSFW = "face_swap_clay_to_model_master_nsfw.txt"
 _SYSTEM_PREP = "face_swap_clay_grok_prep_system.txt"
 _SYSTEM_FINAL = "face_swap_clay_grok_final_system.txt"
 
@@ -46,7 +47,14 @@ def load_clay_prep_template(*, wave_profile: str) -> str:
     return _read_prompt_file(_PREP_SFW if wp == "regular" else _PREP_NSFW)
 
 
-def load_clay_to_model_master_template() -> str:
+def load_clay_to_model_master_template(
+    *,
+    wave_profile: str = "nsfw",
+    with_intimate_ref: bool = False,
+) -> str:
+    wp = (wave_profile or "nsfw").strip().lower()
+    if wp != "regular" and with_intimate_ref:
+        return _read_prompt_file(_FINAL_MASTER_NSFW)
     return _read_prompt_file(_FINAL_MASTER)
 
 
@@ -100,7 +108,7 @@ def _grok_vision_model() -> str:
 
 
 def _warn_unfilled(prompt: str, names: str) -> str:
-    if re.search(r"\[(EXPRESSION|BODY|FACE|HAIR)\]", prompt or "", re.I):
+    if re.search(r"\[(EXPRESSION|BODY|FACE|HAIR|INTIMATE)\]", prompt or "", re.I):
         log.warning("clay face swap: unresolved placeholders (%s)", names)
     return (prompt or "").strip()
 
@@ -156,18 +164,31 @@ async def compose_clay_prep_prompt(
 async def compose_clay_to_model_prompt(
     *,
     credentials: StudioOpenAiCredentials | Any,
+    wave_profile: str,
     model_profile_text: str | None,
     scene_description: str,
     clay_bytes: bytes,
     clay_mime: str,
     face_image: Any,
     body_image: Any,
+    intimate_image: Any | None = None,
     user_notes: str = "",
+    visibility: Any | None = None,
 ) -> str:
-    """Pass 2: глина + лицо + тело → финальный edit prompt."""
-    from app.services.studio_anchor_pipeline import SCENE_OVERLAY_EXCLUSION_BLOCK
+    """Pass 2: глина + лицо + тело (+ интим NSFW) → финальный edit prompt."""
+    from app.services.studio_anchor_pipeline import (
+        SCENE_OVERLAY_EXCLUSION_BLOCK,
+        AnchorVisibility,
+        identity_marks_block,
+    )
 
-    template = load_clay_to_model_master_template()
+    with_intimate = intimate_image is not None and (
+        (wave_profile or "nsfw").strip().lower() != "regular"
+    )
+    template = load_clay_to_model_master_template(
+        wave_profile=wave_profile,
+        with_intimate_ref=with_intimate,
+    )
     system = _read_prompt_file(_SYSTEM_FINAL)
 
     profile = (model_profile_text or "").strip() or "(no profile — derive from model photos)"
@@ -179,10 +200,16 @@ async def compose_clay_to_model_prompt(
         user_text += f"SCENE ANALYSIS (expression hints from original reference):\n{scene_txt}\n\n"
     if notes:
         user_text += f"USER NOTES (do not override Image 1 pose):\n{notes}\n\n"
-    user_text += (
-        "Attached in order: (1) CLAY after pass 1, (2) MODEL FACE, (3) MODEL BODY.\n"
-        "Output the completed prompt only."
-    )
+    if with_intimate:
+        user_text += (
+            "Attached in order: (1) CLAY after pass 1, (2) MODEL FACE, (3) MODEL BODY, "
+            "(4) MODEL INTIMATE ANATOMY (genitals reference).\nOutput the completed prompt only."
+        )
+    else:
+        user_text += (
+            "Attached in order: (1) CLAY after pass 1, (2) MODEL FACE, (3) MODEL BODY.\n"
+            "Output the completed prompt only."
+        )
 
     face_raw, face_mime = _read_model_image_file(face_image)
     body_raw, body_mime = _read_model_image_file(body_image)
@@ -191,6 +218,9 @@ async def compose_clay_to_model_prompt(
     content.append(_image_part(clay_bytes, clay_mime or "image/jpeg"))
     content.append(_image_part(face_raw, face_mime))
     content.append(_image_part(body_raw, body_mime))
+    if with_intimate and intimate_image is not None:
+        intimate_raw, intimate_mime = _read_model_image_file(intimate_image)
+        content.append(_image_part(intimate_raw, intimate_mime))
 
     raw = await chat_completion_openai_compatible_text(
         model=_grok_vision_model(),
@@ -204,6 +234,10 @@ async def compose_clay_to_model_prompt(
         timeout_seconds=float(settings.grok_scene_compose_timeout_seconds or 120.0),
     )
     out = _warn_unfilled(_strip_code_fences(raw or "").strip(), "final")
+    vis = visibility if isinstance(visibility, AnchorVisibility) else AnchorVisibility()
+    marks = identity_marks_block(vis)
+    if "SKIN MARKS AND BODY MODS" not in out.upper():
+        out = f"{out}\n\n{marks}"
     upper = out.upper()
     if "OVERLAYS_AND_TEXT" not in upper and "OVERLAYS AND TEXT" not in upper:
         out = f"{out}\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"

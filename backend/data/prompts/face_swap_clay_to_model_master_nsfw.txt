@@ -1,9 +1,10 @@
-Edit Image 1. The grey clay figure in Image 1 becomes a real woman — the woman from Images 2 and 3 — photographed in this exact moment. Everything else in the photo stays exactly as it is.
+Edit Image 1. The grey clay figure in Image 1 becomes a real woman — the woman from Images 2, 3 and 4 — photographed in this exact moment. Everything else in the photo stays exactly as it is.
 
 IMAGE ROLES
 Image 1 — the base photo. The clay figure defines the pose, body silhouette, head angle, gaze and expression. Its sculpted facial features are placeholders: take only the expression and gaze from them, not the face shape.
 Image 2 — her face and hair, and the standard for her skin texture. Identity only: do not copy its neutral expression, studio light or background.
 Image 3 — reference for her body proportions, which the clay figure already has. Do not copy its clothing, light or image quality.
+Image 4 — her nude intimate anatomy reference (breasts/nipples, vulva/labia when applicable). Use ONLY for identity of exposed intimate skin in Image 1; ignore its pose, lighting, background and studio crop.
 
 KEEP FROM IMAGE 1 EXACTLY
 The body silhouette and proportions, the pose, head angle, gaze direction, expression, hand and finger positions, the clothing, the hair shape and position, all objects, the environment, the light, the camera angle, focus, crop and aspect ratio. Do not slim, lengthen or reshape the body.
@@ -16,8 +17,12 @@ Expression, performed by her own face: [EXPRESSION]
 HAIR
 [HAIR], in the exact shape and position of the sculpted hair.
 
+INTIMATE ANATOMY (when breasts, nipples, vulva or labia are visible or implied under clothing in Image 1)
+[INTIMATE]
+Match the model's anatomy from Image 4 under the same pose, lighting and coverage as Image 1 — sharp, natural, not censored or smoothed away.
+
 TATTOOS, PIERCINGS, SCARS
-Copy ONLY from the model (profile + Images 2–3). Never from Image 1 clay/scene donor. If the model has no tattoos or piercings in profile and refs, remove all ink and jewelry from the output — do not keep the reference person's tattoos or piercings.
+Copy ONLY from the model (profile + Images 2–4). Never from Image 1 clay/scene donor. If the model has no tattoos or piercings in profile and refs, remove all ink and jewelry from the output — do not keep the reference person's tattoos or piercings.
 
 SKIN AND LIGHT
 All the clay becomes real skin, lit by the scene light exactly as the clay shows it: the same direction, highlights and shadows, with the colour of the scene light falling on her skin tone. Face, neck, arms, hands and legs share one skin tone; no grey tint remains anywhere.

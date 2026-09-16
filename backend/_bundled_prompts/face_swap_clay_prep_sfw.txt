@@ -13,3 +13,4 @@ Sculpted in the same grey clay, keeping the exact shape, length and position of 
 
 BODY
 Keep the body silhouette and proportions of the pose in Image 1. Real human anatomy for the visible pose: normal neck length, normal head size, natural hands with visible knuckles. The clothes re-fit with natural folds and tension. The whole visible figure is one uniform matte grey clay — no skin colour, no skin texture, no makeup.
+Do not preserve the original person's tattoos, piercings, body jewelry, or distinctive skin marks on the clay — smooth uniform clay skin except for sculpted clothing folds and expression geometry.

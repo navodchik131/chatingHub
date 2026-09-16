@@ -248,18 +248,20 @@ def face_swap_mannequin_prep_enabled_for_model(wave_model_id: str) -> bool:
         return False
     return face_swap_mannequin_prep_enabled()
 
-# Родинки/тату/шрамы — только с модели, никогда с scene donor (Image 3 / текст сцены).
+# Родинки/тату/шрамы/пирсинг — только с модели, никогда с рефа или глины.
 IDENTITY_MARKS_BLOCK = (
-    "Skin marks (freckles, moles, birthmarks, scars, tattoos): copy ONLY from the model identity "
-    "(face reference image + model profile anchor text). NEVER copy marks, tattoos, or scars "
-    "from the scene donor — even if they appear prominently on the scene person."
+    "SKIN MARKS AND BODY MODS (mandatory): Freckles, moles, birthmarks, scars, tattoos, piercings, "
+    "and body jewelry come ONLY from the model identity (model profile text + model reference photos). "
+    "NEVER copy tattoos, piercings, scars, moles, or jewelry from Image 1 (clay/scene donor) — even if "
+    "they are large or central in the frame. If the model profile and model refs show no tattoos and "
+    "no piercings, the output must have none — remove every tattoo and piercing visible on the clay donor."
 )
 
 UPPER_BODY_MARKS_BLOCK = (
-    "Visible chest, décolletage, neck, shoulders, arms, and any other exposed skin in the scene "
-    "reference must NOT keep the sitter's tattoos, moles, scars, or birthmarks. "
-    "Use model identity skin only — if the model profile lists marks, apply those; otherwise clean bare skin. "
-    "The scene reference donates pose, framing, light, and garment coverage — never epidermal marks."
+    "Visible chest, décolletage, neck, shoulders, arms, hands, stomach, and any other exposed skin "
+    "must NOT keep the sitter's tattoos, piercings, moles, scars, or birthmarks from Image 1. "
+    "Apply only what the model identity defines; otherwise clean bare skin with no ink and no metal jewelry "
+    "unless the model wears the same item in her reference photos."
 )
 
 
@@ -908,6 +910,14 @@ def profile_text_to_identity_anchor(model_profile_text: str | None) -> str:
             _block("GENERAL BUILD", build_lines),
         ]
     )
+
+
+def pick_genitals_image(imgs: list[Any]) -> Any | None:
+    """Снимок модели с kind=genitals (интимная анатомия) для NSFW финала."""
+    for im in imgs or []:
+        if (getattr(im, "image_kind", None) or "other").lower() == "genitals":
+            return im
+    return None
 
 
 def pick_face_and_body_images(imgs: list[Any]) -> tuple[Any | None, Any | None]:

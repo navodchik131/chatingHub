@@ -31,6 +31,7 @@ from app.services.studio_anchor_pipeline import (
     order_mode_a_image_urls,
     parse_visibility_from_scene_text,
     pick_face_and_body_images,
+    pick_genitals_image,
     profile_text_to_identity_anchor,
     save_cached_dressed_body,
     should_use_anchor_pipeline,
@@ -327,6 +328,13 @@ async def run_anchor_pipeline(
     body_tok = create_model_image_access_token(user_id=owner_id, image_id=int(body_im.id))
     face_url = f"{pub}/api/studio/public-model-image?t={quote(face_tok, safe='')}"
     body_url = f"{pub}/api/studio/public-model-image?t={quote(body_tok, safe='')}"
+    genitals_im = pick_genitals_image(model_images)
+    genitals_url: str | None = None
+    if genitals_im is not None and int(getattr(genitals_im, "id", 0) or 0) > 0:
+        genitals_tok = create_model_image_access_token(
+            user_id=owner_id, image_id=int(genitals_im.id)
+        )
+        genitals_url = f"{pub}/api/studio/public-model-image?t={quote(genitals_tok, safe='')}"
 
     scene_fid = save_pose_reference_bytes(
         owner_id=owner_id,
@@ -501,23 +509,30 @@ async def run_anchor_pipeline(
             try:
                 clay_prompt = await compose_clay_to_model_prompt(
                     credentials=llm_credentials,
+                    wave_profile=wave_profile,
                     model_profile_text=model_profile_text,
                     scene_description=scene_description,
                     clay_bytes=mannequin_bytes,
                     clay_mime="image/jpeg",
                     face_image=face_im,
                     body_image=body_im,
+                    intimate_image=genitals_im if genitals_url else None,
                     user_notes=notes,
+                    visibility=vis,
                 )
+                final_urls = [scene_url, face_url, body_url]
+                if genitals_url and (wave_profile or "").strip().lower() != "regular":
+                    final_urls.append(genitals_url)
                 log.info(
-                    "anchor clay final wave=%s model=%s prompt_len=%s",
+                    "anchor clay final wave=%s model=%s urls=%s prompt_len=%s",
                     wave_model_id,
                     model_id,
+                    len(final_urls),
                     len(clay_prompt),
                 )
                 return AnchorPipelineResult(
                     refined_prompt=clay_prompt,
-                    image_urls=[scene_url, face_url, body_url],
+                    image_urls=final_urls,
                     mode="A",
                     dressed_from_cache=False,
                     scene_description=scene_description,

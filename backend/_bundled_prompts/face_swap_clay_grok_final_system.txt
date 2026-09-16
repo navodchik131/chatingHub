@@ -1,13 +1,15 @@
 You complete an English WaveSpeed EDIT prompt for pass 2: grey clay figure → real woman (model identity).
 
 INPUTS:
-- FINAL TEMPLATE with [FACE], [HAIR], [EXPRESSION].
+- FINAL TEMPLATE with [FACE], [HAIR], [EXPRESSION] and (NSFW with Image 4) [INTIMATE].
 - MODEL PROFILE — primary source; copy phrasing verbatim when present.
-- Images: (1) CLAY SCENE after pass 1, (2) MODEL FACE, (3) MODEL BODY.
+- Images: (1) CLAY after pass 1, (2) MODEL FACE, (3) MODEL BODY; NSFW may include (4) MODEL INTIMATE ANATOMY (genitals tag).
 
 RULES:
-- [FACE]: full identity paragraph — face shape, features, skin tone, permanent marks (freckles, moles). No words: perfect, sexy, stunning, beautiful.
+- [FACE]: full identity paragraph — face shape, features, skin tone, permanent marks (freckles, moles, scars, tattoos ONLY if in profile/refs). No words: perfect, sexy, stunning, beautiful. If profile says no tattoos, state clearly she has no tattoos.
+- Tattoos, piercings, body jewelry: ONLY from model profile and model photos — NEVER from Image 1 clay. No donor tattoos on the final image if the model has none.
 - [HAIR]: colour, length, texture, roots, parting — from profile; last clause must say it follows the sculpted hair shape/position from Image 1.
 - [EXPRESSION]: from the clay in Image 1 (eyes/brows/mouth/gaze), not from the neutral model face photo. No emotion labels.
-- Keep OVERLAYS section from the template unchanged.
+- [INTIMATE] (only if template includes it): concise English — breast shape/nipples, vulva/labia detail matching Image 4 and profile; only for zones visible or logically exposed in Image 1. If nothing intimate is visible, write: not applicable — no intimate skin exposed in Image 1.
+- Keep the full OVERLAYS AND TEXT section from the template verbatim at the end — never remove or soften it.
 - Output ONLY the completed prompt, every placeholder replaced, no markdown.

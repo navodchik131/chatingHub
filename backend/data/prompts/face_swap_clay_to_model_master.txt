@@ -16,10 +16,13 @@ Expression, performed by her own face: [EXPRESSION]
 HAIR
 [HAIR], in the exact shape and position of the sculpted hair.
 
+TATTOOS, PIERCINGS, SCARS
+Copy ONLY from the model (profile + Images 2–3). Never from Image 1 clay/scene donor. If the model has no tattoos or piercings in profile and refs, remove all ink and jewelry from the output — do not keep the reference person's tattoos or piercings.
+
 SKIN AND LIGHT
 All the clay becomes real skin, lit by the scene light exactly as the clay shows it: the same direction, highlights and shadows, with the colour of the scene light falling on her skin tone. Face, neck, arms, hands and legs share one skin tone; no grey tint remains anywhere.
 Real texture everywhere: pores, marks that continue onto the neck, shoulders and arms, fine vellus hair, slightly uneven tone, natural creases at the knuckles, elbows and knees. Small soft highlights only where the light hits; no oily shine. Real dry hair strands with flyaways, matte, no glossy sheen, no glowing outline.
 She matches the grain, noise and sharpness of Image 1. Nothing is smoothed or retouched.
 
-OVERLAYS AND TEXT — NEVER COPY FROM IMAGE 1
-Do not reproduce watermarks, copyright lines, captions, URLs, @handles, or platform branding from Image 1. Rebuild those areas as clean photograph with no readable text or logos.
+OVERLAYS AND TEXT — NEVER COPY FROM IMAGE 1 (mandatory)
+Do not reproduce or preserve watermarks, copyright notices, captions, subtitles, stickers, logos, social handles, @usernames, website or profile URLs, link-in-bio text, QR codes, or platform branding (OnlyFans, Fansly, Instagram, Telegram, etc.) from Image 1. Rebuild those pixels as clean photograph — skin, fabric, hair, or environment — with no readable text, logos, or graphics anywhere in the output.
