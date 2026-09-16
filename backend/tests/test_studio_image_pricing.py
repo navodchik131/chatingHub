@@ -69,11 +69,12 @@ def test_refine_billing_face_swap_mannequin_two_prep_edits():
         refine_prompt_billing_quote,
     )
 
-    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 2
+    # Classic face swap по умолчанию — без mannequin/dress prep.
+    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 0
     assert anchor_prep_edits_quoted(studio_mode="model_scene") == 1
     assert (
         anchor_prep_edits_quoted(
-            studio_mode="face_swap", wave_model_id="seedream-v5.0-pro"
+            studio_mode="face_swap", wave_model_id="nano-banana-pro"
         )
         == 0
     )
@@ -119,13 +120,22 @@ def test_effective_studio_image_edit_wave_model():
     )
 
 
-def test_mannequin_prep_off_for_seedream_v5_classic():
-    from app.services.studio_anchor_pipeline import (
-        face_swap_mannequin_prep_enabled_for_model,
-    )
+def test_mannequin_prep_off_when_face_swap_classic():
+    from app.services.studio_anchor_pipeline import face_swap_mannequin_prep_enabled_for_model
 
     assert face_swap_mannequin_prep_enabled_for_model("seedream-v5.0-pro") is False
+    assert face_swap_mannequin_prep_enabled_for_model("wan-2.7") is False
+    assert face_swap_mannequin_prep_enabled_for_model("nano-banana-pro") is False
+
+
+def test_mannequin_prep_when_classic_disabled(monkeypatch):
+    from app.config import settings
+    from app.services.studio_anchor_pipeline import face_swap_mannequin_prep_enabled_for_model
+    from app.services.studio_refine_billing import anchor_prep_edits_quoted
+
+    monkeypatch.setattr(settings, "studio_face_swap_seedream_v5_classic", False)
     assert face_swap_mannequin_prep_enabled_for_model("wan-2.7") is True
+    assert anchor_prep_edits_quoted(studio_mode="face_swap") == 2
 
 
 def test_anchor_pipeline_eligible_params():

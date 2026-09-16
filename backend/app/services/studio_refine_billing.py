@@ -65,10 +65,10 @@ def anchor_pipeline_eligible_from_params(
 def anchor_prep_edits_quoted(*, studio_mode: str, wave_model_id: str = "") -> int:
     """Сколько WaveSpeed prep-edit заложено в котировку (mannequin + dress для face_swap)."""
     from app.services.studio_anchor_pipeline import face_swap_mannequin_prep_enabled_for_model
-    from app.services.studio_face_swap_seedream_v5 import face_swap_seedream_v5_classic_enabled
+    from app.services.studio_face_swap_seedream_v5 import face_swap_classic_enabled
 
     mode = normalize_studio_mode(str(studio_mode or ""))
-    if mode == "face_swap" and face_swap_seedream_v5_classic_enabled(wave_model_id):
+    if mode == "face_swap" and face_swap_classic_enabled(wave_model_id):
         return 0
     if mode == "face_swap" and face_swap_mannequin_prep_enabled_for_model(wave_model_id):
         return 2

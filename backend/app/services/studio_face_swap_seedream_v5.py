@@ -1,4 +1,4 @@
-"""Face swap Seedream v5 Pro — classic single-pass (без mannequin prep)."""
+"""Face swap classic — один Grok master prompt и edit ref→face→body (без mannequin prep)."""
 
 from __future__ import annotations
 
@@ -46,11 +46,15 @@ def load_face_swap_seedream_v5_grok_system() -> str:
     return _read_prompt_file(_SYSTEM)
 
 
+def face_swap_classic_enabled(wave_model_id: str = "") -> bool:
+    """Classic face swap для любой WaveSpeed-модели (Grok + один edit, без mannequin)."""
+    _ = wave_model_id
+    return bool(getattr(settings, "studio_face_swap_seedream_v5_classic", True))
+
+
 def face_swap_seedream_v5_classic_enabled(wave_model_id: str) -> bool:
-    """Classic face swap для seedream-v5.0-pro (Grok + один edit)."""
-    if not bool(getattr(settings, "studio_face_swap_seedream_v5_classic", True)):
-        return False
-    return (wave_model_id or "").strip().lower() == "seedream-v5.0-pro"
+    """Обратная совместимость — то же, что face_swap_classic_enabled."""
+    return face_swap_classic_enabled(wave_model_id)
 
 
 def _read_model_image_file(im: Any) -> tuple[bytes, str]:
@@ -85,11 +89,11 @@ def _image_part(raw: bytes, mime: str) -> dict[str, Any]:
 def _strip_unfilled_placeholders(prompt: str) -> str:
     """На случай если Grok оставил скобки — логируем, не падаем."""
     if re.search(r"\[(FACE|MARKS|HAIR|BODY|EXPRESSION)\]", prompt or "", re.I):
-        log.warning("seedream v5 compose: unresolved placeholders in prompt")
+        log.warning("face swap classic compose: unresolved placeholders in prompt")
     return (prompt or "").strip()
 
 
-async def compose_seedream_v5_face_swap_prompt(
+async def compose_classic_face_swap_prompt(
     *,
     credentials: StudioOpenAiCredentials | Any,
     model_profile_text: str | None,
@@ -157,3 +161,8 @@ async def compose_seedream_v5_face_swap_prompt(
     )
     out = _strip_code_fences(raw or "").strip()
     return _strip_unfilled_placeholders(out)
+
+
+async def compose_seedream_v5_face_swap_prompt(**kwargs: Any) -> str:
+    """Alias для compose_classic_face_swap_prompt."""
+    return await compose_classic_face_swap_prompt(**kwargs)

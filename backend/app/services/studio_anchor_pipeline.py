@@ -248,10 +248,10 @@ def face_swap_mannequin_prep_enabled() -> bool:
 
 
 def face_swap_mannequin_prep_enabled_for_model(wave_model_id: str) -> bool:
-    """Манекен выключен для Seedream v5 classic."""
-    from app.services.studio_face_swap_seedream_v5 import face_swap_seedream_v5_classic_enabled
+    """Манекен выключен при classic face swap (Grok master, без prep)."""
+    from app.services.studio_face_swap_seedream_v5 import face_swap_classic_enabled
 
-    if face_swap_seedream_v5_classic_enabled(wave_model_id):
+    if face_swap_classic_enabled(wave_model_id):
         return False
     return face_swap_mannequin_prep_enabled()
 

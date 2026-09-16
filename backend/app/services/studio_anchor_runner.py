@@ -67,7 +67,8 @@ class AnchorPipelineResult:
     mannequin_prep_ran: bool = False
     wardrobe_prep_ran: bool = False
     mannequin_dressed_first: bool = False
-    seedream_v5_classic: bool = False
+    face_swap_classic: bool = False
+    seedream_v5_classic: bool = False  # deprecated alias, см. face_swap_classic
 
 
 async def _analyze_scene_text(
@@ -276,19 +277,19 @@ async def run_anchor_pipeline(
     notes = extract_creative_notes_from_workflow_description(user_notes)
 
     from app.services.studio_face_swap_seedream_v5 import (
-        compose_seedream_v5_face_swap_prompt,
-        face_swap_seedream_v5_classic_enabled,
+        compose_classic_face_swap_prompt,
+        face_swap_classic_enabled,
     )
 
-    use_classic_v5 = (
+    use_classic = (
         mode_n == "face_swap"
         and not face_closeup
-        and face_swap_seedream_v5_classic_enabled(wave_model_id)
+        and face_swap_classic_enabled(wave_model_id)
     )
     use_mannequin = (
         mode_n == "face_swap"
         and not face_closeup
-        and not use_classic_v5
+        and not use_classic
         and face_swap_mannequin_prep_enabled_for_model(wave_model_id)
     )
     dress_headless = use_mannequin
@@ -335,10 +336,10 @@ async def run_anchor_pipeline(
     scene_url_original = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
     scene_url = scene_url_original
 
-    # Seedream v5 Pro classic: Grok master prompt, один edit, порядок ref→face→body.
-    if use_classic_v5 and llm_credentials is not None:
+    # Classic face swap: Grok master prompt, один edit, порядок ref→face→body (все модели).
+    if use_classic and llm_credentials is not None:
         try:
-            prompt = await compose_seedream_v5_face_swap_prompt(
+            prompt = await compose_classic_face_swap_prompt(
                 credentials=llm_credentials,
                 model_profile_text=model_profile_text,
                 scene_description=scene_description,
@@ -349,7 +350,8 @@ async def run_anchor_pipeline(
                 user_notes=notes,
             )
             log.info(
-                "anchor seedream v5 classic model=%s prompt_len=%s",
+                "anchor face swap classic wave=%s model=%s prompt_len=%s",
+                wave_model_id,
                 model_id,
                 len(prompt),
             )
@@ -366,16 +368,22 @@ async def run_anchor_pipeline(
                 face_closeup=False,
                 bust_portrait=bust_portrait,
                 mannequin_scene=False,
+                face_swap_classic=True,
                 seedream_v5_classic=True,
             )
         except Exception as e:
             log.warning(
-                "seedream v5 classic compose failed model=%s: %s — fallback to standard anchor",
+                "face swap classic compose failed wave=%s model=%s: %s — fallback to standard anchor",
+                wave_model_id,
                 model_id,
                 e,
             )
-    elif use_classic_v5 and llm_credentials is None:
-        log.warning("seedream v5 classic skipped: no LLM credentials model=%s", model_id)
+    elif use_classic and llm_credentials is None:
+        log.warning(
+            "face swap classic skipped: no LLM credentials wave=%s model=%s",
+            wave_model_id,
+            model_id,
+        )
 
     mannequin_prep_ran = False
     wardrobe_prep_ran = False

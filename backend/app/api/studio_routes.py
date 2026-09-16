@@ -5735,7 +5735,8 @@ async def _studio_job_execute_refine_prompt(
                 log.info(
                     "anchor pipeline mode=%s classic_v5=%s closeup=%s bust=%s cache=%s urls=%s job=%s",
                     anchor_result.mode,
-                    getattr(anchor_result, "seedream_v5_classic", False),
+                    getattr(anchor_result, "face_swap_classic", False)
+                    or getattr(anchor_result, "seedream_v5_classic", False),
                     anchor_result.face_closeup,
                     anchor_result.bust_portrait,
                     anchor_result.dressed_from_cache,
@@ -6085,7 +6086,9 @@ async def _studio_job_execute_refine_prompt(
                 user_pose_ref_prepended = False
                 wavespeed_prompt = (refined or "").strip()
                 if mode_n == "face_swap" and anchor_result.mode == "A":
-                    if getattr(anchor_result, "seedream_v5_classic", False):
+                    if getattr(anchor_result, "face_swap_classic", False) or getattr(
+                        anchor_result, "seedream_v5_classic", False
+                    ):
                         # Grok уже отдал финальный master prompt — без префиксов mannequin/scene-first.
                         wavespeed_prompt = strip_workflow_meta_from_wavespeed_prose(
                             wavespeed_prompt
@@ -7136,7 +7139,8 @@ async def _studio_job_execute_motion_first_frame(
                 log.info(
                     "motion first-frame anchor mode=%s classic_v5=%s cache=%s job=%s",
                     anchor_result.mode,
-                    getattr(anchor_result, "seedream_v5_classic", False),
+                    getattr(anchor_result, "face_swap_classic", False)
+                    or getattr(anchor_result, "seedream_v5_classic", False),
                     anchor_result.dressed_from_cache,
                     job.id,
                 )
@@ -7301,7 +7305,9 @@ async def _studio_job_execute_motion_first_frame(
             user_pose_ref_prepended = False
             wavespeed_prompt = (refined or "").strip()
             if mode_n == "face_swap" and anchor_result.mode == "A":
-                if getattr(anchor_result, "seedream_v5_classic", False):
+                if getattr(anchor_result, "face_swap_classic", False) or getattr(
+                    anchor_result, "seedream_v5_classic", False
+                ):
                     wavespeed_prompt = strip_workflow_meta_from_wavespeed_prose(
                         wavespeed_prompt
                     )
