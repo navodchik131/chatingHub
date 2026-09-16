@@ -243,45 +243,63 @@ def schedule_studio_job(job_id: int) -> None:
     if not settings.studio_jobs_execute_in_api:
         # worker-контейнер подберёт pending job из БД
         return
-    task = asyncio.create_task(_run_studio_job(job_id))
-    _running_job_tasks.add(task)
-    task.add_done_callback(_running_job_tasks.discard)
+    _schedule_studio_job_task(job_id)
 
 
-async def _next_pending_studio_job_id() -> int | None:
+async def _claim_next_pending_studio_job_id() -> int | None:
+    """Атомарно pending→running: одна job — один исполнитель (parallel worker loop)."""
     pending_cutoff = datetime.now(timezone.utc) - timedelta(
         minutes=STUDIO_PENDING_MAX_AGE_MINUTES
     )
+    now = datetime.now(timezone.utc)
     async with SessionLocal() as session:
         stmt = (
-            select(StudioJob.id)
+            select(StudioJob)
             .where(
                 StudioJob.status == StudioJobStatus.pending.value,
                 StudioJob.created_at >= pending_cutoff,
             )
             .order_by(StudioJob.created_at.asc())
             .limit(1)
+            .with_for_update(skip_locked=True)
         )
-        return (await session.execute(stmt)).scalar_one_or_none()
+        job = (await session.execute(stmt)).scalar_one_or_none()
+        if job is None:
+            return None
+        job.status = StudioJobStatus.running.value
+        job.started_at = now
+        job.updated_at = now
+        await session.commit()
+        return job.id
+
+
+def _schedule_studio_job_task(job_id: int) -> None:
+    """Запуск job в фоне; лимит одновременных — семафор в _run_studio_job."""
+    task = asyncio.create_task(_run_studio_job(job_id))
+    _running_job_tasks.add(task)
+    task.add_done_callback(_running_job_tasks.discard)
 
 
 async def studio_jobs_worker_loop() -> None:
     """Фоновый poll pending studio jobs (APP_ROLE=worker)."""
     if not settings.studio_jobs_worker_loop_enabled:
         return
+    max_c = int(settings.studio_max_concurrent_jobs)
     log.info(
         "Studio jobs worker loop started (poll=%ss, concurrent=%s)",
         settings.studio_jobs_poll_interval_seconds,
-        settings.studio_max_concurrent_jobs,
+        max_c,
     )
     await asyncio.sleep(2)
     while True:
         try:
-            job_id = await _next_pending_studio_job_id()
-            if job_id is not None:
-                await _run_studio_job(job_id)
-            else:
-                await asyncio.sleep(settings.studio_jobs_poll_interval_seconds)
+            # Разные job параллельно; внутри одной job шаги по-прежнему последовательны.
+            while len(_running_job_tasks) < max_c:
+                job_id = await _claim_next_pending_studio_job_id()
+                if job_id is None:
+                    break
+                _schedule_studio_job_task(job_id)
+            await asyncio.sleep(settings.studio_jobs_poll_interval_seconds)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -456,12 +474,22 @@ async def _run_studio_job_inner(job_id: int, execute_studio_job) -> None:
         async with SessionLocal() as session:
             stmt = select(StudioJob).where(StudioJob.id == job_id).with_for_update()
             job = (await session.execute(stmt)).scalar_one_or_none()
-            if not job or job.status != StudioJobStatus.pending.value:
+            if not job:
                 return
-            job.status = StudioJobStatus.running.value
-            job.started_at = datetime.now(timezone.utc)
-            job.updated_at = datetime.now(timezone.utc)
-            await session.commit()
+            st = (job.status or "").strip()
+            if st in (
+                StudioJobStatus.completed.value,
+                StudioJobStatus.failed.value,
+            ):
+                return
+            if st == StudioJobStatus.pending.value:
+                job.status = StudioJobStatus.running.value
+                job.started_at = datetime.now(timezone.utc)
+                job.updated_at = datetime.now(timezone.utc)
+                await session.commit()
+            elif st != StudioJobStatus.running.value:
+                return
+            # running: уже забронировано worker claim или повторный вход — выполняем дальше
 
         async with SessionLocal() as session:
             job = await session.get(StudioJob, job_id)
