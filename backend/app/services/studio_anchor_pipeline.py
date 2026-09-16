@@ -246,6 +246,15 @@ def face_swap_mannequin_prep_enabled() -> bool:
 
     return bool(getattr(settings, "studio_face_swap_mannequin_prep", True))
 
+
+def face_swap_mannequin_prep_enabled_for_model(wave_model_id: str) -> bool:
+    """Манекен выключен для Seedream v5 classic."""
+    from app.services.studio_face_swap_seedream_v5 import face_swap_seedream_v5_classic_enabled
+
+    if face_swap_seedream_v5_classic_enabled(wave_model_id):
+        return False
+    return face_swap_mannequin_prep_enabled()
+
 # Родинки/тату/шрамы — только с модели, никогда с scene donor (Image 3 / текст сцены).
 IDENTITY_MARKS_BLOCK = (
     "Skin marks (freckles, moles, birthmarks, scars, tattoos): copy ONLY from the model identity "

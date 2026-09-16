@@ -21,7 +21,7 @@ from app.services.studio_anchor_pipeline import (
     detect_face_closeup_scene,
     dressed_body_cache_key,
     extract_expression_block_from_scene_text,
-    face_swap_mannequin_prep_enabled,
+    face_swap_mannequin_prep_enabled_for_model,
     filter_anchor_by_visibility,
     load_cached_dressed_body,
     load_face_swap_dressed_body_headless_prompt,
@@ -67,6 +67,7 @@ class AnchorPipelineResult:
     mannequin_prep_ran: bool = False
     wardrobe_prep_ran: bool = False
     mannequin_dressed_first: bool = False
+    seedream_v5_classic: bool = False
 
 
 async def _analyze_scene_text(
@@ -274,10 +275,21 @@ async def run_anchor_pipeline(
     # Только SCENE_DIRECTION / пользовательские заметки — без REFERENCE_CONTEXT из workflow.
     notes = extract_creative_notes_from_workflow_description(user_notes)
 
+    from app.services.studio_face_swap_seedream_v5 import (
+        compose_seedream_v5_face_swap_prompt,
+        face_swap_seedream_v5_classic_enabled,
+    )
+
+    use_classic_v5 = (
+        mode_n == "face_swap"
+        and not face_closeup
+        and face_swap_seedream_v5_classic_enabled(wave_model_id)
+    )
     use_mannequin = (
         mode_n == "face_swap"
         and not face_closeup
-        and face_swap_mannequin_prep_enabled()
+        and not use_classic_v5
+        and face_swap_mannequin_prep_enabled_for_model(wave_model_id)
     )
     dress_headless = use_mannequin
     dressed_first_final = use_mannequin and mannequin_final_dressed_first(wave_model_id)
@@ -322,6 +334,48 @@ async def run_anchor_pipeline(
     scene_tok = create_pose_reference_access_token(user_id=owner_id, file_id=scene_fid)
     scene_url_original = f"{pub}/api/studio/public-pose-reference?t={quote(scene_tok, safe='')}"
     scene_url = scene_url_original
+
+    # Seedream v5 Pro classic: Grok master prompt, один edit, порядок ref→face→body.
+    if use_classic_v5 and llm_credentials is not None:
+        try:
+            prompt = await compose_seedream_v5_face_swap_prompt(
+                credentials=llm_credentials,
+                model_profile_text=model_profile_text,
+                scene_description=scene_description,
+                scene_bytes=scene_bytes,
+                scene_mime=scene_mime or "image/jpeg",
+                face_image=face_im,
+                body_image=body_im,
+                user_notes=notes,
+            )
+            log.info(
+                "anchor seedream v5 classic model=%s prompt_len=%s",
+                model_id,
+                len(prompt),
+            )
+            return AnchorPipelineResult(
+                refined_prompt=prompt,
+                image_urls=[scene_url_original, face_url, body_url],
+                mode="A",
+                dressed_from_cache=False,
+                scene_description=scene_description,
+                visibility=vis,
+                cache_key=cache_key,
+                dressed_body_bytes=None,
+                scene_first=True,
+                face_closeup=False,
+                bust_portrait=bust_portrait,
+                mannequin_scene=False,
+                seedream_v5_classic=True,
+            )
+        except Exception as e:
+            log.warning(
+                "seedream v5 classic compose failed model=%s: %s — fallback to standard anchor",
+                model_id,
+                e,
+            )
+    elif use_classic_v5 and llm_credentials is None:
+        log.warning("seedream v5 classic skipped: no LLM credentials model=%s", model_id)
 
     mannequin_prep_ran = False
     wardrobe_prep_ran = False

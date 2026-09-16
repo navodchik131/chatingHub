@@ -84,10 +84,12 @@ from app.services.demo_generations import (
 from app.services.device_signal import device_signal_from_mapping, merge_device_key_into_params
 from app.services.entitlements import subscription_active
 from app.services.studio_image_pricing import (
+    effective_studio_image_edit_wave_model,
     effective_wave_model_for_billing,
     grok_pipeline_for_studio_mode,
     quote_studio_image_credits,
 )
+from app.services.studio_prompt_bundle import strip_workflow_meta_from_wavespeed_prose
 from app.services.studio_operation_pricing import (
     studio_carousel_shot_credit_cost,
     studio_inpaint_credit_cost,
@@ -948,11 +950,22 @@ async def _reserve_refine_prompt_billing_at_accept(
         if workflow_wave_model
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
+    workflow_source_billing = str(params.get("workflow_source") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    edit_wave_model = effective_studio_image_edit_wave_model(
+        wave_profile=wave_profile_n,
+        workflow_wave_model=workflow_wave_model,
+        workflow_source=workflow_source_billing,
+    )
     anchor_prep = anchor_pipeline_eligible_from_params(
         params,
         has_scene_image=has_scene_image,
         mask_bytes=mask_bytes,
     )
+    prep_wave_model = edit_wave_model if mode_n == "face_swap" else billing_wave_model
     usage_kind, quoted_cost, base_studio_credit = refine_prompt_billing_quote(
         plan,
         mask_bytes=mask_bytes,
@@ -960,7 +973,9 @@ async def _reserve_refine_prompt_billing_at_accept(
         wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
         include_anchor_prep=anchor_prep,
-        anchor_prep_edits=anchor_prep_edits_quoted(studio_mode=mode_n),
+        anchor_prep_edits=anchor_prep_edits_quoted(
+            studio_mode=mode_n, wave_model_id=prep_wave_model
+        ),
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
@@ -5274,6 +5289,11 @@ async def _studio_job_execute_refine_prompt(
         if workflow_wave_model
         else effective_wave_model_for_billing(None, wave_profile=wave_profile_n)
     )
+    edit_wave_model = effective_studio_image_edit_wave_model(
+        wave_profile=wave_profile_n,
+        workflow_wave_model=workflow_wave_model or None,
+        workflow_source=workflow_source,
+    )
     anchor_eligible = bool(
         do_wavespeed
         and image_bytes
@@ -5282,6 +5302,7 @@ async def _studio_job_execute_refine_prompt(
         and mode_n in ("face_swap", "model_scene")
         and not mask_bytes
     )
+    prep_wave_model = edit_wave_model if mode_n == "face_swap" else billing_wave_model
     usage_kind, quoted_cost, base_studio_credit = refine_prompt_billing_quote(
         plan,
         mask_bytes=bool(mask_bytes),
@@ -5289,7 +5310,9 @@ async def _studio_job_execute_refine_prompt(
         wan_tier_n=wan_tier_n,
         grok_pipeline=grok_pipeline,
         include_anchor_prep=anchor_eligible,
-        anchor_prep_edits=anchor_prep_edits_quoted(studio_mode=mode_n),
+        anchor_prep_edits=anchor_prep_edits_quoted(
+            studio_mode=mode_n, wave_model_id=prep_wave_model
+        ),
     )
     assert_demo_only_user_model_allowed(
         plan=plan,
@@ -5695,7 +5718,7 @@ async def _studio_job_execute_refine_prompt(
                 wavespeed_api_key=ws_key,
                 wave_profile=wave_profile_n,
                 wan_edit_tier=wan_tier_n,
-                wave_model_id=billing_wave_model,
+                wave_model_id=edit_wave_model,
                 aspect_ratio=aspect_key,
                 force_redress=False,
                 lock_hairstyle_style=effective_lock_hairstyle,
@@ -5710,8 +5733,9 @@ async def _studio_job_execute_refine_prompt(
                     session.add(gen_row)
                     await session.flush()
                 log.info(
-                    "anchor pipeline mode=%s closeup=%s bust=%s cache=%s urls=%s job=%s",
+                    "anchor pipeline mode=%s classic_v5=%s closeup=%s bust=%s cache=%s urls=%s job=%s",
                     anchor_result.mode,
+                    getattr(anchor_result, "seedream_v5_classic", False),
                     anchor_result.face_closeup,
                     anchor_result.bust_portrait,
                     anchor_result.dressed_from_cache,
@@ -5737,7 +5761,9 @@ async def _studio_job_execute_refine_prompt(
                 wan_tier_n=wan_tier_n,
             ),
         )
-        prep_quoted = anchor_prep_edits_quoted(studio_mode=mode_n)
+        prep_quoted = anchor_prep_edits_quoted(
+            studio_mode=mode_n, wave_model_id=prep_wave_model
+        )
         uncached = anchor_uncached_prep_edits(anchor_result) if anchor_result else 0
         refund_edits = max(0, prep_quoted - uncached)
         if refund_edits:
@@ -6059,17 +6085,23 @@ async def _studio_job_execute_refine_prompt(
                 user_pose_ref_prepended = False
                 wavespeed_prompt = (refined or "").strip()
                 if mode_n == "face_swap" and anchor_result.mode == "A":
-                    wavespeed_prompt = finalize_anchor_mode_a_wavespeed_prompt(
-                        wavespeed_prompt,
-                        wave_profile=wave_profile_n,
-                        lock_model_hairstyle=effective_lock_hairstyle,
-                        scene_first=anchor_result.scene_first,
-                        bust_portrait=anchor_result.bust_portrait,
-                        mannequin_scene=anchor_result.mannequin_scene,
-                        mannequin_dressed_first=bool(
-                            getattr(anchor_result, "mannequin_dressed_first", False)
-                        ),
-                    )
+                    if getattr(anchor_result, "seedream_v5_classic", False):
+                        # Grok уже отдал финальный master prompt — без префиксов mannequin/scene-first.
+                        wavespeed_prompt = strip_workflow_meta_from_wavespeed_prose(
+                            wavespeed_prompt
+                        )
+                    else:
+                        wavespeed_prompt = finalize_anchor_mode_a_wavespeed_prompt(
+                            wavespeed_prompt,
+                            wave_profile=wave_profile_n,
+                            lock_model_hairstyle=effective_lock_hairstyle,
+                            scene_first=anchor_result.scene_first,
+                            bust_portrait=anchor_result.bust_portrait,
+                            mannequin_scene=anchor_result.mannequin_scene,
+                            mannequin_dressed_first=bool(
+                                getattr(anchor_result, "mannequin_dressed_first", False)
+                            ),
+                        )
                 size_for_ws: str | None
                 if settings.wavespeed_seedream_omit_size:
                     size_for_ws = None
@@ -7048,6 +7080,11 @@ async def _studio_job_execute_motion_first_frame(
 
     # Первый кадр motion: по умолчанию face_swap (Mode A); shot-batch тоже на Mode A.
     mode_n = _normalize_studio_mode(str(p.get("studio_mode") or "face_swap"))
+    edit_wave_model = effective_studio_image_edit_wave_model(
+        wave_profile=wave_profile_n,
+        workflow_wave_model=workflow_wave_model or None,
+        workflow_source=workflow_first_frame,
+    )
     skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
         do_wavespeed=not skip_ws,
@@ -7090,18 +7127,16 @@ async def _studio_job_execute_motion_first_frame(
                 wavespeed_api_key=ws_key,
                 wave_profile=wave_profile_n,
                 wan_edit_tier=wan_tier_n,
-                wave_model_id=billing_wave_model or (
-                    workflow_wave_model
-                    or ("wan-2.7" if wave_profile_n == "nsfw" else "nano-banana-pro")
-                ),
+                wave_model_id=edit_wave_model,
                 aspect_ratio=aspect_key,
                 force_redress=False,
                 lock_hairstyle_style=effective_lock_hairstyle,
             )
             if anchor_result is not None:
                 log.info(
-                    "motion first-frame anchor mode=%s cache=%s job=%s",
+                    "motion first-frame anchor mode=%s classic_v5=%s cache=%s job=%s",
                     anchor_result.mode,
+                    getattr(anchor_result, "seedream_v5_classic", False),
                     anchor_result.dressed_from_cache,
                     job.id,
                 )
@@ -7266,17 +7301,22 @@ async def _studio_job_execute_motion_first_frame(
             user_pose_ref_prepended = False
             wavespeed_prompt = (refined or "").strip()
             if mode_n == "face_swap" and anchor_result.mode == "A":
-                wavespeed_prompt = finalize_anchor_mode_a_wavespeed_prompt(
-                    wavespeed_prompt,
-                    wave_profile=wave_profile_n,
-                    lock_model_hairstyle=effective_lock_hairstyle,
-                    scene_first=anchor_result.scene_first,
-                    bust_portrait=anchor_result.bust_portrait,
-                    mannequin_scene=anchor_result.mannequin_scene,
-                    mannequin_dressed_first=bool(
-                        getattr(anchor_result, "mannequin_dressed_first", False)
-                    ),
-                )
+                if getattr(anchor_result, "seedream_v5_classic", False):
+                    wavespeed_prompt = strip_workflow_meta_from_wavespeed_prose(
+                        wavespeed_prompt
+                    )
+                else:
+                    wavespeed_prompt = finalize_anchor_mode_a_wavespeed_prompt(
+                        wavespeed_prompt,
+                        wave_profile=wave_profile_n,
+                        lock_model_hairstyle=effective_lock_hairstyle,
+                        scene_first=anchor_result.scene_first,
+                        bust_portrait=anchor_result.bust_portrait,
+                        mannequin_scene=anchor_result.mannequin_scene,
+                        mannequin_dressed_first=bool(
+                            getattr(anchor_result, "mannequin_dressed_first", False)
+                        ),
+                    )
             if workflow_first_frame:
                 from app.services.studio_model_bootstrap import (
                     append_motion_first_frame_overlay_removal,

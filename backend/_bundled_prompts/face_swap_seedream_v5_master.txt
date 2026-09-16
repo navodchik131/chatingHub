@@ -1,0 +1,29 @@
+Edit Image 1. Image 1 is the base photo. Replace the person in it with the woman shown in Images 2 and 3, as if she had been photographed in this exact moment.
+
+IMAGE ROLES
+Image 1 — the base photo: pose, clothing, scene, light and camera. It is NOT a source for the person's face, hair or body.
+Image 2 — her face. The only source of facial identity.
+Image 3 — her full body. The only source of her body build and proportions.
+From Images 2 and 3 take only the person; ignore their background, light and clothing.
+
+FACE — replace it completely
+No facial feature of the original person may remain: not the face shape, jaw, cheekbones, eyes, brows, nose, lips or teeth. Rebuild the face from Image 2, seen at the head angle of Image 1.
+[FACE]
+[MARKS]
+Expression, performed by her own face: [EXPRESSION]
+Her own lips, teeth and skin form the expression; smile lines and eye creases appear naturally on her face.
+
+HAIR
+[HAIR], arranged the way the hair is arranged in Image 1 (loose, tucked, tied, moved by wind).
+
+BODY — from Image 3
+[BODY]
+Do not keep the original person's body shape, height or proportions, and do not slim or lengthen her. Her body performs the exact pose of Image 1. The clothes from Image 1 re-fit to her shape, with folds and tension where her body presses against the fabric.
+
+KEEP FROM IMAGE 1 EXACTLY
+The pose, head position and tilt, hand and finger positions, the clothing and accessories, all objects and the environment, the lighting, the camera angle, focus, crop, image quality and aspect ratio.
+
+REALISM
+She is lit by the light of Image 1; do not bring the lighting of Images 2 and 3. Face, neck, arms and hands share one consistent skin tone.
+Real skin: visible pores, fine vellus hair, slightly uneven tone, natural asymmetry, small soft highlights only where the light hits. No oily shine, no smoothing, no retouching, no beauty filter. Natural matte lips. Real hair strands with a few flyaways, no glossy sheen, no glowing outline. Real hands with knuckle creases.
+She has the same sharpness, noise and colour as the rest of the photo, with correct contact shadows. She looks photographed in this place, not pasted in.

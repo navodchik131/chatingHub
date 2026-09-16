@@ -111,6 +111,21 @@ def effective_wave_model_for_billing(
     return DEMO_WAN_WAVE_MODEL
 
 
+def effective_studio_image_edit_wave_model(
+    *,
+    wave_profile: str | None,
+    workflow_wave_model: str | None = None,
+    workflow_source: bool = False,
+) -> str:
+    """Модель WaveSpeed edit в кабинете (совпадает с веткой else seedream в studio_routes)."""
+    wwm = (workflow_wave_model or "").strip().lower()
+    if workflow_source and wwm in _WAVE_MODELS:
+        return wwm
+    if normalize_studio_wave_profile(wave_profile) == "regular":
+        return "nano-banana-pro"
+    return "seedream-v5.0-pro"
+
+
 def demo_request_eligible_for_free_slot(
     *,
     wave_model_id: str | None,

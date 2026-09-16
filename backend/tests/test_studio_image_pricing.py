@@ -71,6 +71,12 @@ def test_refine_billing_face_swap_mannequin_two_prep_edits():
 
     assert anchor_prep_edits_quoted(studio_mode="face_swap") == 2
     assert anchor_prep_edits_quoted(studio_mode="model_scene") == 1
+    assert (
+        anchor_prep_edits_quoted(
+            studio_mode="face_swap", wave_model_id="seedream-v5.0-pro"
+        )
+        == 0
+    )
     _, one_prep, _ = refine_prompt_billing_quote(
         "credits",
         mask_bytes=False,
@@ -90,6 +96,36 @@ def test_refine_billing_face_swap_mannequin_two_prep_edits():
         anchor_prep_edits=2,
     )
     assert two_prep > one_prep
+
+
+def test_effective_studio_image_edit_wave_model():
+    from app.services.studio_image_pricing import effective_studio_image_edit_wave_model
+
+    assert (
+        effective_studio_image_edit_wave_model(wave_profile="nsfw")
+        == "seedream-v5.0-pro"
+    )
+    assert (
+        effective_studio_image_edit_wave_model(wave_profile="regular")
+        == "nano-banana-pro"
+    )
+    assert (
+        effective_studio_image_edit_wave_model(
+            wave_profile="nsfw",
+            workflow_wave_model="wan-2.7",
+            workflow_source=True,
+        )
+        == "wan-2.7"
+    )
+
+
+def test_mannequin_prep_off_for_seedream_v5_classic():
+    from app.services.studio_anchor_pipeline import (
+        face_swap_mannequin_prep_enabled_for_model,
+    )
+
+    assert face_swap_mannequin_prep_enabled_for_model("seedream-v5.0-pro") is False
+    assert face_swap_mannequin_prep_enabled_for_model("wan-2.7") is True
 
 
 def test_anchor_pipeline_eligible_params():
