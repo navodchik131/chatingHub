@@ -159,8 +159,21 @@ async def compose_classic_face_swap_prompt(
         credentials=credentials,
         timeout_seconds=float(cfg.grok_scene_compose_timeout_seconds or 120.0),
     )
-    out = _strip_code_fences(raw or "").strip()
-    return _strip_unfilled_placeholders(out)
+    out = _strip_unfilled_placeholders(_strip_code_fences(raw or "").strip())
+    return _ensure_overlay_exclusion_on_classic_prompt(out)
+
+
+def _ensure_overlay_exclusion_on_classic_prompt(prompt: str) -> str:
+    """Classic не проходит finalize_anchor — дублируем серверный блок против водяных знаков/URL."""
+    from app.services.studio_anchor_pipeline import SCENE_OVERLAY_EXCLUSION_BLOCK
+
+    p = (prompt or "").strip()
+    if not p:
+        return p
+    upper = p.upper()
+    if "OVERLAYS_AND_TEXT" in upper or "OVERLAYS AND TEXT" in upper:
+        return p
+    return f"{p}\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
 
 
 async def compose_seedream_v5_face_swap_prompt(**kwargs: Any) -> str:

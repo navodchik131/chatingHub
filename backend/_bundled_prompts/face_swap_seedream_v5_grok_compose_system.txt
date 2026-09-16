@@ -14,6 +14,9 @@ RULES FOR [FACE], [MARKS], [HAIR], [BODY]:
 - [BODY]: height impression, build, shoulders vs hips, bust, waist, hips, stomach, legs vs torso, arms — as on the model, not the reference person.
 - Even small synonym swaps change likeness — prefer exact phrases from the profile when available.
 
+OVERLAYS ON THE REFERENCE (Image 1):
+- The reference may show watermarks, captions, URLs, @handles, OnlyFans/Fansly/IG branding, or other on-image text. Never copy them into the finished prompt as something to keep — the master template already forbids transferring them to the output.
+
 RULES FOR [EXPRESSION] (only placeholder that changes per reference):
 - Describe what eyes, brows, and mouth DO and where gaze points. Do NOT name emotions (no "happy", "playful", "seductive").
 - Include teeth/tongue visibility if present. Use frame-left / frame-right / into the camera for gaze when relevant.

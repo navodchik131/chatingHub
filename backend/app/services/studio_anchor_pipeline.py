@@ -33,11 +33,12 @@ REALISM_BLOCK = (
 
 # Сцена-реф часто с OnlyFans/IG водяными знаками — при scene-first edit canvas их нельзя сохранять.
 SCENE_OVERLAY_EXCLUSION_BLOCK = (
-    "OVERLAYS_AND_TEXT (mandatory): The scene reference may contain watermarks, captions, "
-    "subtitles, logos, stickers, social handles, @usernames, URLs, platform branding "
-    "(OnlyFans, Fansly, Instagram, Telegram, etc.), timecode, or UI overlays. "
-    "Do NOT reproduce, preserve, or transfer any of them into the output — rebuild those "
-    "areas as clean photograph (skin, fabric, or environment). No on-screen text or graphics."
+    "OVERLAYS_AND_TEXT (mandatory): The scene reference may contain watermarks, copyright "
+    "notices, captions, subtitles, logos, stickers, social handles, @usernames, URLs, "
+    "link-in-bio or profile links, platform branding (OnlyFans, Fansly, Instagram, "
+    "Telegram, etc.), timecode, or UI overlays. Do NOT reproduce, preserve, or transfer "
+    "any of them into the output — rebuild those areas as clean photograph (skin, fabric, "
+    "hair, or environment). No on-screen text or graphics."
 )
 
 VISIBILITY_ONLY_PROMPT = """Look at this photo and determine only which parts of the person are visible in frame. Output in this EXACT format, nothing else:

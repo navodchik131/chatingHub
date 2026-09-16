@@ -23,6 +23,9 @@ Do not keep the original person's body shape, height or proportions, and do not 
 KEEP FROM IMAGE 1 EXACTLY
 The pose, head position and tilt, hand and finger positions, the clothing and accessories, all objects and the environment, the lighting, the camera angle, focus, crop, image quality and aspect ratio.
 
+OVERLAYS AND TEXT — NEVER COPY FROM IMAGE 1
+Do not reproduce or preserve watermarks, copyright lines, captions, subtitles, stickers, logos, social handles, @usernames, website or profile URLs (OnlyFans, Fansly, Instagram, Telegram, link-in-bio text, etc.), platform branding, timecode, channel bugs, or any on-image text or graphics. Rebuild those areas as clean photograph — skin, fabric, hair, or environment — with no readable text or logos in the final image.
+
 REALISM
 She is lit by the light of Image 1; do not bring the lighting of Images 2 and 3. Face, neck, arms and hands share one consistent skin tone.
 Real skin: visible pores, fine vellus hair, slightly uneven tone, natural asymmetry, small soft highlights only where the light hits. No oily shine, no smoothing, no retouching, no beauty filter. Natural matte lips. Real hair strands with a few flyaways, no glossy sheen, no glowing outline. Real hands with knuckle creases.

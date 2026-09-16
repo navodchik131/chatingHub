@@ -128,6 +128,20 @@ def test_mannequin_prep_off_when_face_swap_classic():
     assert face_swap_mannequin_prep_enabled_for_model("nano-banana-pro") is False
 
 
+def test_classic_face_swap_prompt_appends_overlay_block():
+    from app.services.studio_face_swap_seedream_v5 import (
+        _ensure_overlay_exclusion_on_classic_prompt,
+    )
+
+    bare = "Edit Image 1. Replace the person."
+    out = _ensure_overlay_exclusion_on_classic_prompt(bare)
+    assert "OVERLAYS_AND_TEXT" in out
+    assert "OnlyFans" in out
+    # Не дублируем, если Grok уже включил секцию из master.
+    already = bare + "\n\nOVERLAYS AND TEXT — NEVER COPY"
+    assert _ensure_overlay_exclusion_on_classic_prompt(already) == already
+
+
 def test_mannequin_prep_when_classic_disabled(monkeypatch):
     from app.config import settings
     from app.services.studio_anchor_pipeline import face_swap_mannequin_prep_enabled_for_model
