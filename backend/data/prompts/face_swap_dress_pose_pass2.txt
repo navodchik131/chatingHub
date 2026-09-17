@@ -1,7 +1,7 @@
 Image 1 is the base. Keep from image 1 exactly: composition, camera angle, framing, crop, background, lighting, pose, clothing.
 Keep the same parts of the body inside and outside the frame as in image 1 — do not reveal a head, face, or limb that image 1 cuts off.
 Replace the woman in image 1 with the woman from image 2.
-Image 2 shows the same woman already in the same outfit and pose — take from it her body shape, body proportions, skin tone and hair.
+Image 2 is an edited photo of the target woman already in this outfit and pose — take from it her body shape, body proportions, bust/waist/hip volumes, limb thickness, skin tone and hair. Do not reshape her to match the original woman in image 1.
 Image 3 is a close-up of her face — use it for the face, facial features and identity. The face must match image 3 exactly.
 Her body is different from the woman in image 1: {{BODY_DIFFERENCE}}
 Do not keep the face or body proportions of the original woman in image 1.

@@ -118,14 +118,22 @@ def test_dress_pose_pass_prompts():
     )
     p1 = build_dress_pose_pass1_prompt(
         scene_description=scene,
-        filtered_anchor="FACE:\n- Distinguishing marks: small tattoo on wrist",
+        filtered_anchor=(
+            "FACE:\n- Distinguishing marks: small tattoo on wrist\n\n"
+            "UPPER BODY:\n- Bust: full\n- Waist: narrow\n\n"
+            "LOWER BODY:\n- Hips: wide relative to waist\n"
+        ),
     )
     assert "CROP LOCK" in p1
     assert "only chin and lips in frame" in p1
-    assert "Image 1 is the base" in p1
+    assert "IMAGE EDIT" in p1
+    assert "BODY LOCK" in p1
+    assert "Do NOT mix or average two bodies" in p1
+    assert "Image 1 is the canvas" in p1
     assert "standing" in p1
     assert "eye level" in p1
-    assert "tattoo" in p1.lower()
+    assert "Bust: full" in p1
+    assert "Hips: wide" in p1
     assert "image 3" in p1.lower()
     p2 = build_dress_pose_pass2_prompt(
         filtered_anchor="GENERAL BUILD: tall athletic",
@@ -134,6 +142,7 @@ def test_dress_pose_pass_prompts():
     )
     assert "Image 1 is the base" in p2
     assert "athletic" in p2
+    assert "Do not reshape her to match the original woman in image 1" in p2
     assert "OVERLAYS_AND_TEXT" in p2
     assert "watermark" in p2.lower()
     assert "CROP LOCK" in p2

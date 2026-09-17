@@ -59,7 +59,7 @@ def dress_pose_prep_cache_key(
     wp = (wave_profile or "nsfw").strip().lower()
     details = ",".join(str(i) for i in sorted(detail_image_ids or []))
     h.update(
-        f"dress_pose_v5|{wp}|b{body_image_id or 0}|f{face_image_id or 0}|d{details}".encode()
+        f"dress_pose_v6|{wp}|b{body_image_id or 0}|f{face_image_id or 0}|d{details}".encode()
     )
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()
@@ -323,6 +323,31 @@ def _model_marks_snippet(filtered_anchor: str, model_profile_text: str | None) -
     )
 
 
+def _body_lock_snippet(filtered_anchor: str, model_profile_text: str | None) -> str:
+    """Фигура модели для pass 1: edit Image 1, не копировать тело с рефа."""
+    src = (filtered_anchor or model_profile_text or "").strip()
+    if not src:
+        return (
+            "- Keep bust, waist, hips, abdomen, limb thickness and overall build exactly as in image 1. "
+            "Do not interpolate toward the body of the woman in image 3."
+        )
+    from app.services.studio_anchor_pipeline import parse_anchor_sections
+
+    sections = parse_anchor_sections(src)
+    parts: list[str] = []
+    for header in ("UPPER BODY", "LOWER BODY", "GENERAL BUILD"):
+        lines = [ln.strip() for ln in sections.get(header, []) if ln.strip()]
+        if lines:
+            parts.append(f"{header}:")
+            parts.extend(lines[:12])
+    if parts:
+        return "\n".join(parts)
+    compact = re.sub(r"\s+", " ", src)
+    if len(compact) > 700:
+        compact = compact[:697].rstrip() + "…"
+    return compact
+
+
 def _body_difference_snippet(filtered_anchor: str, model_profile_text: str | None) -> str:
     """Кратко: фигура модели для pass 2 (не копировать реф-персонажа)."""
     src = (filtered_anchor or model_profile_text or "").strip()
@@ -339,12 +364,13 @@ def _body_difference_snippet(filtered_anchor: str, model_profile_text: str | Non
 
 PASS1_FINAL_RULES = (
     "FINAL RULES (mandatory):\n"
-    "- From image 3 take ONLY: the outfit, the pose, the camera angle and the crop.\n"
-    "- Take NOTHING else from image 3: not the background, not the room, bed, furniture or props, "
-    "not the scene lighting, not the face, body, skin or hair.\n"
-    "- The output background is a plain neutral gray studio backdrop with soft even lighting — "
-    "the woman from image 1 standing/posing in a studio, wearing the outfit from image 3.\n"
-    "- The outfit must actually change: replace whatever image 1 is wearing with the garments from image 3."
+    "- This is an edit of image 1. The output person is the woman from image 1 after a pose/wardrobe change.\n"
+    "- From image 3 take ONLY: the outfit, the pose (joint angles), the camera angle and the crop.\n"
+    "- Do NOT mix or average two bodies. If image 3 has a different bust, waist, hips, thighs or height — ignore that.\n"
+    "- Take NOTHING else from image 3: not background, room, bed, furniture, props, lighting, face, body, skin or hair.\n"
+    "- The output background is a plain neutral gray studio backdrop with soft even lighting.\n"
+    "- The outfit must actually change: replace whatever image 1 is wearing with the garments from image 3, "
+    "fitted onto image 1's unchanged body."
 )
 
 
@@ -378,6 +404,10 @@ def build_dress_pose_pass1_prompt(
         template.replace("{{POSE_DESCRIPTION}}", pose.strip())
         .replace("{{CAMERA_DESCRIPTION}}", camera.strip())
         .replace("{{OUTFIT_DESCRIPTION}}", outfit.strip())
+        .replace(
+            "{{BODY_LOCK}}",
+            _body_lock_snippet(filtered_anchor, model_profile_text).strip(),
+        )
     )
     marks_ctx = _model_marks_snippet(filtered_anchor, model_profile_text)
     # Доп. референсы идут после ref: image 1 body, 2 face, 3 ref, далее детализация.
