@@ -102,6 +102,13 @@ CAMERA:
 - Camera distance and implied lens: [description]
 - Framing: [what's included/cropped]
 
+CROP:
+- Head and face crop: [whole head in frame / top of head cut off / forehead cut off / eyes cut off — only nose, mouth and chin in frame / only chin and lips in frame / head fully out of frame]
+- Top edge cuts: [what the upper frame edge cuts through]
+- Bottom edge cuts: [what the lower frame edge cuts through, e.g. mid-thigh, knees, calves, feet included]
+- Left/right edge cuts: [what the side edges cut through, e.g. raised arm cut at elbow]
+- Body parts entirely outside the frame: [list them, or "none"]
+
 POSE:
 - Overall body position: [description]
 - Torso and shoulders: [orientation]
@@ -131,7 +138,7 @@ MOOD/STYLE:
 - Grain, sharpness, color grading impression: [if notable]
 
 VISIBILITY:
-- Face: [visible / not visible — if not visible, state why: turned away, cropped out of frame, obscured by hair/object/angle]
+- Face: [fully visible / partially visible — state exactly which facial parts are inside the frame and which are cut off / not visible — state why: turned away, cropped out of frame, obscured by hair/object/angle]
 - Hair: [visible / not visible]
 - Upper body (torso, chest, arms): [visible / not visible]
 - Lower body (hips, legs, feet): [visible / not visible]
@@ -577,7 +584,7 @@ def exclusion_notes(vis: AnchorVisibility) -> str:
 
 
 _SCENE_SECTION_HEADERS = re.compile(
-    r"^(ENVIRONMENT|CAMERA|POSE|EXPRESSION|LIGHTING|OUTFIT|MOOD|VISIBILITY|"
+    r"^(ENVIRONMENT|CAMERA|CROP|POSE|EXPRESSION|LIGHTING|OUTFIT|MOOD|VISIBILITY|"
     r"MOOD/STYLE|OVERLAYS):\s*$",
     re.I,
 )

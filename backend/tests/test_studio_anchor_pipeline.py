@@ -110,11 +110,18 @@ def test_dress_pose_pass_prompts():
         build_dress_pose_pass2_prompt,
     )
 
-    scene = "CAMERA:\n- eye level\n\nPOSE:\n- standing\n"
+    scene = (
+        "CAMERA:\n- eye level\n\n"
+        "CROP:\n- Head and face crop: top of head cut off, only chin and lips in frame\n\n"
+        "POSE:\n- standing\n\n"
+        "VISIBILITY:\n- Face: partially visible — only chin and lips in frame\n"
+    )
     p1 = build_dress_pose_pass1_prompt(
         scene_description=scene,
         filtered_anchor="FACE:\n- Distinguishing marks: small tattoo on wrist",
     )
+    assert "CROP LOCK" in p1
+    assert "only chin and lips in frame" in p1
     assert "Image 1 is the base" in p1
     assert "standing" in p1
     assert "eye level" in p1
@@ -123,11 +130,26 @@ def test_dress_pose_pass_prompts():
     p2 = build_dress_pose_pass2_prompt(
         filtered_anchor="GENERAL BUILD: tall athletic",
         model_profile_text=None,
+        scene_description=scene,
     )
     assert "Image 1 is the base" in p2
     assert "athletic" in p2
     assert "OVERLAYS_AND_TEXT" in p2
     assert "watermark" in p2.lower()
+    assert "CROP LOCK" in p2
+
+
+def test_reference_aspect_key_matches_reference():
+    import io
+
+    from PIL import Image
+
+    from app.services.studio_face_swap_two_pass import reference_aspect_key
+
+    buf = io.BytesIO()
+    Image.new("RGB", (600, 800)).save(buf, format="JPEG")
+    assert reference_aspect_key(buf.getvalue(), "9:16") == "3:4"
+    assert reference_aspect_key(b"not-an-image", "9:16") == "9:16"
 
 
 def test_clay_visibility_block_headless():

@@ -5,6 +5,7 @@ Image 3 is the reference. Use image 3 ONLY for clothing, pose and camera angle.
 Clothing: dress the woman in the exact outfit from image 3 — same garments, cut, fit, length, fabric, color, pattern, details, shoes and accessories.
 Pose: put her in the exact pose from image 3 — same body position, torso turn, head tilt, arm and hand placement, leg position, weight distribution and gaze direction.
 Camera: match the camera angle, camera height, shooting distance and framing of image 3.
+Crop: reproduce the exact crop of image 3 — every body part that the frame cuts off in image 3 stays cut off. If image 3 shows only part of the face (for example only chin and lips), show only that part; never render the full face or the whole head.
 
 Pose description: {{POSE_DESCRIPTION}}
 Camera description: {{CAMERA_DESCRIPTION}}

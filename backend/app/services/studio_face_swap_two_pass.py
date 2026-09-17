@@ -56,16 +56,71 @@ def dress_pose_prep_cache_key(
     """Кэш pass 1: тело+лицо+реф → модель в одежде и позе рефа на сером фоне."""
     h = hashlib.sha256()
     wp = (wave_profile or "nsfw").strip().lower()
-    h.update(f"dress_pose_v2|{wp}|b{body_image_id or 0}|f{face_image_id or 0}".encode())
+    h.update(f"dress_pose_v3|{wp}|b{body_image_id or 0}|f{face_image_id or 0}".encode())
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()
 
 
 def extract_scene_section_block(scene_text: str, section: str) -> str:
-    """Текст секции POSE / CAMERA из Grok SCENE_ANALYSIS."""
+    """Текст секции POSE / CAMERA / CROP из Grok SCENE_ANALYSIS."""
     from app.services.studio_anchor_pipeline import extract_scene_section_from_scene_text
 
     return extract_scene_section_from_scene_text(scene_text, section)
+
+
+def _visibility_face_line(scene_text: str) -> str:
+    """Строка `- Face: …` из VISIBILITY — там же отметка partially visible."""
+    m = re.search(r"(?im)^\s*[-*]?\s*face\s*:\s*(.+)$", scene_text or "")
+    return m.group(1).strip() if m else ""
+
+
+def build_crop_lock_block(scene_description: str, *, image_label: str) -> str:
+    """Жёсткий лок кадра: не дорисовывать то, что обрезано рамкой рефа."""
+    crop = extract_scene_section_block(scene_description, "CROP").strip()
+    face_line = _visibility_face_line(scene_description)
+    lines = [
+        f"CROP LOCK (mandatory — reproduce the framing of {image_label} exactly):",
+        f"- Any body part cut off by the frame edge in {image_label} must stay cut off in the output.",
+        "- Do not zoom out, do not widen the crop, do not shift the camera to reveal more of the body.",
+        "- Do not complete or reconstruct a head, face, limb, or any body part that the frame cuts off.",
+        "- If only part of the face is inside the frame (for example only chin, lips and jaw), keep exactly "
+        "that part visible and keep the rest outside the frame — never render the whole face.",
+        "- Keep the same distance from the camera and the same subject scale within the frame.",
+    ]
+    if crop:
+        lines.append("")
+        lines.append(crop)
+    if face_line:
+        lines.append("")
+        lines.append(f"Face in frame: {face_line}")
+    return "\n".join(lines)
+
+
+def reference_aspect_key(scene_bytes: bytes, fallback: str) -> str:
+    """Аспект pass 1 = аспект рефа, иначе рамка кадра и кроп не совпадут."""
+    from app.services.studio_aspect import ASPECT_PRESETS, normalize_aspect_key
+
+    try:
+        fb = normalize_aspect_key(fallback)
+    except Exception:
+        fb = "9:16"
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(scene_bytes)) as im:
+            w, h = im.size
+    except Exception:
+        return fb
+    if not w or not h:
+        return fb
+    ratio = w / h
+    best = min(
+        ASPECT_PRESETS.items(),
+        key=lambda kv: abs((kv[1][0] / kv[1][1]) - ratio),
+    )
+    return best[0]
 
 
 def _model_marks_snippet(filtered_anchor: str, model_profile_text: str | None) -> str:
@@ -153,6 +208,8 @@ def build_dress_pose_pass1_prompt(
     vis_txt = (visibility_block or "").strip()
     if vis_txt:
         out = f"{out}\n\n{vis_txt}"
+    # CROP LOCK последним: он уточняет частично обрезанное лицо поверх общей видимости.
+    out = f"{out}\n\n{build_crop_lock_block(scene_description, image_label='image 3')}"
     return out.strip()
 
 
@@ -162,6 +219,7 @@ def build_dress_pose_pass2_prompt(
     model_profile_text: str | None,
     visibility_block: str = "",
     vis: Any | None = None,
+    scene_description: str = "",
 ) -> str:
     """Pass 2: WaveSpeed [reference, pass1 result, face]."""
     from app.services.studio_anchor_pipeline import (
@@ -174,8 +232,12 @@ def build_dress_pose_pass2_prompt(
     template = _read_prompt_file(_PASS2)
     body_diff = _body_difference_snippet(filtered_anchor, model_profile_text)
     out = template.replace("{{BODY_DIFFERENCE}}", body_diff)
-    out = f"{out}\n\n{two_pass_pass2_identity_marks_block(v)}\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
+    out = (
+        f"{out}\n\n{two_pass_pass2_identity_marks_block(v)}"
+        f"\n\n{SCENE_OVERLAY_EXCLUSION_BLOCK}"
+    )
     vis_txt = (visibility_block or "").strip()
     if vis_txt:
         out = f"{out}\n\n{vis_txt}"
+    out = f"{out}\n\n{build_crop_lock_block(scene_description, image_label='image 1')}"
     return out.strip()

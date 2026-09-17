@@ -412,6 +412,7 @@ async def run_anchor_pipeline(
             build_dress_pose_pass1_prompt,
             build_dress_pose_pass2_prompt,
             dress_pose_prep_cache_key,
+            reference_aspect_key,
         )
         from app.services.studio_anchor_pipeline import clay_visibility_prompt_block
 
@@ -435,10 +436,13 @@ async def run_anchor_pipeline(
                 model_profile_text=model_profile_text,
                 vis=vis,
             )
+            # Кадр pass 1 = кадр рефа: иначе модель сама решает кроп и «дорисовывает» лицо.
+            prep_aspect = reference_aspect_key(scene_bytes, aspect_ratio)
             log.info(
-                "anchor dress-pose pass1 model=%s key=%s… urls=body,face,ref prompt_len=%s",
+                "anchor dress-pose pass1 model=%s key=%s… urls=body,face,ref aspect=%s prompt_len=%s",
                 model_id,
                 prep_key[:12],
+                prep_aspect,
                 len(pass1_prompt),
             )
             dress_pose_bytes = await _wavespeed_edit_bytes(
@@ -448,7 +452,7 @@ async def run_anchor_pipeline(
                 wave_profile=wave_profile,
                 wan_edit_tier=wan_edit_tier,
                 wave_model_id=wave_model_id,
-                aspect_ratio=aspect_ratio,
+                aspect_ratio=prep_aspect,
             )
             save_cached_dressed_body(
                 prep_key,
@@ -472,6 +476,7 @@ async def run_anchor_pipeline(
             model_profile_text=model_profile_text,
             visibility_block=vis_block,
             vis=vis,
+            scene_description=scene_description,
         )
         final_urls = [scene_url_original, dress_pose_url, face_url]
         log.info(
