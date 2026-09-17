@@ -1,16 +1,21 @@
-Image 1 is the base: full-body photo of the woman on a plain neutral gray background. Keep her identity, body shape, body proportions, skin tone and hair exactly as in image 1.
+Image 1 is the base: photo of the woman. Keep her identity, body shape, body proportions, skin tone and hair exactly as in image 1.
 Image 2 is a close-up of the same woman's face. Use it to keep her face exactly the same.
-Image 3 is the reference. Use image 3 ONLY for clothing, pose and camera angle.
+Image 3 is the reference. Use image 3 ONLY for clothing, pose, camera angle and crop — never for background, scene or identity.
 
-Clothing: dress the woman in the exact outfit from image 3 — same garments, cut, fit, length, fabric, color, pattern, details, shoes and accessories.
+Output: a clean studio photo of the woman from image 1 on a plain neutral gray background, wearing the outfit from image 3 and posed exactly as in image 3.
+
+Clothing (must change): remove whatever the woman wears in image 1 and dress her in the exact outfit from image 3 — same garments, cut, fit, length, fabric, color, pattern, lace and trim details, straps, hardware, stockings, shoes and accessories.
+Outfit description: {{OUTFIT_DESCRIPTION}}
+
 Pose: put her in the exact pose from image 3 — same body position, torso turn, head tilt, arm and hand placement, leg position, weight distribution and gaze direction.
-Camera: match the camera angle, camera height, shooting distance and framing of image 3.
-Crop: reproduce the exact crop of image 3 — every body part that the frame cuts off in image 3 stays cut off. If image 3 shows only part of the face (for example only chin and lips), show only that part; never render the full face or the whole head.
-
 Pose description: {{POSE_DESCRIPTION}}
+
+Camera: match the camera angle, camera height, shooting distance and framing of image 3.
 Camera description: {{CAMERA_DESCRIPTION}}
 
+Crop: reproduce the exact crop of image 3 — every body part that the frame cuts off in image 3 stays cut off. If image 3 shows only part of the face (for example only chin and lips), show only that part; never render the full face or the whole head.
+
+Background: plain neutral gray studio backdrop with soft even lighting. Do not copy the room, bed, bedding, furniture, floor, props or scene lighting from image 3.
 Do not copy the face, body, proportions, skin or hair of the woman in image 3.
 Do not copy tattoos, piercings, scars, moles, or jewelry from image 3 — only the model's documented marks (see MODEL MARKS below).
-Keep the plain neutral gray studio background and soft even lighting.
 Photorealistic, natural skin texture, realistic fabric folds, sharp focus.

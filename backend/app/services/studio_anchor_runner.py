@@ -414,9 +414,7 @@ async def run_anchor_pipeline(
             dress_pose_prep_cache_key,
             reference_aspect_key,
         )
-        from app.services.studio_anchor_pipeline import clay_visibility_prompt_block
 
-        vis_block = clay_visibility_prompt_block(vis)
         prep_key = dress_pose_prep_cache_key(
             scene_bytes=scene_bytes,
             wave_profile=wave_profile,
@@ -431,7 +429,6 @@ async def run_anchor_pipeline(
         if dress_pose_bytes is None:
             pass1_prompt = build_dress_pose_pass1_prompt(
                 scene_description=scene_description,
-                visibility_block=vis_block,
                 filtered_anchor=filtered or anchor,
                 model_profile_text=model_profile_text,
                 vis=vis,
@@ -474,7 +471,6 @@ async def run_anchor_pipeline(
         pass2_prompt = build_dress_pose_pass2_prompt(
             filtered_anchor=filtered or anchor,
             model_profile_text=model_profile_text,
-            visibility_block=vis_block,
             vis=vis,
             scene_description=scene_description,
         )
