@@ -412,14 +412,48 @@ async def run_anchor_pipeline(
             build_dress_pose_pass1_prompt,
             build_dress_pose_pass2_prompt,
             dress_pose_prep_cache_key,
+            pick_nsfw_detail_images,
+            pick_two_pass_body_image,
             reference_aspect_key,
         )
+
+        # NSFW: тело берём с «Обнажённое тело целиком», иначе обычный body-реф.
+        pass1_body_im = pick_two_pass_body_image(
+            model_images,
+            wave_profile=wave_profile,
+            fallback=body_im,
+        )
+        pass1_body_url = body_url
+        if pass1_body_im is not None and int(getattr(pass1_body_im, "id", 0) or 0) != int(
+            getattr(body_im, "id", 0) or 0
+        ):
+            pass1_body_tok = create_model_image_access_token(
+                user_id=owner_id, image_id=int(pass1_body_im.id)
+            )
+            pass1_body_url = (
+                f"{pub}/api/studio/public-model-image?t={quote(pass1_body_tok, safe='')}"
+            )
+        detail_refs = pick_nsfw_detail_images(
+            model_images,
+            wave_profile=wave_profile,
+            scene_description=scene_description,
+            vis=vis,
+        )
+        detail_urls: list[str] = []
+        for _kind, det_im in detail_refs:
+            det_tok = create_model_image_access_token(
+                user_id=owner_id, image_id=int(det_im.id)
+            )
+            detail_urls.append(
+                f"{pub}/api/studio/public-model-image?t={quote(det_tok, safe='')}"
+            )
 
         prep_key = dress_pose_prep_cache_key(
             scene_bytes=scene_bytes,
             wave_profile=wave_profile,
-            body_image_id=getattr(body_im, "id", None),
+            body_image_id=getattr(pass1_body_im, "id", None),
             face_image_id=getattr(face_im, "id", None),
+            detail_image_ids=[int(getattr(im, "id", 0) or 0) for _k, im in detail_refs],
         )
         dress_pose_bytes: bytes | None = None
         dress_pose_from_cache = False
@@ -432,19 +466,22 @@ async def run_anchor_pipeline(
                 filtered_anchor=filtered or anchor,
                 model_profile_text=model_profile_text,
                 vis=vis,
+                detail_refs=detail_refs,
             )
             # Кадр pass 1 = кадр рефа: иначе модель сама решает кроп и «дорисовывает» лицо.
             prep_aspect = reference_aspect_key(scene_bytes, aspect_ratio)
             log.info(
-                "anchor dress-pose pass1 model=%s key=%s… urls=body,face,ref aspect=%s prompt_len=%s",
+                "anchor dress-pose pass1 model=%s key=%s… body_kind=%s details=%s aspect=%s prompt_len=%s",
                 model_id,
                 prep_key[:12],
+                getattr(pass1_body_im, "image_kind", None),
+                [k for k, _im in detail_refs],
                 prep_aspect,
                 len(pass1_prompt),
             )
             dress_pose_bytes = await _wavespeed_edit_bytes(
                 api_key=wavespeed_api_key,
-                image_urls=[body_url, face_url, scene_url_original],
+                image_urls=[pass1_body_url, face_url, scene_url_original, *detail_urls],
                 prompt=pass1_prompt,
                 wave_profile=wave_profile,
                 wan_edit_tier=wan_edit_tier,

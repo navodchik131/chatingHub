@@ -139,6 +139,92 @@ def test_dress_pose_pass_prompts():
     assert "CROP LOCK" in p2
 
 
+class _FakeModelImage:
+    def __init__(self, img_id: int, kind: str) -> None:
+        self.id = img_id
+        self.image_kind = kind
+
+
+def test_two_pass_nsfw_uses_nude_full_and_detail_refs():
+    from app.services.studio_anchor_pipeline import AnchorVisibility
+    from app.services.studio_face_swap_two_pass import (
+        build_dress_pose_pass1_prompt,
+        pick_nsfw_detail_images,
+        pick_two_pass_body_image,
+    )
+
+    imgs = [
+        _FakeModelImage(1, "face"),
+        _FakeModelImage(2, "body"),
+        _FakeModelImage(3, "nude_full"),
+        _FakeModelImage(4, "genitals_back"),
+        _FakeModelImage(5, "breasts"),
+    ]
+    assert pick_two_pass_body_image(imgs, wave_profile="nsfw").id == 3
+    assert pick_two_pass_body_image(imgs, wave_profile="regular").id == 2
+
+    scene = (
+        "INTIMATE VIEW:\n"
+        "- Crotch area: bare — rear view from behind\n"
+        "- Chest area: fully bare\n"
+    )
+    details = pick_nsfw_detail_images(
+        imgs,
+        wave_profile="nsfw",
+        scene_description=scene,
+        vis=AnchorVisibility(),
+    )
+    assert [k for k, _im in details] == ["genitals_back", "breasts"]
+    assert not pick_nsfw_detail_images(
+        imgs, wave_profile="regular", scene_description=scene, vis=AnchorVisibility()
+    )
+
+    prompt = build_dress_pose_pass1_prompt(
+        scene_description=scene,
+        filtered_anchor="",
+        detail_refs=details,
+    )
+    assert "Image 4: close-up reference of the genital area seen from behind" in prompt
+    assert "Image 5: close-up reference of the breasts" in prompt
+
+
+def test_two_pass_detail_refs_skip_when_area_out_of_frame():
+    from app.services.studio_anchor_pipeline import AnchorVisibility
+    from app.services.studio_face_swap_two_pass import pick_nsfw_detail_images
+
+    imgs = [_FakeModelImage(1, "genitals_front"), _FakeModelImage(2, "breasts")]
+    scene = "INTIMATE VIEW:\n- Crotch area: bare — front view\n- Chest area: fully bare\n"
+    details = pick_nsfw_detail_images(
+        imgs,
+        wave_profile="nsfw",
+        scene_description=scene,
+        vis=AnchorVisibility(lower=False, upper=False),
+    )
+    assert details == []
+
+
+def test_new_model_image_kinds_and_regular_filter():
+    from app.services.studio_model_images import (
+        STUDIO_MODEL_IMAGE_KINDS,
+        assert_studio_image_kind,
+        model_images_for_wavespeed_profile,
+    )
+
+    for kind in ("nude_full", "genitals_front", "genitals_back", "genitals_bottom", "breasts"):
+        assert kind in STUDIO_MODEL_IMAGE_KINDS
+        assert assert_studio_image_kind(kind) == kind
+
+    imgs = [
+        _FakeModelImage(1, "face"),
+        _FakeModelImage(2, "nude_full"),
+        _FakeModelImage(3, "genitals_front"),
+        _FakeModelImage(4, "breasts"),
+    ]
+    kept = model_images_for_wavespeed_profile(imgs, "regular")
+    assert [im.id for im in kept] == [1]
+    assert len(model_images_for_wavespeed_profile(imgs, "nsfw")) == 4
+
+
 def test_reference_aspect_key_matches_reference():
     import io
 

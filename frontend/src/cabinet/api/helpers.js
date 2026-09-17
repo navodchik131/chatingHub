@@ -353,13 +353,29 @@ export function dialogSettingsSummary(conv, lang = 'ru') {
 }
 
 /** Backend: studio_model_images.STUDIO_MODEL_IMAGE_KINDS */
-export const STUDIO_MODEL_IMAGE_KINDS = ['face', 'turnaround', 'body', 'genitals', 'other']
+export const STUDIO_MODEL_IMAGE_KINDS = [
+  'face',
+  'turnaround',
+  'body',
+  'nude_full',
+  'breasts',
+  'genitals',
+  'genitals_front',
+  'genitals_back',
+  'genitals_bottom',
+  'other',
+]
 
 export const PHOTO_TAG_DEFS = [
   { kind: 'face', ru: 'Лицо / идентичность', en: 'Face / identity', shortRu: 'Лицо', shortEn: 'Face' },
   { kind: 'turnaround', ru: 'Развёртка', en: 'Turnaround / character sheet', shortRu: 'Развёртка', shortEn: 'Turnaround' },
   { kind: 'body', ru: 'Тело целиком', en: 'Full body', shortRu: 'Тело', shortEn: 'Body' },
+  { kind: 'nude_full', ru: 'Обнажённое тело целиком', en: 'Full nude body', shortRu: 'Нюд тело', shortEn: 'Nude body' },
+  { kind: 'breasts', ru: 'Грудь', en: 'Breasts', shortRu: 'Грудь', shortEn: 'Breasts' },
   { kind: 'genitals', ru: 'Интимная зона (реф.)', en: 'Intimate reference', shortRu: 'Интим', shortEn: 'Intimate' },
+  { kind: 'genitals_front', ru: 'Гениталии: фронт', en: 'Genitals: front', shortRu: 'Гениталии фронт', shortEn: 'Genitals front' },
+  { kind: 'genitals_back', ru: 'Гениталии: бэк', en: 'Genitals: back', shortRu: 'Гениталии бэк', shortEn: 'Genitals back' },
+  { kind: 'genitals_bottom', ru: 'Гениталии: вид снизу', en: 'Genitals: from below', shortRu: 'Гениталии снизу', shortEn: 'Genitals below' },
   { kind: 'other', ru: 'Общий референс', en: 'General reference', shortRu: 'Общий', shortEn: 'Other' },
 ]
 

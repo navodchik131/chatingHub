@@ -323,7 +323,7 @@ router = APIRouter(tags=["studio"])
 
 log = logging.getLogger(__name__)
 
-MAX_MODEL_IMAGES = 8
+MAX_MODEL_IMAGES = 20
 
 
 async def _download_image_bytes_best_effort(url: str) -> tuple[bytes | None, str | None]:

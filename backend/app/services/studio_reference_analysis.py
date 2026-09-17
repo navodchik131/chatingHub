@@ -174,9 +174,21 @@ def build_identity_visibility(
     allowed: set[str] = {"body", "other", "turnaround"}
     if face:
         allowed.add("face")
-    if body_visible and (wave_profile or "").strip().lower() == "nsfw":
-        if regions & {"LEGS", "FEET", "BUTT", "TORSO", "CHEST", "FULL_BODY"}:
-            allowed.add("genitals")
+    if (wave_profile or "").strip().lower() == "nsfw":
+        # Обнажённое тело целиком — база для face swap вместо обычного body.
+        allowed.add("nude_full")
+        if body_visible:
+            if regions & {"LEGS", "FEET", "BUTT", "TORSO", "CHEST", "FULL_BODY"}:
+                allowed.update(
+                    {
+                        "genitals",
+                        "genitals_front",
+                        "genitals_back",
+                        "genitals_bottom",
+                    }
+                )
+            if regions & {"CHEST", "TORSO", "FULL_BODY"}:
+                allowed.add("breasts")
     if not face:
         allowed.discard("face")
 

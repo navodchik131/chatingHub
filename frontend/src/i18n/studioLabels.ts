@@ -8,7 +8,17 @@ export type StudioJobMode =
   | 'face_swap'
   | 'grok_compose'
 
-export type StudioModelImageKind = 'turnaround' | 'face' | 'body' | 'genitals' | 'other'
+export type StudioModelImageKind =
+  | 'turnaround'
+  | 'face'
+  | 'body'
+  | 'nude_full'
+  | 'breasts'
+  | 'genitals'
+  | 'genitals_front'
+  | 'genitals_back'
+  | 'genitals_bottom'
+  | 'other'
 
 export const STUDIO_IMAGE_MODE_IDS: StudioJobMode[] = [
   'model_scene',
@@ -22,7 +32,12 @@ export const STUDIO_MODEL_IMAGE_KIND_VALUES: StudioModelImageKind[] = [
   'turnaround',
   'face',
   'body',
+  'nude_full',
+  'breasts',
   'genitals',
+  'genitals_front',
+  'genitals_back',
+  'genitals_bottom',
   'other',
 ]
 

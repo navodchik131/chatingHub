@@ -81,7 +81,7 @@ export function uid() {
 export function roleFromKind(kind) {
   const k = String(kind || '').toLowerCase();
   if (k === 'face') return 'face';
-  if (k === 'body' || k === 'turnaround') return 'body';
+  if (k === 'body' || k === 'turnaround' || k === 'nude_full') return 'body';
   if (k === 'other') return 'character';
   return k || 'character';
 }

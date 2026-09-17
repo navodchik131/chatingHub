@@ -10,7 +10,12 @@
     "turnaround": "Turnaround / character sheet",
     "face": "Face / identity",
     "body": "Full body",
+    "nude_full": "Full nude body",
+    "breasts": "Breasts",
     "genitals": "Intimate reference",
+    "genitals_front": "Genitals: front",
+    "genitals_back": "Genitals: back",
+    "genitals_bottom": "Genitals: from below",
     "other": "General reference"
   },
   "integrationsHint": "Add your WaveSpeed API key: Account → Connections → WaveSpeed.",

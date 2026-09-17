@@ -52,11 +52,15 @@ def dress_pose_prep_cache_key(
     wave_profile: str,
     body_image_id: int | None,
     face_image_id: int | None,
+    detail_image_ids: list[int] | None = None,
 ) -> str:
-    """Кэш pass 1: тело+лицо+реф → модель в одежде и позе рефа на сером фоне."""
+    """Кэш pass 1: тело+лицо+реф(+детали) → модель в одежде и позе рефа на сером фоне."""
     h = hashlib.sha256()
     wp = (wave_profile or "nsfw").strip().lower()
-    h.update(f"dress_pose_v4|{wp}|b{body_image_id or 0}|f{face_image_id or 0}".encode())
+    details = ",".join(str(i) for i in sorted(detail_image_ids or []))
+    h.update(
+        f"dress_pose_v5|{wp}|b{body_image_id or 0}|f{face_image_id or 0}|d{details}".encode()
+    )
     h.update(hashlib.sha256(scene_bytes).digest())
     return h.hexdigest()
 
@@ -162,6 +166,123 @@ def reference_aspect_key(scene_bytes: bytes, fallback: str) -> str:
     return best[0]
 
 
+def _images_by_kind(model_images: list[Any]) -> dict[str, list[Any]]:
+    by_kind: dict[str, list[Any]] = {}
+    for im in model_images or []:
+        k = str(getattr(im, "image_kind", "") or "other").strip().lower()
+        by_kind.setdefault(k, []).append(im)
+    return by_kind
+
+
+def pick_two_pass_body_image(
+    model_images: list[Any],
+    *,
+    wave_profile: str,
+    fallback: Any | None = None,
+) -> Any | None:
+    """NSFW: Image 1 = «Обнажённое тело целиком», иначе обычное фото тела."""
+    by_kind = _images_by_kind(model_images)
+    order = ["body", "turnaround"]
+    if (wave_profile or "nsfw").strip().lower() != "regular":
+        order = ["nude_full", "body", "turnaround"]
+    for kind in order:
+        rows = by_kind.get(kind) or []
+        if rows:
+            return rows[0]
+    return fallback
+
+
+def parse_intimate_view(scene_text: str) -> tuple[str | None, bool]:
+    """Из блока INTIMATE VIEW: ракурс промежности (front/back/bottom) и обнажена ли грудь."""
+    text = scene_text or ""
+    crotch = ""
+    m = re.search(r"(?im)^\s*[-*]?\s*crotch(?:\s+area)?\s*:\s*(.+)$", text)
+    if m:
+        crotch = m.group(1).strip().lower()
+    view: str | None = None
+    if crotch and "not in frame" not in crotch and "covered" not in crotch:
+        if "below" in crotch or "underneath" in crotch or "from under" in crotch:
+            view = "bottom"
+        elif "rear" in crotch or "behind" in crotch or "back" in crotch:
+            view = "back"
+        elif "front" in crotch or "bare" in crotch:
+            view = "front"
+
+    chest = ""
+    m2 = re.search(r"(?im)^\s*[-*]?\s*chest(?:\s+area)?\s*:\s*(.+)$", text)
+    if m2:
+        chest = m2.group(1).strip().lower()
+    breasts_bare = bool(chest) and "bare" in chest and "not in frame" not in chest
+    return view, breasts_bare
+
+
+_GENITAL_KIND_BY_VIEW = {
+    "front": "genitals_front",
+    "back": "genitals_back",
+    "bottom": "genitals_bottom",
+}
+
+_DETAIL_LABEL = {
+    "genitals_front": "the genital area seen from the front",
+    "genitals_back": "the genital area seen from behind",
+    "genitals_bottom": "the genital area seen from below",
+    "genitals": "the intimate anatomy",
+    "breasts": "the breasts and nipples",
+}
+
+
+def pick_nsfw_detail_images(
+    model_images: list[Any],
+    *,
+    wave_profile: str,
+    scene_description: str,
+    vis: Any | None = None,
+) -> list[tuple[str, Any]]:
+    """Доп. референсы детализации: гениталии нужного ракурса + грудь (только NSFW)."""
+    if (wave_profile or "nsfw").strip().lower() == "regular":
+        return []
+    from app.services.studio_anchor_pipeline import AnchorVisibility
+
+    v = vis if isinstance(vis, AnchorVisibility) else AnchorVisibility()
+    by_kind = _images_by_kind(model_images)
+    view, breasts_bare = parse_intimate_view(scene_description)
+    picked: list[tuple[str, Any]] = []
+
+    if v.lower and view:
+        candidates = [_GENITAL_KIND_BY_VIEW[view], "genitals"]
+        # Нет фото нужного ракурса — берём любой интимный референс.
+        candidates += [k for k in _GENITAL_KIND_BY_VIEW.values() if k != candidates[0]]
+        for kind in candidates:
+            rows = by_kind.get(kind) or []
+            if rows:
+                picked.append((kind, rows[0]))
+                break
+
+    if v.upper and breasts_bare:
+        rows = by_kind.get("breasts") or []
+        if rows:
+            picked.append(("breasts", rows[0]))
+    return picked
+
+
+def build_detail_reference_lines(details: list[tuple[str, Any]], *, first_index: int) -> str:
+    """Строки «Image N …» для доп. NSFW-референсов в промпте pass 1."""
+    if not details:
+        return ""
+    lines = [
+        "ADDITIONAL MODEL ANATOMY REFERENCES "
+        "(same woman — use ONLY for anatomical accuracy in that area):"
+    ]
+    for offset, (kind, _im) in enumerate(details):
+        label = _DETAIL_LABEL.get(kind, "an intimate anatomy area")
+        lines.append(
+            f"- Image {first_index + offset}: close-up reference of {label}. "
+            "Use it only for the shape, proportions and skin detail of that area. "
+            "Never take pose, framing, background, clothing or lighting from it."
+        )
+    return "\n".join(lines)
+
+
 def _model_marks_snippet(filtered_anchor: str, model_profile_text: str | None) -> str:
     """Краткий контекст тату/пирсингов модели для pass 1 (не с рефа)."""
     src = (filtered_anchor or model_profile_text or "").strip()
@@ -234,6 +355,7 @@ def build_dress_pose_pass1_prompt(
     filtered_anchor: str = "",
     model_profile_text: str | None = None,
     vis: Any | None = None,
+    detail_refs: list[tuple[str, Any]] | None = None,
 ) -> str:
     """Pass 1: WaveSpeed [body, face, reference]."""
     from app.services.studio_anchor_pipeline import (
@@ -258,8 +380,11 @@ def build_dress_pose_pass1_prompt(
         .replace("{{OUTFIT_DESCRIPTION}}", outfit.strip())
     )
     marks_ctx = _model_marks_snippet(filtered_anchor, model_profile_text)
+    # Доп. референсы идут после ref: image 1 body, 2 face, 3 ref, далее детализация.
+    detail_lines = build_detail_reference_lines(detail_refs or [], first_index=4)
     blocks = [
         out,
+        detail_lines,
         marks_ctx,
         two_pass_pass1_identity_marks_block(v),
         _frame_parts_block(v),

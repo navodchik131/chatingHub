@@ -143,6 +143,10 @@ VISIBILITY:
 - Upper body (torso, chest, arms): [visible / not visible]
 - Lower body (hips, legs, feet): [visible / not visible]
 
+INTIMATE VIEW (viewing geometry only — no identity, no anatomy detail):
+- Crotch area: [not in frame / covered by clothing / bare — front view / bare — rear view from behind / bare — view from below / bare — other angle]
+- Chest area: [not in frame / covered by clothing / partially bare / fully bare]
+
 Do not include: face shape, facial features, eye color, hair color/style, skin tone, body build, bust/waist/hip proportions, height, or any other identity-related detail.
 
 OVERLAYS (ignore completely — do NOT describe or transcribe):
@@ -585,7 +589,7 @@ def exclusion_notes(vis: AnchorVisibility) -> str:
 
 _SCENE_SECTION_HEADERS = re.compile(
     r"^(ENVIRONMENT|CAMERA|CROP|POSE|EXPRESSION|LIGHTING|OUTFIT|MOOD|VISIBILITY|"
-    r"MOOD/STYLE|OVERLAYS):\s*$",
+    r"INTIMATE VIEW|MOOD/STYLE|OVERLAYS):\s*$",
     re.I,
 )
 

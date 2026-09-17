@@ -10,7 +10,12 @@
     "turnaround": "Развёртка / character sheet",
     "face": "Лицо / идентичность",
     "body": "Тело целиком",
+    "nude_full": "Обнажённое тело целиком",
+    "breasts": "Грудь",
     "genitals": "Интимная зона (реф.)",
+    "genitals_front": "Гениталии: фронт",
+    "genitals_back": "Гениталии: бэк",
+    "genitals_bottom": "Гениталии: вид снизу",
     "other": "Общий референс"
   },
   "integrationsHint": "Добавьте API-ключ WaveSpeed: кабинет → Подключения → блок WaveSpeed.",

@@ -8,15 +8,57 @@ from fastapi import HTTPException
 if TYPE_CHECKING:
     from app.db.models import UserStudioModelImage
 
-STUDIO_MODEL_IMAGE_KINDS = frozenset({"face", "body", "genitals", "turnaround", "other"})
+STUDIO_MODEL_IMAGE_KINDS = frozenset(
+    {
+        "face",
+        "body",
+        "genitals",
+        "turnaround",
+        "other",
+        # NSFW-детализация для face swap (два прохода)
+        "nude_full",
+        "genitals_front",
+        "genitals_back",
+        "genitals_bottom",
+        "breasts",
+    }
+)
 
-_KIND_ORDER = {"turnaround": 0, "face": 1, "body": 2, "genitals": 3, "other": 4}
+# Кадры с обнажённой натурой: не уходят в regular-профиль (Nano/Google блокирует).
+NSFW_ONLY_IMAGE_KINDS = frozenset(
+    {
+        "genitals",
+        "nude_full",
+        "genitals_front",
+        "genitals_back",
+        "genitals_bottom",
+        "breasts",
+    }
+)
+
+_KIND_ORDER = {
+    "turnaround": 0,
+    "face": 1,
+    "body": 2,
+    "nude_full": 3,
+    "genitals": 4,
+    "genitals_front": 5,
+    "genitals_back": 6,
+    "genitals_bottom": 7,
+    "breasts": 8,
+    "other": 9,
+}
 
 _RU_LABEL = {
     "turnaround": "развёртка / character sheet (лицо, ракурсы)",
     "face": "лицо и идентичность",
     "body": "телосложение и тело целиком",
+    "nude_full": "обнажённое тело целиком (силуэт и пропорции без одежды)",
     "genitals": "интимная анатомия (референс для соответствующих зон)",
+    "genitals_front": "гениталии, вид спереди",
+    "genitals_back": "гениталии, вид сзади",
+    "genitals_bottom": "гениталии, вид снизу",
+    "breasts": "грудь (форма и детализация)",
     "other": "общий референс модели",
 }
 
@@ -31,9 +73,10 @@ def normalize_studio_image_kind(raw: object) -> str:
 def assert_studio_image_kind(raw: object) -> str:
     s = str(raw or "").strip().lower()
     if s not in STUDIO_MODEL_IMAGE_KINDS:
+        allowed = ", ".join(sorted(STUDIO_MODEL_IMAGE_KINDS))
         raise HTTPException(
             status_code=400,
-            detail="kind: ожидается одно из: face, body, genitals, turnaround, other",
+            detail=f"kind: ожидается одно из: {allowed}",
         )
     return s
 
@@ -446,7 +489,11 @@ def model_images_for_wavespeed_profile(
     p = (wave_profile or "nsfw").strip().lower()
     if p != "regular":
         return imgs_sorted
-    return [im for im in imgs_sorted if (im.image_kind or "other").lower() != "genitals"]
+    return [
+        im
+        for im in imgs_sorted
+        if (im.image_kind or "other").lower() not in NSFW_ONLY_IMAGE_KINDS
+    ]
 
 
 def parse_image_export_selfies_json(
