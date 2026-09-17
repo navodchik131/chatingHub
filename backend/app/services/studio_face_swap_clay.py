@@ -59,10 +59,14 @@ def load_clay_to_model_master_template(
 
 
 def face_swap_clay_pipeline_enabled() -> bool:
-    """Clay prep + Grok final; выключено если classic single-pass включён."""
+    """Clay prep + Grok final; выключено если classic или two-pass dress+pose."""
     from app.services.studio_face_swap_seedream_v5 import face_swap_classic_enabled
 
     if face_swap_classic_enabled(""):
+        return False
+    from app.services.studio_face_swap_two_pass import face_swap_two_pass_enabled
+
+    if face_swap_two_pass_enabled():
         return False
     from app.services.studio_anchor_pipeline import face_swap_mannequin_prep_enabled
 

@@ -304,6 +304,8 @@ class Settings(BaseSettings):
     credit_cost_studio_model_profile_generate: int = Field(default=1)
     # Face swap: реф → серый манекен + headless dressed body перед финальным swap (см. studio_anchor_runner).
     studio_face_swap_mannequin_prep: bool = Field(default=True)
+    # Face swap: pass1 одежда+поза на сером (body,face,ref), pass2 замена на реф (ref,pass1,face).
+    studio_face_swap_two_pass: bool = Field(default=True)
     # Face swap (все модели): Grok master prompt + Image1=ref, Image2=face, Image3=body, без mannequin prep.
     studio_face_swap_seedream_v5_classic: bool = Field(default=False)
     # Локальная отладка: клиент может передать generate_wavespeed=0 и получить только refined_prompt без WaveSpeed

@@ -1,0 +1,15 @@
+Image 1 is the base: full-body photo of the woman on a plain neutral gray background. Keep her identity, body shape, body proportions, skin tone and hair exactly as in image 1.
+Image 2 is a close-up of the same woman's face. Use it to keep her face exactly the same.
+Image 3 is the reference. Use image 3 ONLY for clothing, pose and camera angle.
+
+Clothing: dress the woman in the exact outfit from image 3 — same garments, cut, fit, length, fabric, color, pattern, details, shoes and accessories.
+Pose: put her in the exact pose from image 3 — same body position, torso turn, head tilt, arm and hand placement, leg position, weight distribution and gaze direction.
+Camera: match the camera angle, camera height, shooting distance and framing of image 3.
+
+Pose description: {{POSE_DESCRIPTION}}
+Camera description: {{CAMERA_DESCRIPTION}}
+
+Do not copy the face, body, proportions, skin or hair of the woman in image 3.
+Do not copy tattoos, piercings, scars, moles, or jewelry from image 3 — only the model's documented marks (see MODEL MARKS below).
+Keep the plain neutral gray studio background and soft even lighting.
+Photorealistic, natural skin texture, realistic fabric folds, sharp focus.

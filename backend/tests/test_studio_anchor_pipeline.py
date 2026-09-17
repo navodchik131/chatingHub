@@ -89,6 +89,47 @@ def test_clay_prep_nsfw_template_placeholders():
     assert "abdomen" in t.lower()
 
 
+def test_extract_scene_section_pose_camera():
+    from app.services.studio_anchor_pipeline import extract_scene_section_from_scene_text
+
+    text = (
+        "ENVIRONMENT:\n- room\n\n"
+        "CAMERA:\n- low angle\n- full body\n\n"
+        "POSE:\n- sitting\n- legs crossed\n\n"
+        "VISIBILITY:\n- face: yes\n"
+    )
+    cam = extract_scene_section_from_scene_text(text, "CAMERA")
+    pose = extract_scene_section_from_scene_text(text, "POSE")
+    assert "low angle" in cam
+    assert "sitting" in pose
+
+
+def test_dress_pose_pass_prompts():
+    from app.services.studio_face_swap_two_pass import (
+        build_dress_pose_pass1_prompt,
+        build_dress_pose_pass2_prompt,
+    )
+
+    scene = "CAMERA:\n- eye level\n\nPOSE:\n- standing\n"
+    p1 = build_dress_pose_pass1_prompt(
+        scene_description=scene,
+        filtered_anchor="FACE:\n- Distinguishing marks: small tattoo on wrist",
+    )
+    assert "Image 1 is the base" in p1
+    assert "standing" in p1
+    assert "eye level" in p1
+    assert "tattoo" in p1.lower()
+    assert "image 3" in p1.lower()
+    p2 = build_dress_pose_pass2_prompt(
+        filtered_anchor="GENERAL BUILD: tall athletic",
+        model_profile_text=None,
+    )
+    assert "Image 1 is the base" in p2
+    assert "athletic" in p2
+    assert "OVERLAYS_AND_TEXT" in p2
+    assert "watermark" in p2.lower()
+
+
 def test_clay_visibility_block_headless():
     from app.services.studio_anchor_pipeline import (
         AnchorVisibility,

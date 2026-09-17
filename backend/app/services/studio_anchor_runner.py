@@ -70,6 +70,7 @@ class AnchorPipelineResult:
     face_swap_classic: bool = False
     seedream_v5_classic: bool = False  # deprecated alias, см. face_swap_classic
     face_swap_clay_final: bool = False
+    face_swap_two_pass_final: bool = False
 
 
 async def _analyze_scene_text(
@@ -280,16 +281,24 @@ async def run_anchor_pipeline(
     )
 
     from app.services.studio_face_swap_clay import face_swap_clay_pipeline_enabled
+    from app.services.studio_face_swap_two_pass import face_swap_two_pass_enabled
 
     use_classic = (
         mode_n == "face_swap"
         and not face_closeup
         and face_swap_classic_enabled(wave_model_id)
     )
+    use_two_pass = (
+        mode_n == "face_swap"
+        and not face_closeup
+        and not use_classic
+        and face_swap_two_pass_enabled()
+    )
     use_clay = (
         mode_n == "face_swap"
         and not face_closeup
         and not use_classic
+        and not use_two_pass
         and face_swap_clay_pipeline_enabled()
     )
     use_mannequin = use_clay
@@ -396,6 +405,99 @@ async def run_anchor_pipeline(
 
     mannequin_prep_ran = False
     wardrobe_prep_ran = False
+
+    # Two-pass face swap: pass1 body+face+ref → dress/pose on gray; pass2 ref+pass1+face → swap.
+    if use_two_pass:
+        from app.services.studio_face_swap_two_pass import (
+            build_dress_pose_pass1_prompt,
+            build_dress_pose_pass2_prompt,
+            dress_pose_prep_cache_key,
+        )
+        from app.services.studio_anchor_pipeline import clay_visibility_prompt_block
+
+        vis_block = clay_visibility_prompt_block(vis)
+        prep_key = dress_pose_prep_cache_key(
+            scene_bytes=scene_bytes,
+            wave_profile=wave_profile,
+            body_image_id=getattr(body_im, "id", None),
+            face_image_id=getattr(face_im, "id", None),
+        )
+        dress_pose_bytes: bytes | None = None
+        dress_pose_from_cache = False
+        if not force_redress:
+            dress_pose_bytes = load_cached_dressed_body(prep_key)
+            dress_pose_from_cache = dress_pose_bytes is not None
+        if dress_pose_bytes is None:
+            pass1_prompt = build_dress_pose_pass1_prompt(
+                scene_description=scene_description,
+                visibility_block=vis_block,
+                filtered_anchor=filtered or anchor,
+                model_profile_text=model_profile_text,
+                vis=vis,
+            )
+            log.info(
+                "anchor dress-pose pass1 model=%s key=%s… urls=body,face,ref prompt_len=%s",
+                model_id,
+                prep_key[:12],
+                len(pass1_prompt),
+            )
+            dress_pose_bytes = await _wavespeed_edit_bytes(
+                api_key=wavespeed_api_key,
+                image_urls=[body_url, face_url, scene_url_original],
+                prompt=pass1_prompt,
+                wave_profile=wave_profile,
+                wan_edit_tier=wan_edit_tier,
+                wave_model_id=wave_model_id,
+                aspect_ratio=aspect_ratio,
+            )
+            save_cached_dressed_body(
+                prep_key,
+                dress_pose_bytes,
+                meta={"mode": "dress_pose", "wave_profile": wave_profile},
+            )
+        mannequin_prep_ran = True
+        dress_pose_fid = save_pose_reference_bytes(
+            owner_id=owner_id,
+            raw=dress_pose_bytes,
+            content_type="image/jpeg",
+        )
+        dress_pose_tok = create_pose_reference_access_token(
+            user_id=owner_id, file_id=dress_pose_fid
+        )
+        dress_pose_url = (
+            f"{pub}/api/studio/public-pose-reference?t={quote(dress_pose_tok, safe='')}"
+        )
+        pass2_prompt = build_dress_pose_pass2_prompt(
+            filtered_anchor=filtered or anchor,
+            model_profile_text=model_profile_text,
+            visibility_block=vis_block,
+            vis=vis,
+        )
+        final_urls = [scene_url_original, dress_pose_url, face_url]
+        log.info(
+            "anchor dress-pose pass2 model=%s urls=ref,pass1,face prompt_len=%s cache=%s",
+            model_id,
+            len(pass2_prompt),
+            dress_pose_from_cache,
+        )
+        return AnchorPipelineResult(
+            refined_prompt=pass2_prompt,
+            image_urls=final_urls,
+            mode="A",
+            dressed_from_cache=dress_pose_from_cache,
+            scene_description=scene_description,
+            visibility=vis,
+            cache_key=prep_key,
+            dressed_body_bytes=dress_pose_bytes,
+            scene_first=True,
+            face_closeup=False,
+            bust_portrait=bust_portrait,
+            mannequin_scene=False,
+            mannequin_from_cache=dress_pose_from_cache,
+            mannequin_prep_ran=True,
+            wardrobe_prep_ran=False,
+            face_swap_two_pass_final=True,
+        )
 
     # Pass 1: реф → глиняная фигура (Grok prep; NSFW — scene + body model).
     if use_mannequin:

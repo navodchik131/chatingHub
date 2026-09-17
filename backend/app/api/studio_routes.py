@@ -6088,6 +6088,7 @@ async def _studio_job_execute_refine_prompt(
                 if mode_n == "face_swap" and anchor_result.mode == "A":
                     if (
                         getattr(anchor_result, "face_swap_clay_final", False)
+                        or getattr(anchor_result, "face_swap_two_pass_final", False)
                         or getattr(anchor_result, "face_swap_classic", False)
                         or getattr(anchor_result, "seedream_v5_classic", False)
                     ):
@@ -7309,6 +7310,7 @@ async def _studio_job_execute_motion_first_frame(
             if mode_n == "face_swap" and anchor_result.mode == "A":
                 if (
                     getattr(anchor_result, "face_swap_clay_final", False)
+                    or getattr(anchor_result, "face_swap_two_pass_final", False)
                     or getattr(anchor_result, "face_swap_classic", False)
                     or getattr(anchor_result, "seedream_v5_classic", False)
                 ):

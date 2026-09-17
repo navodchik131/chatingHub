@@ -271,6 +271,46 @@ def identity_marks_block(vis: AnchorVisibility) -> str:
         return f"{IDENTITY_MARKS_BLOCK}\n{UPPER_BODY_MARKS_BLOCK}"
     return IDENTITY_MARKS_BLOCK
 
+
+# Two-pass face swap pass 1: Image1=body, Image2=face, Image3=reference (одежда/поза).
+TWO_PASS_PASS1_IDENTITY_MARKS = (
+    "SKIN MARKS AND BODY MODS (mandatory): Tattoos, piercings, scars, moles, birthmarks, freckles, "
+    "and body jewelry come ONLY from the model — image 1 (body), image 2 (face), and MODEL MARKS below. "
+    "NEVER copy any tattoo, piercing, scar, mole, or jewelry from image 3 (reference person), even if "
+    "large or central on the reference. If the model has no tattoos or piercings in her photos and profile, "
+    "the output must have none — strip every tattoo and piercing visible on the reference while keeping "
+    "only clothing and pose from image 3."
+)
+
+TWO_PASS_PASS1_UPPER_MARKS = (
+    "Exposed skin in the output (neck, chest, arms, stomach, legs if visible) must show only the model's "
+    "documented marks — not the reference sitter's ink or metal from image 3."
+)
+
+# Two-pass pass 2: Image1=scene ref, Image2=pass1 model, Image3=face.
+TWO_PASS_PASS2_IDENTITY_MARKS = (
+    "SKIN MARKS AND BODY MODS (mandatory): Tattoos, piercings, scars, moles, and jewelry come ONLY from "
+    "the model in image 2 and image 3 — NEVER from the original sitter in image 1 (scene reference). "
+    "If the model has no tattoos or piercings, remove all ink and piercings copied from the reference scene."
+)
+
+TWO_PASS_PASS2_UPPER_MARKS = (
+    "Do not preserve the original person's tattoos, piercings, or skin marks from image 1 on the final photo — "
+    "only what the model identity defines in image 2 and image 3."
+)
+
+
+def two_pass_pass1_identity_marks_block(vis: AnchorVisibility) -> str:
+    if vis.upper or vis.lower:
+        return f"{TWO_PASS_PASS1_IDENTITY_MARKS}\n{TWO_PASS_PASS1_UPPER_MARKS}"
+    return TWO_PASS_PASS1_IDENTITY_MARKS
+
+
+def two_pass_pass2_identity_marks_block(vis: AnchorVisibility) -> str:
+    if vis.upper or vis.lower:
+        return f"{TWO_PASS_PASS2_IDENTITY_MARKS}\n{TWO_PASS_PASS2_UPPER_MARKS}"
+    return TWO_PASS_PASS2_IDENTITY_MARKS
+
 # Жёсткий лок лица — модели часто «держат» лицо со scene ref без явного запрета.
 FACE_IDENTITY_LOCK_BLOCK = (
     "CRITICAL FACE REPLACEMENT: The output face must be unmistakably the person from the "
@@ -536,33 +576,52 @@ def exclusion_notes(vis: AnchorVisibility) -> str:
     return " ".join(notes)
 
 
-def extract_expression_block_from_scene_text(text: str) -> str:
-    """Блок EXPRESSION из Grok scene analysis (оригинальный реф до mannequin)."""
+_SCENE_SECTION_HEADERS = re.compile(
+    r"^(ENVIRONMENT|CAMERA|POSE|EXPRESSION|LIGHTING|OUTFIT|MOOD|VISIBILITY|"
+    r"MOOD/STYLE|OVERLAYS):\s*$",
+    re.I,
+)
+
+
+def extract_scene_section_from_scene_text(text: str, section: str) -> str:
+    """Блок POSE / CAMERA / … из Grok scene analysis."""
     raw = (text or "").strip()
-    if not raw:
+    name = (section or "").strip().upper()
+    if not raw or not name:
         return ""
-    section_header = re.compile(
-        r"^(ENVIRONMENT|CAMERA|POSE|EXPRESSION|LIGHTING|OUTFIT|MOOD|VISIBILITY|"
-        r"MOOD/STYLE|OVERLAYS):\s*$",
-        re.I,
-    )
+    header_re = re.compile(rf"^{re.escape(name)}:\s*$", re.I)
     lines = raw.split("\n")
     out: list[str] = []
-    in_expr = False
+    in_section = False
     for line in lines:
         stripped = line.strip()
-        if re.match(r"^EXPRESSION:\s*$", stripped, re.I):
-            in_expr = True
-            out.append("EXPRESSION:")
+        if header_re.match(stripped):
+            in_section = True
+            out.append(f"{name}:")
             continue
-        if in_expr:
-            if section_header.match(stripped) and not stripped.upper().startswith("EXPRESSION"):
+        if in_section:
+            if _SCENE_SECTION_HEADERS.match(stripped) and not stripped.upper().startswith(name):
                 break
             out.append(line)
     block = "\n".join(out).strip()
-    if not block or not re.search(r"(?im)^\s*-\s+", block):
+    if not block:
+        # Строка вида POSE: one line …
+        m = re.search(rf"(?im)^{re.escape(name)}:\s*(.+)$", raw)
+        if m:
+            return f"{name}: {m.group(1).strip()}"
+        return ""
+    if name != "VISIBILITY" and not re.search(r"(?im)^\s*-\s+", block) and ":" in block:
+        after = block.split(":", 1)[1].strip()
+        if after:
+            return block
+    if name != "VISIBILITY" and not re.search(r"(?im)^\s*-\s+", block):
         return ""
     return block
+
+
+def extract_expression_block_from_scene_text(text: str) -> str:
+    """Блок EXPRESSION из Grok scene analysis (оригинальный реф до mannequin)."""
+    return extract_scene_section_from_scene_text(text, "EXPRESSION")
 
 
 def format_scene_expression_prompt_block(expression_block: str) -> str:

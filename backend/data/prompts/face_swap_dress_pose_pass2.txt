@@ -1,0 +1,8 @@
+Image 1 is the base. Keep from image 1 exactly: composition, camera angle, framing, background, lighting, pose, clothing.
+Replace the woman in image 1 with the woman from image 2.
+Image 2 shows the same woman already in the same outfit and pose — take from it her body shape, body proportions, skin tone and hair.
+Image 3 is a close-up of her face — use it for the face, facial features and identity. The face must match image 3 exactly.
+Her body is different from the woman in image 1: {{BODY_DIFFERENCE}}
+Do not keep the face or body proportions of the original woman in image 1.
+Do not keep watermarks, @handles, URLs, copyright text, or platform logos from image 1.
+Photorealistic, natural skin texture, consistent lighting on face and body.
