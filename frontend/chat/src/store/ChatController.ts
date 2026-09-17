@@ -190,11 +190,15 @@ export class ChatController {
   private setConversationsFromApi(rows: ApiConversation[]): void {
     const prevDrafts = new Map(this.chats.map((c) => [c.id, c.draft]))
     const prevMsgs = new Map(this.chats.map((c) => [c.id, c.msgs]))
+    // Заметки не приходят в /api/conversations — без сохранения poll каждые ~12 с обнуляет панель.
+    const prevNotes = new Map(this.chats.map((c) => [c.id, c.notes]))
     this.chats = rows.map((c, i) => {
       const ui = mapApiConversation(c, i)
       ui.draft = prevDrafts.get(c.id) || ''
       const kept = prevMsgs.get(c.id)
       if (kept?.length && c.id === this.activeChatId) ui.msgs = kept
+      const keptNotes = prevNotes.get(c.id)
+      if (keptNotes) ui.notes = keptNotes
       return ui
     })
     // После пересборки списка — восстановить тред из apiMessages (WS мог обновить между fetch и map).
@@ -323,6 +327,9 @@ export class ChatController {
       this.setConversationsFromApi(convs)
       await saveConversationsCache(convs)
       this.emitListIfChanged()
+      if (this.activeChatId != null) {
+        void this.loadNotes(this.activeChatId)
+      }
     } catch {
       /* ignore background refresh errors */
     }

@@ -358,6 +358,15 @@ export function CabinetDataProvider({ children }) {
     }
     try {
       const noteRows = await actions.fetchConversationNotes(convId, { autoRefresh: false })
+      const cached = notesByConvIdRef.current[key]
+      // Гонка: GET стартовал до завершения AI-анализ/POST — не затираем уже показанные заметки пустым ответом.
+      if (
+        !noteRows.length &&
+        Array.isArray(cached) &&
+        cached.length > 0
+      ) {
+        return
+      }
       patchNotesForConv(key, noteRows)
     } catch (e) {
       const msg = e?.message || String(e)
