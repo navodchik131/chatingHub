@@ -4932,6 +4932,9 @@ async def _studio_job_execute_refine_prompt(
     workflow_wave_model = str(p.get("workflow_wave_model") or "").strip().lower()
     workflow_wave_resolution_raw = str(p.get("workflow_wave_resolution") or "").strip().lower()
     workflow_first_frame = _truthy_wavespeed_flag(str(p.get("workflow_first_frame") or ""))
+    motion_first_frame_delegate = _truthy_wavespeed_flag(
+        str(p.get("motion_first_frame_delegate") or "")
+    )
     from app.services.studio_workflow_image_resolution import (
         normalize_workflow_image_resolution,
         workflow_wavespeed_size_for_resolution,
@@ -5314,6 +5317,8 @@ async def _studio_job_execute_refine_prompt(
             studio_mode=mode_n, wave_model_id=prep_wave_model
         ),
     )
+    if motion_first_frame_delegate:
+        usage_kind = "studio_motion_first_frame"
     assert_demo_only_user_model_allowed(
         plan=plan,
         demo_remaining=_demo_access,
@@ -6635,6 +6640,12 @@ async def _studio_job_execute_refine_prompt(
                         outfit_generation_id=outfit_row.id,
                     )
                     await session.flush()
+            if motion_first_frame_delegate:
+                mauto = str(p.get("motion_video_prompt_auto") or "").strip()
+                if mauto and finished_row is not None:
+                    finished_row.motion_video_prompt_auto = mauto
+                    session.add(finished_row)
+                    await session.flush()
             arch_base = _public_app_base(None)
             if generation_has_archive_file(finished_row) and arch_base:
                 generated_image_url = _studio_archive_image_url(
@@ -6667,6 +6678,45 @@ async def _studio_job_execute_refine_prompt(
     if wavespeed_deferred_pending and gen_row is not None:
         generation_id = gen_row.id
 
+    billing_meta: dict[str, Any] = {
+        "has_image": bool(image_bytes),
+        "studio_model_id": mid,
+        "two_step": bool(image_bytes),
+        "anchor_prep_applied": anchor_prep_applied,
+        "anchor_dressed_from_cache": (
+            anchor_result.dressed_from_cache if anchor_result is not None else None
+        ),
+        "wavespeed": bool(generated_image_url),
+        "generation_id": generation_id,
+        "studio_mode": mode_n,
+        "wan_edit_tier": wan_tier_n,
+        "studio_wave_profile": wave_profile_n,
+        "lock_model_hairstyle": effective_lock_hairstyle,
+        "lock_model_hairstyle_requested": lock_hair_req,
+        "send_pose_reference_to_wavespeed": send_pose_to_ws,
+        "prompt_brief_mode": prompt_brief_mode,
+        "inpaint_mask": bool(mask_bytes),
+        "regional_masked_compose_ready": regional_composed_png is not None,
+        "masked_edit_engine": (
+            (
+                "z_image_inpaint"
+                if not settings.studio_regional_masked_edit
+                else (
+                    "nano_wan_multimage_mask_pair_blend"
+                    if regional_composed_png is not None
+                    else "nano_wan_multimage_mask_pair"
+                )
+            )
+            if mask_bytes
+            else None
+        ),
+    }
+    if motion_first_frame_delegate:
+        billing_meta["motion_video_file_id"] = str(p.get("motion_video_file_id") or "").strip() or None
+        billing_meta["motion_first_frame_delegate"] = True
+        billing_meta["auto_motion_prompt"] = _truthy_wavespeed_flag(
+            str(p.get("auto_motion_prompt") or "")
+        )
     await record_studio_image_billing(
         session,
         user,
@@ -6674,39 +6724,7 @@ async def _studio_job_execute_refine_prompt(
         usage_kind=usage_kind,
         cost=cost,
         used_demo=used_demo,
-        meta={
-            "has_image": bool(image_bytes),
-            "studio_model_id": mid,
-            "two_step": bool(image_bytes),
-            "anchor_prep_applied": anchor_prep_applied,
-            "anchor_dressed_from_cache": (
-                anchor_result.dressed_from_cache if anchor_result is not None else None
-            ),
-            "wavespeed": bool(generated_image_url),
-            "generation_id": generation_id,
-            "studio_mode": mode_n,
-            "wan_edit_tier": wan_tier_n,
-            "studio_wave_profile": wave_profile_n,
-            "lock_model_hairstyle": effective_lock_hairstyle,
-            "lock_model_hairstyle_requested": lock_hair_req,
-            "send_pose_reference_to_wavespeed": send_pose_to_ws,
-            "prompt_brief_mode": prompt_brief_mode,
-            "inpaint_mask": bool(mask_bytes),
-            "regional_masked_compose_ready": regional_composed_png is not None,
-            "masked_edit_engine": (
-                (
-                    "z_image_inpaint"
-                    if not settings.studio_regional_masked_edit
-                    else (
-                        "nano_wan_multimage_mask_pair_blend"
-                        if regional_composed_png is not None
-                        else "nano_wan_multimage_mask_pair"
-                    )
-                )
-                if mask_bytes
-                else None
-            ),
-        },
+        meta=billing_meta,
     )
     await session.commit()
 
@@ -7133,6 +7151,64 @@ async def _studio_job_execute_motion_first_frame(
         image_bytes=first_frame,
         wave_profile=wave_profile_n,
     )
+
+    motion_auto_for_db_early = ""
+    if motion_clip_summary and motion_clip_summary.strip():
+        marker = (
+            _GROK_MOTION_MARKER
+            if settings.studio_grok_motion_timeline_enabled
+            else _CLIP_MOTION_MARKER
+        )
+        motion_auto_for_db_early = marker + "\n" + motion_clip_summary.strip()
+
+    # Face swap первого кадра = тот же refine_prompt, что в «Картинки» (Anchor two-pass + finish + outfit ref).
+    if (
+        not skip_ws
+        and mode_n == "face_swap"
+        and ws_key
+        and first_frame
+        and len(first_frame) >= 64
+        and eff_mid is not None
+    ):
+        scene_path = studio_jobs.save_studio_job_file(
+            job.id, "motion_refine_scene.bin", first_frame
+        )
+        wf_source = "1" if (workflow_wave_model or workflow_first_frame) else "0"
+        delegate_p: dict[str, Any] = {
+            **studio_jobs.job_params(job),
+            "description": desc_base,
+            "studio_mode": "face_swap",
+            "generate_wavespeed": "1",
+            "model_id": str(eff_mid),
+            "output_aspect": output_aspect,
+            "wan_edit_tier": wan_edit_tier,
+            "studio_wave_profile": studio_wave_profile,
+            "workflow_wave_model": workflow_wave_model or "",
+            "workflow_wave_resolution": workflow_wave_resolution_raw or "",
+            "workflow_source": wf_source,
+            "lock_model_hairstyle": lock_model_hairstyle,
+            "exif_camera": str(p.get("exif_camera") or "main"),
+            "motion_first_frame_delegate": "1",
+            "motion_video_prompt_auto": motion_auto_for_db_early,
+            "image_path": scene_path,
+            "image_mime": first_frame_media or "image/jpeg",
+            "motion_video_file_id": str(motion_video_file_id or ""),
+            "auto_motion_prompt": auto_motion_prompt,
+        }
+        await studio_jobs.update_studio_job_params(session, job, delegate_p)
+        log.info("motion first-frame job=%s delegated to refine face_swap", job.id)
+        refined_out = await _studio_job_execute_refine_prompt(session, job, user)
+        return StudioMotionFirstFrameOut(
+            refined_prompt=str(refined_out.get("refined_prompt") or ""),
+            reference_scene_description=str(
+                refined_out.get("reference_scene_description") or ""
+            ),
+            motion_video_prompt_auto=motion_auto_for_db_early.strip() or None,
+            generated_image_url=refined_out.get("generated_image_url"),
+            wavespeed_message=refined_out.get("wavespeed_message"),
+            generation_id=refined_out.get("generation_id"),
+            motion_video_file_id=motion_video_file_id,
+        ).model_dump()
 
     # Anchor Studio for still generation (same prompts/order as cabinet swap/ref).
     anchor_result = None

@@ -353,8 +353,8 @@ export default function MotionControlWizard({
       waveModelId: ffWave.apiId,
       waveProfile: dressWaveProfile,
       wanEditTier: ffWave.tier,
-      grokPipeline: 'none',
-      studioMode: 'photo_edit',
+      grokPipeline: 'face_swap',
+      studioMode: 'face_swap',
       workflow: false,
     }, imagePricing),
     [ffWave, dressWaveProfile, imagePricing],
@@ -886,24 +886,22 @@ export default function MotionControlWizard({
 
               {ffSource === 'generate' ? (
                 <>
-                  {!simplifiedUi && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
-                        {lang === 'ru' ? 'МОДЕЛЬ ФОТО' : 'IMAGE MODEL'}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {dressModels.map((m) => {
-                          const on = ffModelId === m.id;
-                          const st = cardPickStyle(on);
-                          return (
-                            <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setFfModelId(m.id)}>
-                              <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
-                            </Hoverable>
-                          );
-                        })}
-                      </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
+                      {lang === 'ru' ? 'МОДЕЛЬ FACE SWAP (как в «Картинки»)' : 'FACE SWAP MODEL (same as Images)'}
                     </div>
-                  )}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {dressModels.map((m) => {
+                        const on = ffModelId === m.id;
+                        const st = cardPickStyle(on);
+                        return (
+                          <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setFfModelId(m.id)}>
+                            <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
+                          </Hoverable>
+                        );
+                      })}
+                    </div>
+                  </div>
 
                   {(ffState === 'idle' || ffState === 'loading') && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
