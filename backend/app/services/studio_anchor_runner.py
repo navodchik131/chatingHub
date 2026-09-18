@@ -23,6 +23,7 @@ from app.services.studio_anchor_pipeline import (
     extract_expression_block_from_scene_text,
     face_swap_mannequin_prep_enabled_for_model,
     filter_anchor_by_visibility,
+    invalidate_dressed_body_cache,
     load_cached_dressed_body,
     load_face_swap_dressed_body_headless_prompt,
     mannequin_final_dressed_first,
@@ -460,6 +461,27 @@ async def run_anchor_pipeline(
         if not force_redress:
             dress_pose_bytes = load_cached_dressed_body(prep_key)
             dress_pose_from_cache = dress_pose_bytes is not None
+        from app.services.studio_face_swap_two_pass import (
+            assert_valid_dress_pose_pass1,
+            dress_pose_pass1_prep_error_fatal,
+        )
+
+        if dress_pose_bytes is not None:
+            try:
+                assert_valid_dress_pose_pass1(
+                    result_bytes=dress_pose_bytes,
+                    scene_bytes=scene_bytes,
+                )
+            except RuntimeError as e:
+                log.warning(
+                    "anchor dress-pose pass1 cache invalid model=%s key=%s…: %s",
+                    model_id,
+                    prep_key[:12],
+                    e,
+                )
+                invalidate_dressed_body_cache(prep_key)
+                dress_pose_bytes = None
+                dress_pose_from_cache = False
         if dress_pose_bytes is None:
             pass1_prompt = build_dress_pose_pass1_prompt(
                 scene_description=scene_description,
@@ -479,14 +501,27 @@ async def run_anchor_pipeline(
                 prep_aspect,
                 len(pass1_prompt),
             )
-            dress_pose_bytes = await _wavespeed_edit_bytes(
-                api_key=wavespeed_api_key,
-                image_urls=[pass1_body_url, face_url, scene_url_original, *detail_urls],
-                prompt=pass1_prompt,
-                wave_profile=wave_profile,
-                wan_edit_tier=wan_edit_tier,
-                wave_model_id=wave_model_id,
-                aspect_ratio=prep_aspect,
+            try:
+                dress_pose_bytes = await _wavespeed_edit_bytes(
+                    api_key=wavespeed_api_key,
+                    image_urls=[pass1_body_url, face_url, scene_url_original, *detail_urls],
+                    prompt=pass1_prompt,
+                    wave_profile=wave_profile,
+                    wan_edit_tier=wan_edit_tier,
+                    wave_model_id=wave_model_id,
+                    aspect_ratio=prep_aspect,
+                )
+            except RuntimeError as e:
+                invalidate_dressed_body_cache(prep_key)
+                if dress_pose_pass1_prep_error_fatal(str(e)):
+                    raise RuntimeError(
+                        "Face swap pass 1 отклонён модерацией WaveSpeed. "
+                        "Pass 2 не выполняем — смените модель, профиль или референс."
+                    ) from e
+                raise RuntimeError(f"Face swap pass 1 не выполнен: {e}") from e
+            assert_valid_dress_pose_pass1(
+                result_bytes=dress_pose_bytes,
+                scene_bytes=scene_bytes,
             )
             save_cached_dressed_body(
                 prep_key,

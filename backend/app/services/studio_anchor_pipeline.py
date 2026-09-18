@@ -1117,6 +1117,16 @@ def save_cached_dressed_body(key: str, image_bytes: bytes, *, meta: dict[str, An
     return img_path
 
 
+def invalidate_dressed_body_cache(key: str) -> None:
+    """Сброс pass1/pass-prep кэша после цензуры или битого результата — не тащим в pass 2."""
+    img_path, meta_path = cache_paths(key)
+    for path in (img_path, meta_path):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            log.warning("could not delete dressed-body cache %s", path)
+
+
 def should_use_anchor_pipeline(*, studio_mode: str, has_scene_bytes: bool, has_model: bool) -> bool:
     mode = (studio_mode or "").strip().lower()
     if not has_model:

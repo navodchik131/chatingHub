@@ -99,6 +99,8 @@ export default function MotionControlWizard({
   const [trimOut, setTrimOut] = useState(5);
   /** Уточнения по клипу → опциональные заметки в промпт Seedance. */
   const [clipBrief, setClipBrief] = useState('');
+  /** Подсказки для face swap первого кадра (как поле промпта в «Картинки»). */
+  const [ffBrief, setFfBrief] = useState('');
   /** Первый кадр обязателен в режиме силуэта; в depth v2 — опционален. */
   const [needFirstFrame, setNeedFirstFrame] = useState(MC_WIZARD_OUTLINE_MODE ? 'yes' : 'no');
   /** EvoLink reference-to-video: явная длина результата (не длина ref-видео). */
@@ -149,6 +151,7 @@ export default function MotionControlWizard({
       if (typeof saved.trimIn === 'number') setTrimIn(saved.trimIn);
       if (typeof saved.trimOut === 'number') setTrimOut(saved.trimOut);
       if (typeof saved.clipBrief === 'string') setClipBrief(saved.clipBrief);
+      if (typeof saved.ffBrief === 'string') setFfBrief(saved.ffBrief);
       if (saved.needFirstFrame === 'yes' || saved.needFirstFrame === 'no') setNeedFirstFrame(saved.needFirstFrame);
       if (typeof saved.outputDurationSec === 'number') setOutputDurationSec(saved.outputDurationSec);
       if (saved.ffModelId) setFfModelId(saved.ffModelId);
@@ -271,6 +274,7 @@ export default function MotionControlWizard({
       trimIn,
       trimOut,
       clipBrief,
+      ffBrief,
       needFirstFrame,
       outputDurationSec,
       useMotionOutline,
@@ -304,6 +308,7 @@ export default function MotionControlWizard({
     trimIn,
     trimOut,
     clipBrief,
+    ffBrief,
     outputDurationSec,
     useMotionOutline,
     ffModelId,
@@ -405,7 +410,7 @@ export default function MotionControlWizard({
         waveModelId: ffWave.apiId,
         wanTier: ffWave.tier,
         motionVideoFileId: cabinet.motionVideoFileId,
-        description: '',
+        description: ffBrief.trim(),
       });
       const gid = result?.generation_id;
       const url = (result?.generated_image_url || result?.image_url || '').trim();
@@ -418,7 +423,7 @@ export default function MotionControlWizard({
       setFfState(cabinet.firstFrameGenId ? 'accepted' : 'idle');
       cabinet.setError(e?.message || String(e));
     }
-  }, [cabinet, ffState, ffWave, s.vidFormat, s.contentMode, lang]);
+  }, [cabinet, ffState, ffWave, ffBrief, s.vidFormat, s.contentMode, lang]);
 
   const acceptFirstFrame = useCallback(() => {
     if (!ffPendingGenId) return;
@@ -524,6 +529,8 @@ export default function MotionControlWizard({
       setTurnModelId(turnModels[0].id);
     }
   }, [dressModels, turnModels, dressModelId, ffModelId, turnModelId]);
+
+  const ffModelLabel = dressModels.find((m) => m.id === ffModelId)?.name || ffModelId;
 
   const onDrivingVideoPicked = (file) => {
     void cabinet.uploadDrivingVideo(file);
@@ -875,6 +882,31 @@ export default function MotionControlWizard({
 
           {(MC_WIZARD_OUTLINE_MODE || needFirstFrame === 'yes') && (
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line.hair}` }}>
+              <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 8 }}>
+                {lang === 'ru' ? 'ДВИЖОК ПЕРВОГО КАДРА (FACE SWAP)' : 'FIRST-FRAME ENGINE (FACE SWAP)'}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {dressModels.map((m) => (
+                  <SelectPill
+                    key={m.id}
+                    accent="lime"
+                    on={ffModelId === m.id}
+                    onClick={() => setFfModelId(m.id)}
+                  >
+                    {m.name}
+                  </SelectPill>
+                ))}
+              </div>
+              <div style={{ fontSize: 10.5, color: color.textDim, marginBottom: 12, lineHeight: 1.45 }}>
+                {ffSource === 'upload'
+                  ? (lang === 'ru'
+                    ? `При своём фото движок не используется. Сейчас выбран: ${ffModelLabel} — для «Сгенерировать».`
+                    : `Upload skips the engine. Selected for Generate: ${ffModelLabel}.`)
+                  : (lang === 'ru'
+                    ? `Сейчас: ${ffModelLabel} — тот же пайплайн, что Face swap в «Картинки».`
+                    : `Current: ${ffModelLabel} — same pipeline as Images → Face swap.`)}
+              </div>
+
               <div style={{ display: 'flex', gap: 5, marginBottom: 12, justifyContent: 'flex-end' }}>
                 <Chip on={ffSource === 'generate'} onClick={() => setFfSource('generate')}>
                   {lang === 'ru' ? 'Сгенерировать' : 'Generate'}
@@ -886,22 +918,31 @@ export default function MotionControlWizard({
 
               {ffSource === 'generate' ? (
                 <>
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontFamily: font.mono, fontSize: 9, color: color.textGhost, marginBottom: 6 }}>
-                      {lang === 'ru' ? 'МОДЕЛЬ FACE SWAP (как в «Картинки»)' : 'FACE SWAP MODEL (same as Images)'}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {dressModels.map((m) => {
-                        const on = ffModelId === m.id;
-                        const st = cardPickStyle(on);
-                        return (
-                          <Hoverable key={m.id} style={st.base} hover={st.hover} onClick={() => setFfModelId(m.id)}>
-                            <div style={{ fontWeight: 800, fontSize: 12, ...(on ? { color: color.lime } : {}) }}>{m.name}</div>
-                          </Hoverable>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <textarea
+                    value={ffBrief}
+                    onChange={(e) => setFfBrief(e.target.value)}
+                    placeholder={
+                      lang === 'ru'
+                        ? 'Необязательно: сцена, свет, поза, окружение (t=0)…'
+                        : 'Optional: scene, light, pose, environment at t=0…'
+                    }
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                      minHeight: 72,
+                      marginBottom: 12,
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: `1px solid ${line.soft}`,
+                      background: color.surfaceAlt || 'rgba(255,255,255,.03)',
+                      color: color.text,
+                      fontSize: 11.5,
+                      lineHeight: 1.45,
+                      fontFamily: 'inherit',
+                    }}
+                  />
 
                   {(ffState === 'idle' || ffState === 'loading') && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -1627,11 +1668,11 @@ export default function MotionControlWizard({
         <div style={{ fontSize: 10.5, color: color.textGhost, marginTop: 8, lineHeight: 1.45 }}>
           {MC_WIZARD_OUTLINE_MODE
             ? (lang === 'ru'
-              ? 'Реф-видео → силуэт с линиями (@Video1). Первый кадр + лицо модели (@Image). Без depth map и Grok.'
-              : 'Ref video → silhouette with lines (@Video1). First frame + model face (@Image). No depth map or Grok.')
+              ? `Реф-видео → силуэт (@Video1). Первый кадр: face swap через ${ffModelLabel}. Seedance 2.0/2.5 — только видео.`
+              : `Ref → silhouette (@Video1). First frame: face swap via ${ffModelLabel}. Seedance 2.0/2.5 — video only.`)
             : (lang === 'ru'
-              ? 'Grok анализирует реф-видео, пишет промпт. В Seedance: @Video1 = depth map, @Image1 = развёртка.'
-              : 'Grok analyzes the reference clip and writes the prompt. Seedance gets @Video1 depth map + @Image1 turnaround.')}
+              ? `Grok + depth (@Video1). Первый кадр: ${ffModelLabel}. Развёртка @Image1.`
+              : `Grok + depth (@Video1). First frame: ${ffModelLabel}. Turnaround @Image1.`)}
         </div>
       </div>
     </div>

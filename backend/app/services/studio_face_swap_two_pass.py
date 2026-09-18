@@ -427,6 +427,67 @@ def build_dress_pose_pass1_prompt(
     return "\n\n".join(b.strip() for b in blocks if b and b.strip())
 
 
+def dress_pose_pass1_prep_error_fatal(message: str | None) -> bool:
+    """Ошибки pass1, при которых нельзя идти в pass2 (цензура / policy)."""
+    from app.services.wavespeed_client import wavespeed_is_sensitive_content_error
+
+    if wavespeed_is_sensitive_content_error(message):
+        return True
+    low = (message or "").lower()
+    return (
+        "safety" in low
+        or "guideline" in low
+        or "policy" in low
+        or "moderation" in low
+        or "content filter" in low
+        or ("nsfw" in low and "not allowed" in low)
+    )
+
+
+def dress_pose_pass1_echoes_reference(result_bytes: bytes, scene_bytes: bytes) -> bool:
+    """
+    WaveSpeed иногда «успешно» отдаёт почти тот же кадр, что реф (лицо не модели).
+    Такой pass1 нельзя скармливать в pass2.
+    """
+    if len(result_bytes) < 64 or len(scene_bytes) < 64:
+        return True
+    if result_bytes == scene_bytes:
+        return True
+    if hashlib.sha256(result_bytes).digest() == hashlib.sha256(scene_bytes).digest():
+        return True
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+
+        def _thumb_rgb(raw: bytes) -> list[tuple[int, int, int]]:
+            im = Image.open(BytesIO(raw)).convert("RGB")
+            im = im.resize((48, 48))
+            return list(im.getdata())
+
+        a = _thumb_rgb(result_bytes)
+        b = _thumb_rgb(scene_bytes)
+        if len(a) != len(b):
+            return False
+        mean_abs = sum(
+            abs(x[0] - y[0]) + abs(x[1] - y[1]) + abs(x[2] - y[2]) for x, y in zip(a, b)
+        ) / (len(a) * 3)
+        # Порог: pass1 с серым фоном и телом модели заметно отличается от цветного рефа.
+        return mean_abs < 12.0
+    except Exception as e:
+        log.debug("dress_pose pass1 similarity check skipped: %s", e)
+        return False
+
+
+def assert_valid_dress_pose_pass1(*, result_bytes: bytes, scene_bytes: bytes) -> None:
+    """Pass2 только после валидного pass1 (модель на сером), не echo референса."""
+    if dress_pose_pass1_echoes_reference(result_bytes, scene_bytes):
+        raise RuntimeError(
+            "Face swap pass 1 не подменил персонажа (кадр совпадает с референсом). "
+            "Pass 2 не запускаем — попробуйте другую модель, профиль SFW/NSFW или другой референс."
+        )
+
+
 def build_dress_pose_pass2_prompt(
     *,
     filtered_anchor: str,

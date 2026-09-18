@@ -104,6 +104,24 @@ def test_extract_scene_section_pose_camera():
     assert "sitting" in pose
 
 
+def test_dress_pose_pass1_rejects_reference_echo():
+    from app.services.studio_face_swap_two_pass import (
+        assert_valid_dress_pose_pass1,
+        dress_pose_pass1_echoes_reference,
+        dress_pose_pass1_prep_error_fatal,
+    )
+
+    scene = b"\xff\xd8\xff" + b"x" * 200
+    assert dress_pose_pass1_echoes_reference(scene, scene)
+    try:
+        assert_valid_dress_pose_pass1(result_bytes=scene, scene_bytes=scene)
+        raise AssertionError("expected RuntimeError for reference echo")
+    except RuntimeError as e:
+        assert "Pass 2" in str(e)
+    assert dress_pose_pass1_prep_error_fatal("Content flagged as potentially sensitive")
+    assert not dress_pose_pass1_prep_error_fatal("timeout waiting for result")
+
+
 def test_dress_pose_pass_prompts():
     from app.services.studio_face_swap_two_pass import (
         build_dress_pose_pass1_prompt,
