@@ -5,6 +5,20 @@ html:has(.app.app--shell) #root {
   overflow: hidden;
 }
 
+/* Админка: скролл только в .admin-content, не у document */
+html:has(.admin-app),
+html:has(.admin-app) body,
+html:has(.admin-app) #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+#root:has(.admin-app) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 html,
 body,
 #root {
