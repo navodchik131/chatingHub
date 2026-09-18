@@ -15,14 +15,9 @@ import { AdminPurchasesTab } from './AdminPurchasesTab'
 import { AdminPartnerPayoutsTab } from './AdminPartnerPayoutsTab'
 import { AdminSegmentDrill } from './AdminSegmentDrill'
 import { AdminShell, type AdminTabId } from './AdminShell'
-import { AdminUserPanel } from './AdminUserPanel'
-import {
-  billingPlanLabel,
-  planTierLabel,
-  subscriptionStatusLabel,
-} from './constants'
+import { AdminUsersTab } from './AdminUsersTab'
+import { formatHttpApiError } from '../apiErrors'
 import type { AdminStats, AdminUserDetail, AdminUserListResponse, AdminUserRow } from './types'
-import { formatDateTimeRu } from './utils'
 import './admin.css'
 
 interface UserMe {
@@ -61,6 +56,8 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<AdminUserDetail | null>(null)
+  const [userDetailLoading, setUserDetailLoading] = useState(false)
+  const [userDetailError, setUserDetailError] = useState<string | null>(null)
   const [drillSegment, setDrillSegment] = useState<string | null>(null)
   const [drillTitle, setDrillTitle] = useState('')
   const [ticketsUnreadCount, setTicketsUnreadCount] = useState(0)
@@ -101,11 +98,6 @@ export function AdminPage() {
     }
   }, [])
 
-  const loadUserDetail = useCallback(async (id: number) => {
-    const r = await apiFetch(`/api/admin/users/${id}`)
-    if (r.ok) setSelectedDetail((await r.json()) as AdminUserDetail)
-  }, [])
-
   const loadTicketsUnreadCount = useCallback(async () => {
     const r = await apiFetch('/api/admin/tickets/unread-count')
     if (r.ok) {
@@ -122,15 +114,11 @@ export function AdminPage() {
     }
   }, [])
 
-  const onSelectUserFromDrill = useCallback(
-    (userId: number) => {
-      setDrillSegment(null)
-      setTab('users')
-      setSelectedId(userId)
-      void loadUserDetail(userId)
-    },
-    [loadUserDetail],
-  )
+  const onSelectUserFromDrill = useCallback((userId: number) => {
+    setDrillSegment(null)
+    setTab('users')
+    setSelectedId(userId)
+  }, [])
 
   useEffect(() => {
     if (!getToken()) {
@@ -180,10 +168,30 @@ export function AdminPage() {
   useEffect(() => {
     if (selectedId == null) {
       setSelectedDetail(null)
+      setUserDetailLoading(false)
+      setUserDetailError(null)
       return
     }
-    void loadUserDetail(selectedId)
-  }, [selectedId, loadUserDetail])
+    let cancelled = false
+    setUserDetailLoading(true)
+    setUserDetailError(null)
+    void (async () => {
+      const r = await apiFetch(`/api/admin/users/${selectedId}`)
+      if (cancelled) return
+      if (r.ok) {
+        setSelectedDetail((await r.json()) as AdminUserDetail)
+        setUserDetailError(null)
+      } else {
+        setSelectedDetail(null)
+        const j = await r.json().catch(() => ({}))
+        setUserDetailError(formatHttpApiError(r, j))
+      }
+      setUserDetailLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
 
   const refreshAll = () => {
     setBusy(true)
@@ -205,7 +213,6 @@ export function AdminPage() {
     setUsers((prev) => prev.map((u) => (u.id === row.id ? { ...u, ...row } : u)))
     if (selectedDetail?.id === row.id) {
       setSelectedDetail((prev) => (prev ? { ...prev, ...row } : prev))
-      void loadUserDetail(row.id)
     }
   }
 
@@ -269,152 +276,40 @@ export function AdminPage() {
         {tab === 'purchases' ? <AdminPurchasesTab /> : null}
 
         {tab === 'users' ? (
-          <div className={`admin-users admin-fade-in${selectedDetail ? ' admin-users--split' : ''}`}>
-            <div className="admin-users__main">
-              <div className="admin-user-toolbar">
-                <input
-                  type="search"
-                  placeholder={t('users.searchPlaceholder')}
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') runUserSearch(0)
-                  }}
-                  className="admin-user-search"
-                />
-                <select
-                  className="admin-user-filter"
-                  value={partnersOnly ? 'partners' : 'all'}
-                  onChange={(e) => {
-                    const next = e.target.value === 'partners'
-                    setPartnersOnly(next)
-                    setBusy(true)
-                    setUserPage(0)
-                    void loadUsers(userSearch, 0, next).finally(() => setBusy(false))
-                  }}
-                >
-                  <option value="all">{t('users.filterAll')}</option>
-                  <option value="partners">{t('users.filterPartners')}</option>
-                </select>
-                <button type="button" className="ghost-btn" disabled={busy} onClick={() => runUserSearch(0)}>
-                  {t('common.search')}
-                </button>
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  disabled={busy}
-                  onClick={() => {
-                    setUserSearch('')
-                    setPartnersOnly(false)
-                    setUserPage(0)
-                    setBusy(true)
-                    void loadUsers('', 0, false).finally(() => setBusy(false))
-                  }}
-                >
-                  {t('common.reset')}
-                </button>
-              </div>
-
-              <div className="admin-user-table-wrap admin-card">
-                <table className="admin-user-table">
-                  <thead>
-                    <tr>
-                      <th>{t('common.id')}</th>
-                      <th>{t('common.email')}</th>
-                      <th>{t('common.role')}</th>
-                      <th>{t('common.subscription')}</th>
-                      <th>{t('common.plan')}</th>
-                      <th>{t('common.credits')}</th>
-                      <th>{t('common.generations')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((u) => {
-                      const isOwner = u.parent_user_id == null
-                      const active = selectedId === u.id
-                      return (
-                        <tr
-                          key={u.id}
-                          className={active ? 'admin-user-row--active' : ''}
-                          onClick={() => setSelectedId(u.id)}
-                        >
-                          <td className="mono">{u.id}</td>
-                          <td>
-                            <div>{u.email}</div>
-                            <div className="admin-user-badges">
-                              {!u.is_active ? (
-                                <span className="admin-badge admin-badge--off">{t('roles.disabled')}</span>
-                              ) : null}
-                              {u.is_partner && isOwner ? (
-                                <span className="admin-badge admin-badge--partner">{t('users.partnerBadge')}</span>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td>{isOwner ? t('roles.owner') : u.member_login ?? t('roles.member')}</td>
-                          <td>{subscriptionStatusLabel(u.subscription_status)}</td>
-                          <td>
-                            {billingPlanLabel(u.billing_plan)} · {planTierLabel(u.plan_tier)}
-                            <div className="muted small">{formatDateTimeRu(u.subscription_period_end)}</div>
-                          </td>
-                          <td className="mono admin-kpi__value--accent">{u.credits_balance}</td>
-                          <td className="mono">{u.studio_generations_count ?? 0}</td>
-                        </tr>
-                      )
-                    })}
-                    {!users.length && !busy ? (
-                      <tr>
-                        <td colSpan={7} className="muted admin-user-table__empty">
-                          {t('common.noRecords')}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="admin-user-pagination">
-                <span className="muted small">
-                  {userTotal
-                    ? t('users.paginationRange', { from: userRangeFrom, to: userRangeTo, total: userTotal })
-                    : t('users.paginationEmpty')}
-                </span>
-                <div className="admin-user-pagination__controls">
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    disabled={busy || userPage <= 0}
-                    onClick={() => runUserSearch(userPage - 1)}
-                  >
-                    {t('users.prevPage')}
-                  </button>
-                  <span className="muted small">
-                    {t('users.pageOf', { page: userPage + 1, total: userPageCount })}
-                  </span>
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    disabled={busy || userPage + 1 >= userPageCount}
-                    onClick={() => runUserSearch(userPage + 1)}
-                  >
-                    {t('users.nextPage')}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {selectedDetail ? (
-              <AdminUserPanel
-                user={selectedDetail}
-                busy={busy}
-                onBusy={setBusy}
-                onUpdated={onUserUpdated}
-                onClose={() => setSelectedId(null)}
-                onError={setError}
-              />
-            ) : (
-              <div className="admin-users__placeholder muted">{t('users.placeholder')}</div>
-            )}
-          </div>
+          <AdminUsersTab
+            users={users}
+            userSearch={userSearch}
+            onUserSearchChange={setUserSearch}
+            partnersOnly={partnersOnly}
+            onPartnersOnlyChange={(next) => {
+              setPartnersOnly(next)
+              setUserPage(0)
+              setBusy(true)
+              void loadUsers(userSearch, 0, next).finally(() => setBusy(false))
+            }}
+            busy={busy}
+            userPage={userPage}
+            userPageCount={userPageCount}
+            userRangeFrom={userRangeFrom}
+            userRangeTo={userRangeTo}
+            userTotal={userTotal}
+            selectedId={selectedId}
+            onSelectId={setSelectedId}
+            selectedDetail={selectedDetail}
+            detailLoading={userDetailLoading}
+            detailError={userDetailError}
+            onRunSearch={runUserSearch}
+            onResetSearch={() => {
+              setUserSearch('')
+              setPartnersOnly(false)
+              setUserPage(0)
+              setBusy(true)
+              void loadUsers('', 0, false).finally(() => setBusy(false))
+            }}
+            onUserUpdated={onUserUpdated}
+            onDetailError={setError}
+            onBusy={setBusy}
+          />
         ) : null}
 
         {tab === 'email' ? <AdminEmailTab meEmail={meEmail} onError={setError} /> : null}

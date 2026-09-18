@@ -1065,9 +1065,13 @@
   min-width: 0;
 }
 
+.admin-users__detail {
+  min-width: 0;
+}
+
 @media (min-width: 1100px) {
   .admin-users--split {
-    grid-template-columns: 1fr minmax(320px, 380px);
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
   }
 }
 
@@ -1149,6 +1153,7 @@
 }
 
 .admin-user-table-wrap,
+.admin-user-table-scroller,
 .admin-donations-summary-table-wrap {
   overflow-x: auto;
   overflow-y: visible;
@@ -1160,14 +1165,153 @@
   border-radius: 10px;
 }
 
+.admin-user-table-scroller.admin-card {
+  padding: 0;
+}
+
 .admin-user-table-wrap.admin-card,
 .admin-donations-summary-table-wrap.admin-card {
   padding: 0;
 }
 
 .admin-user-table-wrap.admin-card .admin-user-table,
+.admin-user-table-scroller.admin-card .admin-user-table,
 .admin-donations-summary-table-wrap.admin-card .admin-donations-table {
   margin: 0;
+}
+
+/* Мобилка / PWA: карточки вместо широкой таблицы */
+.admin-user-cards {
+  display: none;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.admin-user-table-desktop {
+  display: block;
+}
+
+.admin-user-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #121316;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-user-card--active {
+  border-color: rgba(215, 244, 82, 0.45);
+  background: rgba(215, 244, 82, 0.06);
+}
+
+.admin-user-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.admin-user-card__email {
+  font-weight: 700;
+  font-size: 0.92rem;
+  word-break: break-word;
+}
+
+.admin-user-card__id {
+  flex: none;
+  color: #9ba0a6;
+  font-size: 0.75rem;
+}
+
+.admin-user-card__meta {
+  margin-top: 0.35rem;
+  line-height: 1.35;
+}
+
+.admin-user-card__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+  align-items: center;
+}
+
+.admin-user-cards__empty {
+  text-align: center;
+  padding: 1.25rem 0.5rem;
+}
+
+@media (max-width: 1099px) {
+  .admin-user-cards {
+    display: flex;
+  }
+
+  .admin-user-table-desktop {
+    display: none;
+  }
+}
+
+/* Полноэкранная карточка пользователя (portal → body, вне overflow админки) */
+.admin-user-mobile-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  background: #0a0b0d;
+  color: #f2f3f0;
+}
+
+.admin-user-mobile-sheet__head {
+  flex: none;
+  padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 10px
+    max(12px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0d0e11;
+}
+
+.admin-user-mobile-sheet__back {
+  border: none;
+  background: transparent;
+  color: #d7f452;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.35rem 0.15rem;
+  cursor: pointer;
+}
+
+.admin-user-mobile-sheet__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 0 max(12px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
+}
+
+.admin-user-mobile-sheet .admin-panel {
+  position: static;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  padding: 16px 4px 24px;
+  background: transparent;
+}
+
+.admin-user-detail-state {
+  padding: 1.25rem 0.5rem;
+  text-align: center;
+}
+
+.admin-user-detail-state--error {
+  color: #ffb4b4;
 }
 
 .admin-user-table,
@@ -1232,8 +1376,14 @@
   padding: 18px;
   position: sticky;
   top: 1rem;
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-users__detail .admin-panel {
+  top: 0;
+  max-height: calc(100dvh - 120px);
 }
 
 .admin-panel__head {

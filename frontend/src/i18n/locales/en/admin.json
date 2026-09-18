@@ -223,8 +223,10 @@
     }
   },
   "users": {
+    "listAria": "User list",
+    "backToList": "Back to list",
     "searchPlaceholder": "Search by email",
-    "placeholder": "Select a user in the table to edit subscription, credits and access.",
+    "placeholder": "Select a user in the list to edit subscription, credits and access.",
     "filterAll": "All users",
     "filterPartners": "Partners only",
     "partnerBadge": "partner",
