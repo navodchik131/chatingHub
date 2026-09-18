@@ -554,14 +554,37 @@ async def _accept_workflow_motion_first_frame_job(
     if motion_id and not description:
         description = default_motion_notes
 
+    from app.services.studio_workflow_scenarios import is_workflow_dual_ref_identity_mode
+
+    plan_refs = [ref_item for _b, _m, ref_item in reference_images]
+    dual_ref_identity = is_workflow_dual_ref_identity_mode(
+        scenario_type=getattr(plan, "scenario_type", None),
+        model_id=plan.model_id,
+        references=plan_refs,
+    )
+    # Тот же studio_mode, что в refine_prompt workflow — anchor face_swap / model_scene.
+    if getattr(plan, "scenario_type", None) == "scenarioFaceSwap" or dual_ref_identity:
+        studio_mode = "face_swap"
+    elif plan.model_id is not None and plan_refs:
+        studio_mode = "model_scene"
+    else:
+        studio_mode = "face_swap"
+
+    lock_hair = getattr(plan, "lock_hairstyle_style", True)
+    lock_hair_str = "1" if lock_hair else "0"
+
     params: dict[str, Any] = {
         "model_id": str(plan.model_id),
         "description": description,
         "output_aspect": plan.output_aspect,
         "wan_edit_tier": plan.wan_edit_tier,
         "studio_wave_profile": plan.studio_wave_profile,
+        "workflow_wave_model": (getattr(plan, "workflow_wave_model", None) or "").strip().lower()
+        or None,
+        "workflow_wave_resolution": getattr(plan, "output_resolution", None) or "",
+        "studio_mode": studio_mode,
         "auto_motion_prompt": "1" if motion_id else "0",
-        "lock_model_hairstyle": "1",
+        "lock_model_hairstyle": lock_hair_str,
         "use_still_as_final": "0",
         "exif_camera": normalize_exif_camera(plan.exif_camera),
         "workflow_source": "1",

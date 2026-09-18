@@ -6837,6 +6837,7 @@ async def api_studio_motion_first_frame(
         "wan_edit_tier": wan_edit_tier,
         "studio_wave_profile": studio_wave_profile,
         "workflow_wave_model": (workflow_wave_model or "").strip().lower() or None,
+        "studio_mode": "face_swap",
         "auto_motion_prompt": auto_motion_prompt,
         "lock_model_hairstyle": lock_model_hairstyle,
         "use_still_as_final": use_still_as_final,
@@ -6913,6 +6914,13 @@ async def _studio_job_execute_motion_first_frame(
     workflow_first_frame = _truthy_wavespeed_flag(str(p.get("workflow_first_frame") or "")) or str(
         p.get("workflow_source") or ""
     ).strip().lower() in ("1", "true", "yes")
+    from app.services.studio_workflow_image_resolution import normalize_workflow_image_resolution
+
+    workflow_wave_resolution_raw = str(p.get("workflow_wave_resolution") or "").strip().lower()
+    workflow_wave_resolution = normalize_workflow_image_resolution(
+        workflow_wave_model or "wan-2.7",
+        workflow_wave_resolution_raw or None,
+    )
 
     if not grok_scene_compose_configured():
         raise RuntimeError(
@@ -7003,6 +7011,24 @@ async def _studio_job_execute_motion_first_frame(
             "Загрузите референс-видео, файл первого кадра или выберите снимок из архива."
         )
 
+    # Кадр из motion-видео (не загруженный still / не архив): overlay-removal как в workflow.
+    motion_scene_from_video = bool(
+        video_path is not None and not explicit_still_file_upload and gen_arch_row is None
+    )
+
+    def _motion_first_frame_prompt_extras(prompt: str) -> str:
+        from app.services.studio_model_bootstrap import (
+            append_motion_first_frame_overlay_removal,
+            append_workflow_first_frame_face_grid,
+        )
+
+        out = (prompt or "").strip()
+        if workflow_first_frame:
+            out = append_workflow_first_frame_face_grid(out)
+        if motion_scene_from_video:
+            out = append_motion_first_frame_overlay_removal(out)
+        return out
+
     from_archive_or_still_upload = gen_arch_row is not None or has_still_upload
     if from_archive_or_still_upload and has_video_upload:
         raw_v2 = studio_jobs.load_studio_job_file(str(p["video_path"]))
@@ -7086,10 +7112,12 @@ async def _studio_job_execute_motion_first_frame(
 
     # Первый кадр motion: по умолчанию face_swap (Mode A); shot-batch тоже на Mode A.
     mode_n = _normalize_studio_mode(str(p.get("studio_mode") or "face_swap"))
+    # Кабинет передаёт workflow_wave_model без workflow_source — prep/final edit должны видеть модель.
+    workflow_source_for_edit = workflow_first_frame or bool(workflow_wave_model)
     edit_wave_model = effective_studio_image_edit_wave_model(
         wave_profile=wave_profile_n,
         workflow_wave_model=workflow_wave_model or None,
-        workflow_source=workflow_first_frame,
+        workflow_source=workflow_source_for_edit,
     )
     skip_ws = gen_arch_row is not None or persist_uploaded_final
     ws_key = _studio_refine_wavespeed_preflight(
@@ -7148,7 +7176,12 @@ async def _studio_job_execute_motion_first_frame(
                     job.id,
                 )
         except Exception as e:
-            log.warning("motion first-frame anchor failed job=%s: %s — falling back", job.id, e)
+            log.error(
+                "motion first-frame anchor failed job=%s: %s",
+                job.id,
+                e,
+                exc_info=True,
+            )
             anchor_result = None
 
     refined: str
@@ -7158,6 +7191,18 @@ async def _studio_job_execute_motion_first_frame(
         refined = anchor_result.refined_prompt
         reference_scene = (anchor_result.scene_description or "").strip()
         grok_neg = None
+    elif (
+        not skip_ws
+        and mode_n in ("face_swap", "model_scene")
+        and ws_key
+        and first_frame
+        and imgs_model
+    ):
+        # Старый motion_face_swap (pose+identity без Anchor) не подменяет модель — не маскируем сбой.
+        raise RuntimeError(
+            "Не удалось выполнить face swap первого кадра (Anchor). "
+            "Повторите генерацию; если ошибка повторяется — проверьте логи backend."
+        )
     else:
         try:
             from app.services.plan_entitlements import assert_grok_allowed, record_grok_usage
@@ -7329,30 +7374,18 @@ async def _studio_job_execute_motion_first_frame(
                             getattr(anchor_result, "mannequin_dressed_first", False)
                         ),
                     )
-            if workflow_first_frame:
-                from app.services.studio_model_bootstrap import (
-                    append_motion_first_frame_overlay_removal,
-                    append_workflow_first_frame_face_grid,
-                )
-
-                wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
-                wavespeed_prompt = append_motion_first_frame_overlay_removal(wavespeed_prompt)
+            wavespeed_prompt = _motion_first_frame_prompt_extras(wavespeed_prompt)
             from app.services.studio_workflow_image_resolution import (
                 default_workflow_image_resolution,
-                normalize_workflow_image_resolution,
                 workflow_wavespeed_size_for_resolution,
             )
 
-            workflow_wave_resolution = (
-                normalize_workflow_image_resolution(workflow_wave_model, None)
-                if workflow_wave_model
-                else None
-            )
+            ws_resolution = workflow_wave_resolution if workflow_wave_model else None
             if settings.wavespeed_seedream_omit_size:
                 size_for_ws: str | None = None
-            elif workflow_wave_model == "wan-2.7" and workflow_wave_resolution:
+            elif workflow_wave_model == "wan-2.7" and ws_resolution:
                 size_for_ws = workflow_wavespeed_size_for_resolution(
-                    aspect_key, workflow_wave_resolution
+                    aspect_key, ws_resolution
                 )
             else:
                 size_for_ws = wavespeed_size_string(aspect_key)
@@ -7370,7 +7403,7 @@ async def _studio_job_execute_motion_first_frame(
                         wave_profile=wave_profile_n,
                         reference_scene_description=reference_scene,
                         size=size_for_ws,
-                        resolution=workflow_wave_resolution
+                        resolution=ws_resolution
                         or default_workflow_image_resolution(workflow_wave_model),
                     )
                 elif wave_profile_n == "regular":
@@ -7463,30 +7496,18 @@ async def _studio_job_execute_motion_first_frame(
                     user_pose_last=pose_is_last_after_reorder,
                     studio_mode=mode_n,
                 )
-                if workflow_first_frame:
-                    from app.services.studio_model_bootstrap import (
-                        append_motion_first_frame_overlay_removal,
-                        append_workflow_first_frame_face_grid,
-                    )
-
-                    wavespeed_prompt = append_workflow_first_frame_face_grid(wavespeed_prompt)
-                    wavespeed_prompt = append_motion_first_frame_overlay_removal(wavespeed_prompt)
+                wavespeed_prompt = _motion_first_frame_prompt_extras(wavespeed_prompt)
                 from app.services.studio_workflow_image_resolution import (
                     default_workflow_image_resolution,
-                    normalize_workflow_image_resolution,
                     workflow_wavespeed_size_for_resolution,
                 )
 
-                workflow_wave_resolution = (
-                    normalize_workflow_image_resolution(workflow_wave_model, None)
-                    if workflow_wave_model
-                    else None
-                )
+                ws_resolution = workflow_wave_resolution if workflow_wave_model else None
                 if settings.wavespeed_seedream_omit_size:
                     size_for_ws = None
-                elif workflow_wave_model == "wan-2.7" and workflow_wave_resolution:
+                elif workflow_wave_model == "wan-2.7" and ws_resolution:
                     size_for_ws = workflow_wavespeed_size_for_resolution(
-                        aspect_key, workflow_wave_resolution
+                        aspect_key, ws_resolution
                     )
                 else:
                     size_for_ws = wavespeed_size_string(aspect_key)
@@ -7504,7 +7525,7 @@ async def _studio_job_execute_motion_first_frame(
                             wave_profile=wave_profile_n,
                             reference_scene_description=reference_scene,
                             size=size_for_ws,
-                            resolution=workflow_wave_resolution
+                            resolution=ws_resolution
                             or default_workflow_image_resolution(workflow_wave_model),
                         )
                     elif wave_profile_n == "regular":
