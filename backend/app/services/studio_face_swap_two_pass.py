@@ -54,7 +54,7 @@ def dress_pose_prep_cache_key(
     face_image_id: int | None,
     detail_image_ids: list[int] | None = None,
 ) -> str:
-    """Кэш pass 1: тело+лицо+реф(+детали) → модель в одежде и позе рефа на сером фоне."""
+    """Стабильный id сцены для логов (two-pass pass1 на диск больше не кэшируется)."""
     h = hashlib.sha256()
     wp = (wave_profile or "nsfw").strip().lower()
     details = ",".join(str(i) for i in sorted(detail_image_ids or []))

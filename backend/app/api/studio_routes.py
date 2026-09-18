@@ -6618,7 +6618,12 @@ async def _studio_job_execute_refine_prompt(
         )
         if finished_row is not None:
             generation_id = finished_row.id
-            if anchor_result is not None and anchor_result.dressed_body_bytes:
+            # Two-pass face swap: pass1 не сохраняем как outfit anchor — только финал pass2.
+            if (
+                anchor_result is not None
+                and anchor_result.dressed_body_bytes
+                and not getattr(anchor_result, "face_swap_two_pass_final", False)
+            ):
                 from app.services.studio_outfit_anchor import (
                     link_outfit_to_generation,
                     persist_outfit_anchor_generation,

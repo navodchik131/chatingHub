@@ -449,6 +449,8 @@ async def run_anchor_pipeline(
                 f"{pub}/api/studio/public-model-image?t={quote(det_tok, safe='')}"
             )
 
+        # Ключ только для логов/метаданных; pass1 на диск не кэшируем — каждый job оба шага заново
+        # (технически валидный, но визуально плохой pass1 иначе залипает до смены рефа).
         prep_key = dress_pose_prep_cache_key(
             scene_bytes=scene_bytes,
             wave_profile=wave_profile,
@@ -456,78 +458,50 @@ async def run_anchor_pipeline(
             face_image_id=getattr(face_im, "id", None),
             detail_image_ids=[int(getattr(im, "id", 0) or 0) for _k, im in detail_refs],
         )
-        dress_pose_bytes: bytes | None = None
-        dress_pose_from_cache = False
-        if not force_redress:
-            dress_pose_bytes = load_cached_dressed_body(prep_key)
-            dress_pose_from_cache = dress_pose_bytes is not None
         from app.services.studio_face_swap_two_pass import (
             assert_valid_dress_pose_pass1,
             dress_pose_pass1_prep_error_fatal,
         )
 
-        if dress_pose_bytes is not None:
-            try:
-                assert_valid_dress_pose_pass1(
-                    result_bytes=dress_pose_bytes,
-                    scene_bytes=scene_bytes,
-                )
-            except RuntimeError as e:
-                log.warning(
-                    "anchor dress-pose pass1 cache invalid model=%s key=%s…: %s",
-                    model_id,
-                    prep_key[:12],
-                    e,
-                )
-                invalidate_dressed_body_cache(prep_key)
-                dress_pose_bytes = None
-                dress_pose_from_cache = False
-        if dress_pose_bytes is None:
-            pass1_prompt = build_dress_pose_pass1_prompt(
-                scene_description=scene_description,
-                filtered_anchor=filtered or anchor,
-                model_profile_text=model_profile_text,
-                vis=vis,
-                detail_refs=detail_refs,
+        pass1_prompt = build_dress_pose_pass1_prompt(
+            scene_description=scene_description,
+            filtered_anchor=filtered or anchor,
+            model_profile_text=model_profile_text,
+            vis=vis,
+            detail_refs=detail_refs,
+        )
+        # Кадр pass 1 = кадр рефа: иначе модель сама решает кроп и «дорисовывает» лицо.
+        prep_aspect = reference_aspect_key(scene_bytes, aspect_ratio)
+        log.info(
+            "anchor dress-pose pass1 (no disk cache) model=%s key=%s… body_kind=%s details=%s aspect=%s prompt_len=%s",
+            model_id,
+            prep_key[:12],
+            getattr(pass1_body_im, "image_kind", None),
+            [k for k, _im in detail_refs],
+            prep_aspect,
+            len(pass1_prompt),
+        )
+        try:
+            dress_pose_bytes = await _wavespeed_edit_bytes(
+                api_key=wavespeed_api_key,
+                image_urls=[pass1_body_url, face_url, scene_url_original, *detail_urls],
+                prompt=pass1_prompt,
+                wave_profile=wave_profile,
+                wan_edit_tier=wan_edit_tier,
+                wave_model_id=wave_model_id,
+                aspect_ratio=prep_aspect,
             )
-            # Кадр pass 1 = кадр рефа: иначе модель сама решает кроп и «дорисовывает» лицо.
-            prep_aspect = reference_aspect_key(scene_bytes, aspect_ratio)
-            log.info(
-                "anchor dress-pose pass1 model=%s key=%s… body_kind=%s details=%s aspect=%s prompt_len=%s",
-                model_id,
-                prep_key[:12],
-                getattr(pass1_body_im, "image_kind", None),
-                [k for k, _im in detail_refs],
-                prep_aspect,
-                len(pass1_prompt),
-            )
-            try:
-                dress_pose_bytes = await _wavespeed_edit_bytes(
-                    api_key=wavespeed_api_key,
-                    image_urls=[pass1_body_url, face_url, scene_url_original, *detail_urls],
-                    prompt=pass1_prompt,
-                    wave_profile=wave_profile,
-                    wan_edit_tier=wan_edit_tier,
-                    wave_model_id=wave_model_id,
-                    aspect_ratio=prep_aspect,
-                )
-            except RuntimeError as e:
-                invalidate_dressed_body_cache(prep_key)
-                if dress_pose_pass1_prep_error_fatal(str(e)):
-                    raise RuntimeError(
-                        "Face swap pass 1 отклонён модерацией WaveSpeed. "
-                        "Pass 2 не выполняем — смените модель, профиль или референс."
-                    ) from e
-                raise RuntimeError(f"Face swap pass 1 не выполнен: {e}") from e
-            assert_valid_dress_pose_pass1(
-                result_bytes=dress_pose_bytes,
-                scene_bytes=scene_bytes,
-            )
-            save_cached_dressed_body(
-                prep_key,
-                dress_pose_bytes,
-                meta={"mode": "dress_pose", "wave_profile": wave_profile},
-            )
+        except RuntimeError as e:
+            if dress_pose_pass1_prep_error_fatal(str(e)):
+                raise RuntimeError(
+                    "Face swap pass 1 отклонён модерацией WaveSpeed. "
+                    "Pass 2 не выполняем — смените модель, профиль или референс."
+                ) from e
+            raise RuntimeError(f"Face swap pass 1 не выполнен: {e}") from e
+        assert_valid_dress_pose_pass1(
+            result_bytes=dress_pose_bytes,
+            scene_bytes=scene_bytes,
+        )
         mannequin_prep_ran = True
         dress_pose_fid = save_pose_reference_bytes(
             owner_id=owner_id,
@@ -548,25 +522,26 @@ async def run_anchor_pipeline(
         )
         final_urls = [scene_url_original, dress_pose_url, face_url]
         log.info(
-            "anchor dress-pose pass2 model=%s urls=ref,pass1,face prompt_len=%s cache=%s",
+            "anchor dress-pose pass2 model=%s urls=ref,pass1,face prompt_len=%s",
             model_id,
             len(pass2_prompt),
-            dress_pose_from_cache,
         )
+        # Pass1 — только prep для pass2 в этом job: не пишем в архив outfit и не
+        # заполняем dressed_body_bytes (иначе refine привяжет pass1 к master/carousel).
         return AnchorPipelineResult(
             refined_prompt=pass2_prompt,
             image_urls=final_urls,
             mode="A",
-            dressed_from_cache=dress_pose_from_cache,
+            dressed_from_cache=False,
             scene_description=scene_description,
             visibility=vis,
             cache_key=prep_key,
-            dressed_body_bytes=dress_pose_bytes,
+            dressed_body_bytes=None,
             scene_first=True,
             face_closeup=False,
             bust_portrait=bust_portrait,
             mannequin_scene=False,
-            mannequin_from_cache=dress_pose_from_cache,
+            mannequin_from_cache=False,
             mannequin_prep_ran=True,
             wardrobe_prep_ran=False,
             face_swap_two_pass_final=True,
