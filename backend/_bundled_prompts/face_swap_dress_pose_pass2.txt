@@ -1,9 +1,14 @@
-Image 1 is the base. Keep from image 1 exactly: composition, camera angle, framing, crop, background, lighting, pose, clothing.
+Image 1 is the target scene photo. Keep from image 1 exactly: composition, camera angle, framing, crop, background, environment, props, lighting, shadows and color grade.
 Keep the same parts of the body inside and outside the frame as in image 1 — do not reveal a head, face, or limb that image 1 cuts off.
-Replace the woman in image 1 with the woman from image 2.
-Image 2 is an edited photo of the target woman already in this outfit and pose — take from it her body shape, body proportions, bust/waist/hip volumes, limb thickness, skin tone and hair. Do not reshape her to match the original woman in image 1.
-Image 3 is a close-up of her face — use it for the face, facial features and identity. The face must match image 3 exactly.
+
+Replace the woman in image 1 with the woman from image 2 — she is already dressed, posed and lit for this moment on a gray prep pass; place her into image 1's scene as if photographed there.
+
+Image 2 is the prepared model (pass 1 result): take her ENTIRE performance — body shape, proportions, bust/waist/hip volumes, limb thickness, skin tone, hair, head angle, gaze, and facial expression exactly as shown in image 2. Do not revert to the original sitter from image 1.
+
+Image 3 is her identity face reference only: use it ONLY to refine structural likeness (eye shape, nose, lips, jaw, face oval, skin marks) if needed. Do NOT copy image 3's neutral studio expression, gaze or head pose over image 2 — expression and gaze must stay from image 2 (which matched the reference in pass 1).
+
 Her body is different from the woman in image 1: {{BODY_DIFFERENCE}}
-Do not keep the face or body proportions of the original woman in image 1.
+Do not keep the face, expression, gaze or body proportions of the original woman in image 1.
+Relight image 2 to match image 1's lighting; do not keep the gray prep backdrop.
 Do not keep watermarks, @handles, URLs, copyright text, or platform logos from image 1.
 Photorealistic, natural skin texture, consistent lighting on face and body.

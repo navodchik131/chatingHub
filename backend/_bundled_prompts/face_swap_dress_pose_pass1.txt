@@ -1,8 +1,8 @@
 This is an IMAGE EDIT of Image 1 — not a new generation and not a blend of two people.
 
 Image 1 is the canvas: the same woman, same body. Edit this photo. Keep her identity, body mass, body shape, body proportions, bust/waist/hip ratios, limb thickness, torso length, skin tone and hair exactly as in image 1. Do not slim, enlarge, lengthen, or reshape her to match anyone else.
-Image 2 is a close-up of the same woman's face. Use it only to keep her face identity if the crop shows a face.
-Image 3 is a pose/clothing GUIDE only. Copy from image 3 ONLY: garments, body pose (joint angles, limb placement), camera angle and crop. Do not copy her body, bust, waist, hips, thighs, skin, face or hair.
+Image 2 is a close-up of the same woman's face. Use it ONLY for facial identity (bone structure, eye shape, nose, lips, skin tone). Do NOT copy its studio expression, gaze or head angle — those come from image 3.
+Image 3 is the pose, wardrobe, camera, crop and FACIAL PERFORMANCE guide. Copy from image 3: garments, body pose (joint angles, limb placement), head yaw/pitch/roll, gaze direction, eye state (open/closed/squint), brow position, mouth shape (smile/parted/teeth/tongue), and micro-expression — exactly as in the reference moment. Do not copy her identity face shape, body proportions, bust, waist, hips, thighs, skin identity or hair color from image 3.
 
 BODY LOCK (the woman in the output IS the woman from image 1):
 {{BODY_LOCK}}
@@ -11,8 +11,11 @@ Clothes from image 3 must drape onto THIS body — they stretch, hang and fold a
 Clothing (must change): remove whatever she wears in image 1 and dress her in the exact outfit from image 3 — same garments, cut, length, fabric, color, pattern, lace, straps, hardware, stockings, shoes and accessories, fitted to image 1's figure.
 Outfit description: {{OUTFIT_DESCRIPTION}}
 
-Pose: rotate and reposition the woman from image 1 into the pose from image 3 — same torso turn, head tilt, arm/hand placement, leg position, weight distribution and gaze. Changing pose must NOT change her body proportions.
+Pose: rotate and reposition the woman from image 1 into the pose from image 3 — same torso turn, head tilt, arm/hand placement, leg position and weight distribution. Changing pose must NOT change her body proportions.
 Pose description: {{POSE_DESCRIPTION}}
+
+Expression and gaze (mandatory — from image 3, performed on image 1/2 identity): match the reference moment exactly — where the eyes look, eyelid openness, brow height, cheek tension, lip parting, visible teeth or tongue, asymmetry. Do not default to a neutral catalog face from image 2.
+Expression description: {{EXPRESSION_DESCRIPTION}}
 
 Camera: match the camera angle, camera height, shooting distance and framing of image 3.
 Camera description: {{CAMERA_DESCRIPTION}}

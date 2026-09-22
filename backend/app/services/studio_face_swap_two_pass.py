@@ -364,13 +364,23 @@ def _body_difference_snippet(filtered_anchor: str, model_profile_text: str | Non
 
 PASS1_FINAL_RULES = (
     "FINAL RULES (mandatory):\n"
-    "- This is an edit of image 1. The output person is the woman from image 1 after a pose/wardrobe change.\n"
-    "- From image 3 take ONLY: the outfit, the pose (joint angles), the camera angle and the crop.\n"
+    "- This is an edit of image 1. The output person is the woman from image 1 after pose/wardrobe/expression change.\n"
+    "- From image 3 take: outfit, pose (joint angles), head angle, gaze, facial performance (eyes/brows/mouth), "
+    "camera angle and crop.\n"
+    "- From image 3 do NOT take: identity face shape, body proportions, skin/hair identity, background, room, props, "
+    "or scene lighting.\n"
+    "- Image 2 is identity only — never paste its neutral studio expression when image 3 shows a different performance.\n"
     "- Do NOT mix or average two bodies. If image 3 has a different bust, waist, hips, thighs or height — ignore that.\n"
-    "- Take NOTHING else from image 3: not background, room, bed, furniture, props, lighting, face, body, skin or hair.\n"
     "- The output background is a plain neutral gray studio backdrop with soft even lighting.\n"
     "- The outfit must actually change: replace whatever image 1 is wearing with the garments from image 3, "
     "fitted onto image 1's unchanged body."
+)
+
+# Pass 2: в кадр рефа ставим готовую модель с pass1; лицо-реф — только черты, не эмоция.
+PASS2_EXPRESSION_LOCK = (
+    "PASS 2 EXPRESSION LOCK: The woman from image 2 already matches the reference pose and expression from pass 1. "
+    "Preserve her gaze, head tilt, brow and mouth state when compositing into image 1. Image 3 must not reset her "
+    "to a neutral face photo."
 )
 
 
@@ -400,10 +410,17 @@ def build_dress_pose_pass1_prompt(
     outfit = extract_scene_section_block(scene_description, "OUTFIT", strip_header=True) or (
         "Every garment visible on the person in image 3, including underwear, stockings and accessories."
     )
+    expression = extract_scene_section_block(
+        scene_description, "EXPRESSION", strip_header=True
+    ) or (
+        "Copy eye openness, gaze direction (into camera / frame-left / frame-right / downward), "
+        "brow position, mouth shape, teeth or tongue visibility, and asymmetry exactly from image 3."
+    )
     out = (
         template.replace("{{POSE_DESCRIPTION}}", pose.strip())
         .replace("{{CAMERA_DESCRIPTION}}", camera.strip())
         .replace("{{OUTFIT_DESCRIPTION}}", outfit.strip())
+        .replace("{{EXPRESSION_DESCRIPTION}}", expression.strip())
         .replace(
             "{{BODY_LOCK}}",
             _body_lock_snippet(filtered_anchor, model_profile_text).strip(),
@@ -500,14 +517,22 @@ def build_dress_pose_pass2_prompt(
     from app.services.studio_anchor_pipeline import (
         AnchorVisibility,
         SCENE_OVERLAY_EXCLUSION_BLOCK,
+        extract_expression_block_from_scene_text,
+        format_scene_expression_prompt_block,
         two_pass_pass2_identity_marks_block,
     )
 
     v = vis if isinstance(vis, AnchorVisibility) else AnchorVisibility()
     template = _read_prompt_file(_PASS2)
     body_diff = _body_difference_snippet(filtered_anchor, model_profile_text)
+    # Подсказка с рефа: pass2 не перерисовывает эмоцию с нуля, но фиксирует целевой performance.
+    expr_hint = format_scene_expression_prompt_block(
+        extract_expression_block_from_scene_text(scene_description)
+    )
     blocks = [
         template.replace("{{BODY_DIFFERENCE}}", body_diff),
+        PASS2_EXPRESSION_LOCK,
+        expr_hint,
         two_pass_pass2_identity_marks_block(v),
         SCENE_OVERLAY_EXCLUSION_BLOCK,
         _frame_parts_block(v),

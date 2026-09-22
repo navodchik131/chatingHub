@@ -132,6 +132,7 @@ def test_dress_pose_pass_prompts():
         "CAMERA:\n- eye level\n\n"
         "CROP:\n- Head and face crop: top of head cut off, only chin and lips in frame\n\n"
         "POSE:\n- standing\n\n"
+        "EXPRESSION:\n- soft squint, lips parted, gaze into camera\n\n"
         "VISIBILITY:\n- Face: partially visible — only chin and lips in frame\n"
     )
     p1 = build_dress_pose_pass1_prompt(
@@ -149,6 +150,7 @@ def test_dress_pose_pass_prompts():
     assert "Do NOT mix or average two bodies" in p1
     assert "Image 1 is the canvas" in p1
     assert "standing" in p1
+    assert "soft squint" in p1
     assert "eye level" in p1
     assert "Bust: full" in p1
     assert "Hips: wide" in p1
@@ -158,9 +160,11 @@ def test_dress_pose_pass_prompts():
         model_profile_text=None,
         scene_description=scene,
     )
-    assert "Image 1 is the base" in p2
+    assert "Image 1 is the target scene photo" in p2
     assert "athletic" in p2
-    assert "Do not reshape her to match the original woman in image 1" in p2
+    assert "prepared model (pass 1 result)" in p2
+    assert "PASS 2 EXPRESSION LOCK" in p2
+    assert "Do NOT copy image 3's neutral studio expression" in p2
     assert "OVERLAYS_AND_TEXT" in p2
     assert "watermark" in p2.lower()
     assert "CROP LOCK" in p2
