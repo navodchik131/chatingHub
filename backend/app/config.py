@@ -1104,8 +1104,8 @@ class Settings(BaseSettings):
 
     @property
     def runs_telegram_user_worker(self) -> bool:
-        """MTProto worker только в api/all; в worker-контейнере не дублируем."""
-        return self.app_role_normalized in ("api", "all")
+        """MTProto (Telethon) — только messaging/all; не в HTTP api (иначе EMFILE → 504 кабинета)."""
+        return self.app_role_normalized in ("messaging", "all")
 
 
 settings = Settings()

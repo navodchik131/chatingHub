@@ -22,7 +22,7 @@ def test_app_role_api_no_background_worker(monkeypatch: pytest.MonkeyPatch) -> N
     assert s.background_maintenance_in_process is False
     assert s.companion_jobs_worker_in_api is False
     assert s.companion_jobs_worker_loop_enabled is False
-    assert s.runs_telegram_user_worker is True
+    assert s.runs_telegram_user_worker is False
 
 
 def test_app_role_worker_runs_maintenance(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,3 +45,4 @@ def test_app_role_messaging_runs_chat_loops(monkeypatch: pytest.MonkeyPatch) -> 
     assert s.companion_jobs_worker_loop_enabled is True
     assert s.messaging_maintenance_in_process is True
     assert s.runs_http_api is False
+    assert s.runs_telegram_user_worker is True

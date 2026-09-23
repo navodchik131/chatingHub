@@ -276,7 +276,15 @@ async def telegram_user_worker_loop() -> None:
 
     log.info("Telegram user MTProto worker started")
     await asyncio.sleep(3)
+    emfile_backoff_s = 0.0
     while True:
+        if emfile_backoff_s > 0:
+            log.warning(
+                "telegram_user worker: backoff %.0fs after EMFILE (too many open files)",
+                emfile_backoff_s,
+            )
+            await asyncio.sleep(emfile_backoff_s)
+            emfile_backoff_s = 0.0
         try:
             async with SessionLocal() as session:
                 has_lease = await try_acquire_process_lease(
@@ -288,11 +296,20 @@ async def telegram_user_worker_loop() -> None:
                 log.warning("telegram_user worker: another process holds lease, skip sync")
             else:
                 await _sync_clients()
+        except OSError as e:
+            if getattr(e, "errno", None) == 24:
+                emfile_backoff_s = 120.0
+                log.error(
+                    "telegram_user worker sync: EMFILE — pause reconnects so HTTP api is not starved"
+                )
+            else:
+                log.exception("telegram_user worker sync failed (OSError)")
         except Exception:
             log.exception("telegram_user worker sync failed")
         active_rows = await _load_active_sessions()
         connected = sum(1 for row in active_rows if get_worker_client(row.id) is not None)
-        wait_s = 2.0 if connected < len(active_rows) else 5.0
+        # Не долбить connect каждые 2 с при недоступном DC — иначе сокеты копятся.
+        wait_s = 30.0 if connected < len(active_rows) else 5.0
         try:
             await asyncio.wait_for(_worker_refresh.wait(), timeout=wait_s)
             _worker_refresh.clear()

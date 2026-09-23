@@ -33,7 +33,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build ap
 На prod:
 - **api** (`APP_ROLE=api`) — HTTP/WebSocket + Redis pub/sub (`REDIS_URL`)
 - **studio-worker** — studio jobs, archive retry, retention/cleanup
-- **messaging-worker** (`APP_ROLE=messaging`) — companion queue, Fanvue poll, companion index
+- **messaging-worker** (`APP_ROLE=messaging`) — companion queue, Fanvue poll, companion index, **Telegram MTProto (Telethon)**
+- **api** — только HTTP/WS; Telethon в api не запускать (утечка fd → 504 кабинета). При проблемах DC: `TELEGRAM_PROXY` в `.env`
 - **Unibox subdomain** — `https://chat.model-mate.online/` (отдельный PWA scope `/`)
 Prod SPA — React `dist-site`. Legacy DesignCode: `frontend/legacy/design-code/` (не в prod build).
 Logout/смена пароля инвалидируют JWT (`auth_token_version`). Rate limit auth — Postgres на prod.

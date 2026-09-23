@@ -135,6 +135,10 @@ def worker_process_coroutines() -> list:
 def messaging_process_coroutines() -> list:
     """Корутины APP_ROLE=messaging — companion queue, Fanvue poll, companion index."""
     coros: list = []
+    if settings.runs_telegram_user_worker and settings.telegram_user_worker_enabled:
+        from app.connectors.telegram_user.worker import telegram_user_worker_loop
+
+        coros.append(telegram_user_worker_loop())
     if settings.companion_jobs_worker_loop_enabled:
         from app.services.companion_bot.job_queue import companion_job_worker_loop
 
