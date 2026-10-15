@@ -219,15 +219,27 @@ def _export(obj: Any) -> Any:
 
 
 @router.get("/files/{fid}")
-async def swap_file(
-    fid: str, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)
-):
-    billing = await resolve_billing_user(session, user)
-    row = await _owned_file(session, billing.id, fid)
-    path = _storage_root() / row.rel_path
-    if not path.is_file():
+async def swap_file(fid: str, session: AsyncSession = Depends(get_session)):
+    """Картинка по секретной ссылке (id — 128 бит случайности, как presigned URL).
+
+    Без проверки сессии: <img> не шлёт Bearer, а cookie сессии живёт меньше, чем токен
+    в localStorage, — из-за этого картинки отдавали 401. Ссылки знает только владелец.
+    """
+    if not re.fullmatch(r"[0-9a-f]{32}", fid or ""):
         raise HTTPException(status_code=404, detail="Файл не найден")
-    return FileResponse(path, media_type=row.mime, headers={"Cache-Control": "private, max-age=31536000, immutable"})
+    row = await session.get(SwapFile, fid)
+    path = _storage_root() / row.rel_path if row is not None else None
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    return FileResponse(
+        path,
+        media_type=row.mime,
+        headers={
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "Referrer-Policy": "no-referrer",
+            "X-Robots-Tag": "noindex, nofollow",
+        },
+    )
 
 
 # ---------------------------------------------------------------- модели и сессии
