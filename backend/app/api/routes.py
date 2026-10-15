@@ -30,6 +30,7 @@ from app.api.studio_routes import router as studio_router
 from app.api.studio_motion_control_routes import router as studio_motion_control_router
 from app.api.studio_workflow_routes import router as studio_workflow_router
 from app.api.support_routes import router as support_router
+from app.api.swap_routes import router as swap_router
 from app.api.tribute_routes import router as tribute_router
 from app.api.stars_business_routes import router as stars_business_router
 from app.api.webhooks_routes import router as webhooks_router
@@ -57,6 +58,7 @@ router.include_router(studio_router)
 router.include_router(studio_motion_control_router)
 router.include_router(studio_workflow_router)
 router.include_router(support_router)
+router.include_router(swap_router)
 router.include_router(analytics_router)
 router.include_router(admin_router)
 router.include_router(admin_support_router)

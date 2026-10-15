@@ -28,6 +28,7 @@ import Support from './pages/Support';
 import Profile from './pages/Profile';
 import Partner from './pages/Partner';
 import ApiStatusBar from './components/ApiStatusBar';
+import NewCabinetPromo from './components/NewCabinetPromo';
 
 const pages = {
   overview: Overview,
@@ -138,6 +139,7 @@ function Shell() {
         {moreOpen && <MoreSheet />}
       </div>
       <DonationAlertBanner />
+      <NewCabinetPromo />
       <ApiStatusBar error={cabinet.error} busy={cabinet.busy} onDismiss={() => cabinet.setError(null)} />
     </div>
   );

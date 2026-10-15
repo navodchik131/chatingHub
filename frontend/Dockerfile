@@ -23,5 +23,7 @@ COPY --from=build /app/frontend/dist-site /usr/share/nginx/html
 COPY --from=build /app/frontend/dist-chat /usr/share/nginx/html/chat
 COPY --from=build /app/frontend/dist-chat-root /usr/share/nginx/html/chat-root
 COPY --from=build /app/frontend/dist/workflow /usr/share/nginx/html/workspace/workflow
+# Новый кабинет (демо): один статичный файл, сборка не нужна
+COPY frontend/swap/ /usr/share/nginx/html/workspace/swap/
 EXPOSE 80
 

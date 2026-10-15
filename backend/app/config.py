@@ -575,6 +575,26 @@ class Settings(BaseSettings):
         description="API-ключ WaveSpeed из .env для подписчиков Managed (студия). BYOK — ключ владельца в БД.",
     )
 
+    # --- Новый кабинет (Model Swap, демо-доступ на /workspace/swap/) ---
+    swap_demo_enabled: bool = Field(
+        default=True,
+        description="Включить демо нового кабинета (поп-ап в старом кабинете и /api/swap/*).",
+    )
+    swap_demo_require_paid: bool = Field(
+        default=True,
+        description="Доступ только при активной оплаченной подписке владельца (админам — всегда).",
+    )
+    swap_grok_model: str = Field(
+        default="grok-4",
+        description="xAI-модель с поддержкой изображений для разбора референсов в новом кабинете.",
+    )
+    swap_grok_timeout_seconds: float = Field(default=180.0, ge=20.0, le=600.0)
+    swap_storage_dir: str = Field(
+        default="data/swap",
+        description="Каталог картинок нового кабинета (относительно backend/).",
+    )
+    swap_max_image_bytes: int = Field(default=15 * 1024 * 1024, ge=1024 * 1024)
+
     @field_validator(
         "wavespeed_platform_api_key",
         "openai_api_key",

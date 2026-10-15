@@ -2210,3 +2210,96 @@ class StarsBusinessOrder(Base):
     )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# --- Новый кабинет (Model Swap, демо) — отдельные сущности, старые персонажи/студия не затрагиваются ---
+
+
+class SwapFile(Base):
+    """Картинка нового кабинета (портреты, панели тела, референсы, результаты генераций)."""
+
+    __tablename__ = "swap_files"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    mime: Mapped[str] = mapped_column(String(64), default="image/jpeg")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    rel_path: Mapped[str] = mapped_column(String(255))
+    """Кэш ссылки WaveSpeed Media (живёт ~7 дней) — чтобы не загружать повторно."""
+    ws_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    ws_url_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class SwapModel(Base):
+    """Персонаж нового кабинета: карточка, параметры тела, набор кадров (JSON-документ)."""
+
+    __tablename__ = "swap_models"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    doc: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class SwapSession(Base):
+    """Сессия «референс → промпт → генерации» (JSON-документ)."""
+
+    __tablename__ = "swap_sessions"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    model_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    doc: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
+class SwapTask(Base):
+    """Задача WaveSpeed, запущенная из нового кабинета (для опроса, сохранения результата и списания)."""
+
+    __tablename__ = "swap_tasks"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    actor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    gen: Mapped[str] = mapped_column(String(16))
+    preset: Mapped[str] = mapped_column(String(16))
+    key_mode: Mapped[str] = mapped_column(String(16))  # own | platform
+    n_images: Mapped[int] = mapped_column(Integer, default=1)
+    price_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    credits: Mapped[int] = mapped_column(Integer, default=0)
+    charged: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(32), default="created", index=True)
+    output_file_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inference_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
