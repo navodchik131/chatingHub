@@ -663,7 +663,9 @@ function shortWhen(t){const l=dayLabel(t);return l==='Сегодня'?hhmm(t):l=
 function plural(n,a,b,c){n=Math.abs(n)%100;const m=n%10;if(n>10&&n<20)return c;if(m>1&&m<5)return b;if(m===1)return a;return c}
 function toast(msg,err){const t=document.createElement('div');t.className='toast'+(err?' err':'');t.innerHTML=esc(msg);$('#toasts').appendChild(t);setTimeout(()=>t.remove(),err?5000:2200)}
 function readFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f)})}
-function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Не удалось открыть картинку'));i.src=src})}
+function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>{const e=new Error('Не удалось открыть картинку');e.raw=String(src||'(пусто)').slice(0,80);rej(e)};i.src=U(src)})}
+/* картинка для Grok: уменьшаем в браузере; если не открылась — отдаём ссылку, сервер возьмёт файл сам */
+async function gimg(src,max,q){try{return await shrink(src,max,q)}catch(e){if(typeof src==='string'&&src.startsWith(FILE_URL))return src;throw e}}
 async function toPortable(dataUrl){const i=await loadImg(dataUrl);const m=Math.max(i.naturalWidth,i.naturalHeight);if(/^data:image\/(png|jpe?g)/.test(dataUrl)&&m<=4000)return{url:dataUrl,w:i.naturalWidth,h:i.naturalHeight};const k=Math.min(1,4000/m);const c=document.createElement('canvas');c.width=Math.round(i.naturalWidth*k);c.height=Math.round(i.naturalHeight*k);c.getContext('2d').drawImage(i,0,0,c.width,c.height);return{url:c.toDataURL('image/jpeg',.93),w:c.width,h:c.height}}
 async function shrink(dataUrl,max,q=.88){const i=await loadImg(dataUrl);const k=Math.min(1,max/Math.max(i.naturalWidth,i.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(i.naturalWidth*k);c.height=Math.round(i.naturalHeight*k);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(i,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q)}
 function dataToBlob(u){const [h,b]=u.split(',');const mime=h.match(/:(.*?);/)[1];const bin=atob(b);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:mime})}
@@ -1156,7 +1158,7 @@ document.addEventListener('keydown',e=>{
 /* ---------- действия: Grok ---------- */
 async function modelContent(m,maxSide=1024){
   const c=[T(`КАРТОЧКА МОДЕЛИ «${m.name}»:\n${m.card||'(карточки нет — опиши по фото)'}\n\nФОТО МОДЕЛИ:`)];
-  for(const f of m.files){c.push(T(`[FILE id=${f.id} метка="${f.label}" ракурс=${f.view}]`));c.push(I(await shrink(f.url,maxSide)))}
+  for(const f of m.files){c.push(T(`[FILE id=${f.id} метка="${f.label}" ракурс=${f.view}]`));c.push(I(await gimg(f.url,maxSide)))}
   return c;
 }
 async function buildMessages(s,m){
@@ -1167,7 +1169,7 @@ async function buildMessages(s,m){
       first=false;
       const c=await modelContent(m);
       c.push(T(`[FILE id=reference метка="Референс" размер=${s.ref.w}x${s.ref.h} ближайшее соотношение=${ratioName(s.ref.w,s.ref.h)}]`));
-      c.push(I(await shrink(s.ref.url,1600)));
+      c.push(I(await gimg(s.ref.url,1600)));
       c.push(T(`Генератор: ${s.target==='seedream'?'только Seedream (prompt_gpt пустой)':s.target==='gpt'?'только GPT Image (prompt_seedream пустой)':'оба'}.`+(t.note?`\nПожелания: ${t.note}`:'')+`\nНапиши промпт и порядок загрузки.`));
       msgs.push({role:'user',content:c});
     }else{
@@ -1414,7 +1416,7 @@ async function runVerdict(s,run){
   try{
     const st=stepList(s).steps[run.step];const checks=st?.j?.checks||[];
     const c=[T(`КАРТОЧКА МОДЕЛИ «${m.name}»:\n${m.card||'(нет)'}\n\nПОРТРЕТ МОДЕЛИ:`),I(await shrinkSafe(portraitOf(m).url,768)),T('РЕФЕРЕНС:'),I(await shrinkSafe(s.ref.url,1024))];
-    for(let k=0;k<run.outputs.length;k++){const o=run.outputs[k];c.push(T(`ВАРИАНТ ${k}:`));c.push(I(await shrinkSafe(o.data||o.url,1024)))}
+    for(let k=0;k<run.outputs.length;k++){const o=run.outputs[k];c.push(T(`ВАРИАНТ ${k}:`));c.push(I(await gimg(o.data||o.url,1024)))}
     c.push(T('Что нужно было проверить: '+(checks.join('; ')||'лицо, выражение, фигура, руки, одежда, фон')+'\nВерни JSON.'));
     const j=parseJson(await callGrok(VERDICT_SYSTEM,[{role:'user',content:c}]));
     const best=Math.min(Math.max(0,parseInt(j.best)||0),run.outputs.length-1);
@@ -2107,7 +2109,7 @@ async function composeCard(){
   S.cardBusy=true;S.cardErr=null;render();
   try{
     const c=[T('Имя модели: '+(e.name||'без имени')+'. Составь карточку.')];
-    for(const f of e.files){c.push(T(`[FILE id=${f.id} метка="${f.label}" ракурс=${f.view}]`));c.push(I(await shrink(f.url,1280)))}
+    for(const f of e.files){c.push(T(`[FILE id=${f.id} метка="${f.label}" ракурс=${f.view}]`));c.push(I(await gimg(f.url,1280)))}
     const j=parseJson(await callGrok(CARD_SYSTEM,[{role:'user',content:c}]));
     if(j.card){e.card=j.card;e.cardAt=Date.now()}
     for(const x of(j.files||[])){const f=e.files.find(f=>f.id===x.id);if(f&&f.view==='other'){if(x.label)f.label=x.label;if(VIEWS[x.view])setView(e,f.id,x.view)}}
