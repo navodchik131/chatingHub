@@ -704,8 +704,8 @@ const outfitText=(b,lang)=>BODY_OPTS.outfit.o[b.outfit]?.[lang==='zh'?1:2]||'';
 
 const ZH_ID='面部特征完全按照图{P}：脸型、眼睛、鼻子、嘴唇、眉毛、肤色、痣和雀斑，发型和发色也与图{P}一致，不要改变长相。';
 const EN_ID='Keep her facial identity exactly as in image {P}: face shape, eyes, nose, lips, brows, skin tone, moles and freckles, plus the same hairstyle and hair color. Do not change her looks.';
-const ZH_ST='纯浅灰色摄影棚背景，柔和均匀的影棚光，没有道具和文字。照片级真实感，皮肤纹理自然，高清细节。';
-const EN_ST='Plain light-gray studio backdrop, soft even studio lighting, no props, no text. Photorealistic, natural skin texture, high detail.';
+const ZH_ST='纯浅灰色背景，柔和均匀的光线，低对比度，阴影保留细节，没有道具和文字。摄影要求：未经修图的真实照片，清晰可见的毛孔、细小绒毛、肤色略不均匀、鼻翼轻微泛红，雀斑（如有）深浅大小不一、分布不均；发丝一根一根分明，有碎发和飞丝，哑光，不发亮、不结成一束一束；眼睛自然湿润，虹膜纹理清晰，颜色自然不过度饱和。不要磨皮、不要美颜、不要塑料感、不要CG渲染感、不要过度锐化、不要过度饱和。';
+const EN_ST='Plain light-gray backdrop, soft even light, low contrast with detail kept in the shadows, no props, no text. Unretouched real photo: visible pores, fine vellus hair, slightly uneven skin tone, faint redness around the nose, freckles (if any) uneven in size and spacing; individual hair strands with flyaways, matte, not glossy or clumped; natural moist eyes with iris texture and natural, not oversaturated color. No skin smoothing, no beauty filter, no plastic or CG look, no oversharpening, no oversaturation.';
 const idz=p=>ZH_ID.replaceAll('{P}',p),ide=p=>EN_ID.replaceAll('{P}',p);
 const KEEP_ZH='保持图1中同一位女性、相同的身材比例、服装、赤脚站姿、背景和光线，只改变拍摄角度：';
 const KEEP_EN='Keep the same woman from image 1 with the same body proportions, outfit, barefoot stance, backdrop and lighting. Change only the camera angle: ';
@@ -1002,12 +1002,15 @@ function refResult(){
     </div></div>
     ${steps[last]?.j&&!wsCfg.key?`<div class="sticky-copy"><button class="btn btn-pri" data-copy-step="${last}">${ic(IC.copy)} Копировать промпт</button></div>`:''}`;
 }
+/* у Seedream свой порядок: эталоны модели впереди, референс последним */
+function orderOf(j,g){const o=g==='sd'&&(j?.upload_order_seedream||[]).length?j.upload_order_seedream:j?.upload_order;return(o||[]).slice().sort((a,b)=>a.slot-b.slot)}
+const isBase=f=>f==='reference'||/^result/.test(f||'');
 function youBubble(s,u){
   const r=u.resultId?(s.results||[]).find(x=>x.id===u.resultId):null;
   return `<div class="step"><div></div><div class="card you" style="border-color:rgba(91,212,255,.25)">${r?`<img src="${U(r.url)}" alt="">`:''}<div><div class="tag">Ты прислал${u.at?' · '+hhmm(u.at):''}</div><div style="margin-top:6px">${esc(u.note||'Посмотри результат')}</div></div></div></div>`;
 }
 function stepCollapsed(s,m,st,i){
-  const j=st.j;const order=(j?.upload_order||[]).slice(0,4);
+  const j=st.j;const order=orderOf(j,s.target==='gpt'?'gpt':'sd').slice(0,4);
   const rr=(s.runs||[]).filter(r=>r.step===i&&r.status==='done');const lr=rr[rr.length-1];const lo=lr&&lr.outputs[lr.final??lr.sel??0];
   const vd=lr?.verdict;const vtxt=vd&&['ok','issues'].includes(vd.status)?(vd.status==='ok'?'Grok: похоже':`Grok: ${(vd.items||[]).filter(x=>!x.ok).length} ${plural((vd.items||[]).filter(x=>!x.ok).length,'замечание','замечания','замечаний')} — ${(vd.items||[]).filter(x=>!x.ok).map(x=>(x.area||'').toLowerCase()).filter(Boolean).join(', ')}`):'';
   return `<button class="card collapsed" data-expand="${i}">
@@ -1020,20 +1023,21 @@ function stepFull(s,m,st,i){
   if(!j)return `<div class="card block"><div class="advice" style="margin:0 0 12px">${ic(IC.warn,18)}<div class="grow">Ответ не разобрался как JSON — показываю как есть.</div></div><pre class="code">${esc(st.a.raw)}</pre></div>`;
   if(j.refused)return `<div class="card alertbox"><div class="icn">${ic(IC.ban)}</div><h3>Grok отказался</h3><p class="muted" style="margin:0">${esc(j.refusal_reason||'')}</p></div>`;
   const target=s.target;
-  const order=(j.upload_order||[]).slice().sort((a,b)=>a.slot-b.slot);
   const genChip=target==='gpt'?`<span class="chip" style="border-color:rgba(91,212,255,.4);color:var(--gpt)"><span class="dot gp"></span>GPT Image 2.5 Edit</span>`:target==='both'?`<span class="chip"><span class="dot sd"></span><span class="dot gp"></span>Оба генератора</span>`:`<span class="chip" style="border-color:rgba(255,122,77,.4);color:var(--seedream)"><span class="dot sd"></span>Seedream V5.0 Pro Edit</span>`;
   const settings=[target!=='gpt'&&j.settings_seedream?(target==='both'?'SD: ':'')+j.settings_seedream:'',target!=='seedream'&&j.settings_gpt?(target==='both'?'GPT: ':'')+j.settings_gpt:''].filter(Boolean);
   const hasZh=!!(j.prompt_seedream||'').trim(),hasEn=!!(j.prompt_gpt||'').trim();
   const tab=S.promptTab[i]||(hasZh?'zh':'en');
   const prompt=tab==='zh'?j.prompt_seedream:j.prompt_gpt;
+  const order=orderOf(j,tab==='zh'?'sd':'gpt');
+  const ownSd=hasZh&&hasEn&&(j.upload_order_seedream||[]).length>0;
   const runsOf=(s.runs||[]).filter(r=>r.step===i);const okStep=runsOf.some(r=>r.verdict?.status==='ok');
   return `<div class="right enter" style="gap:16px">
     <div class="chips" style="align-items:center"><span class="tag" style="color:var(--accent)">Шаг ${i+1}</span>${j.pass==='second'?'<span class="chip solid">2-й проход</span>':''}${genChip}${j.aspect_ratio?`<span class="chip">aspect_ratio ${esc(j.aspect_ratio)}</span>`:''}${settings.map(x=>`<span class="chip" style="text-transform:none;letter-spacing:.02em">${esc(x)}</span>`).join('')}</div>
     <p class="summary">${esc(j.summary||'')}</p>
     <div class="card block">
-      <div class="bh"><h3>Порядок загрузки</h3><span class="tag">${order.length} ${plural(order.length,'картинка','картинки','картинок')}</span><span class="grow"></span><button class="btn btn-sm" data-zip="${i}">${ic(IC.dl,16)} Скачать все · zip</button></div>
-      <div class="slots">${order.map((o,k)=>{const f=fileById(s,m,o.file);return `<div class="slot ${k===0?'first':''}">
-        <div class="pic">${f?`<img src="${U(f.url)}" alt="">`:`<div class="ph" style="position:absolute;inset:0"></div>`}<span class="n">${pad2(o.slot)}</span>${k===0?'<span class="badge chip solid" style="height:20px;font-size:10px">правим</span>':(f?`<button class="dl" data-dlfile="${esc(o.file)}" data-slot="${o.slot}" title="Скачать">${ic(IC.dl,16)}</button>`:'')}</div>
+      <div class="bh"><h3>Порядок загрузки</h3>${ownSd?`<span class="chip"><span class="dot ${tab==='zh'?'sd':'gp'}"></span>для ${tab==='zh'?'Seedream':'GPT Image'}</span>`:''}<span class="tag">${order.length} ${plural(order.length,'картинка','картинки','картинок')}</span><span class="grow"></span><button class="btn btn-sm" data-zip="${i}">${ic(IC.dl,16)} Скачать все · zip</button></div>
+      <div class="slots">${order.map((o,k)=>{const f=fileById(s,m,o.file);return `<div class="slot ${isBase(o.file)?'first':''}">
+        <div class="pic">${f?`<img src="${U(f.url)}" alt="">`:`<div class="ph" style="position:absolute;inset:0"></div>`}<span class="n">${pad2(o.slot)}</span>${isBase(o.file)?'<span class="badge chip solid" style="height:20px;font-size:10px">правим</span>':(f?`<button class="dl" data-dlfile="${esc(o.file)}" data-slot="${o.slot}" title="Скачать">${ic(IC.dl,16)}</button>`:'')}</div>
         <b>${esc(o.label||f?.label||o.file)}</b><small>${esc(o.role||'')}${f?'':' · файл не найден'}</small></div>`}).join('')}</div>
     </div>
     <div class="card block">
@@ -1175,7 +1179,7 @@ async function buildMessages(s,m){
     }else{
       const c=[];const r=t.resultId&&(s.results||[]).find(x=>x.id===t.resultId);
       if(r){c.push(T(`[FILE id=${r.id} метка="Результат генерации"]`));c.push(I(await shrinkSafe(r.url,1600)))}
-      c.push(T((t.note?'Что не так: '+t.note+'\n':'')+'Сравни с референсом и карточкой. Дай исправление в том же JSON-формате. Если подходит второй проход — в upload_order первым ставь результат и укажи pass: second.'));
+      c.push(T((t.note?'Что не так: '+t.note+'\n':'')+'Сравни с референсом и карточкой. Дай исправление в том же JSON-формате. Если подходит второй проход — в upload_order и upload_order_seedream первым ставь результат и укажи pass: second.'));
       msgs.push({role:'user',content:c});
     }
   }
@@ -1230,7 +1234,7 @@ async function runFix(opts){
 }
 async function zipStep(i,btn){
   const s=S.session;const m=S.models.find(x=>x.id===s.modelId);const j=stepList(s).steps[i]?.j;if(!j)return;
-  const order=(j.upload_order||[]).slice().sort((a,b)=>a.slot-b.slot);
+  const order=orderOf(j,(S.promptTab[i]||((j.prompt_seedream||'').trim()?'zh':'en'))==='zh'?'sd':'gpt');
   const files=order.map(o=>({o,f:fileById(s,m,o.file)})).filter(x=>x.f);
   const name=k=>`${pad2(files[k].o.slot)}_${safe(files[k].o.label||files[k].f.label)}.${extOf(files[k].f.url)}`;
   if(window.JSZip){
@@ -1370,18 +1374,20 @@ const _ps=new Map();
 function persistSession(s){clearTimeout(_ps.get(s.id));_ps.set(s.id,setTimeout(()=>Sessions.put(stripRuns(s)).catch(e=>console.error(e)),400))}
 function stripRuns(s){return{...s,runs:(s.runs||[]).map(r=>{const{cancel,thumbs,onDone,_notified,...x}=r;return x})}}
 function sessionCost(s){return(s.runs||[]).reduce((a,r)=>a+(r.cost||0),0)}
-function stepImages(s,i){
+function stepImages(s,i,g='gpt'){
   const m=S.models.find(x=>x.id===s.modelId);const j=stepList(s).steps[i]?.j;if(!j)return[];
-  return(j.upload_order||[]).slice().sort((a,b)=>a.slot-b.slot).map(o=>{const f=fileById(s,m,o.file);return f&&{src:f.url,label:o.label||f.label}}).filter(Boolean);
+  return orderOf(j,g).map(o=>{const f=fileById(s,m,o.file);return f&&{src:f.url,label:o.label||f.label}}).filter(Boolean);
 }
 function launchStep(s,i,o){
   const j=stepList(s).steps[i]?.j;if(!j)return;
-  const imgs=stepImages(s,i);if(!imgs.length){toast('Нет картинок для запуска',true);return}
   const gens=o.gen==='both'?['sd','gpt']:[o.gen];
-  const price=gens.reduce((a,g)=>a+runPrice(g,o.preset,imgs.length)*o.n,0);
+  const imgsOf=Object.fromEntries(gens.map(g=>[g,stepImages(s,i,g)]));
+  if(gens.some(g=>!imgsOf[g].length)){toast('Нет картинок для запуска',true);return}
+  const price=gens.reduce((a,g)=>a+runPrice(g,o.preset,imgsOf[g].length)*o.n,0);
   const lim=limitCheck(price);if(lim){toast(lim.msg,true);return}
   for(const g of gens){
     const prompt=(g==='sd'?j.prompt_seedream:j.prompt_gpt)||'';if(!prompt.trim())continue;
+    const imgs=imgsOf[g];
     const run={id:uid(),step:i,gen:g,preset:o.preset,n:o.n,prompt,ar:j.aspect_ratio,status:'uploading',outputs:[],startedAt:Date.now(),price1:runPrice(g,o.preset,imgs.length),sel:0,nImgs:imgs.length,thumbs:imgs.map(x=>x.src)};
     s.runs=[...(s.runs||[]),run];
     startRun(run,imgs,()=>sessionRunChanged(s,run));
