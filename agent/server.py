@@ -463,7 +463,7 @@ def gen_wavespeed(cid, engine, prompt, image_ids, aspect, cfg):
 TOOLS = [
     {"type": "function", "function": {
         "name": "generate_image",
-        "description": "Сгенерировать кадр через WaveSpeed (GPT Image 2.5 или Seedream V5.0 Pro). В режимах replace/new/carousel/edit входы (лица, тело, силуэт, фактура) и полный промпт с абзацами реализма собирает ПРИЛОЖЕНИЕ по проверенному рецепту — ты даёшь только mode, source_id и описание сцены brief_en + brief_zh. Силуэт для Seedream-замены приложение сделает само. mode=free — только для особых случаев (создание эталонов модели, детализирующий проход, дорисовка серой области): тогда сам пишешь prompt и image_ids. Несколько вызовов в одном ответе идут параллельно.",
+        "description": "Сгенерировать кадр через WaveSpeed (GPT Image 2.5 или Seedream V5.0 Pro). В режимах replace/new/carousel/edit входы (лица, тело, силуэт, фактура) и полный промпт с абзацами реализма собирает ПРИЛОЖЕНИЕ по проверенному рецепту — ты даёшь только mode, source_id и описание сцены brief_en + brief_zh (для carousel и new — ОБЯЗАТЕЛЬНО, у каждого кадра своё: scene с ракурсом и крупностью, action, expression; одной подписи label мало). Силуэт для Seedream-замены приложение сделает само. mode=free — только для особых случаев (создание эталонов модели, детализирующий проход, дорисовка серой области): тогда сам пишешь prompt и image_ids. Несколько вызовов в одном ответе идут параллельно.",
         "parameters": {"type": "object", "properties": {
             "engine": {"type": "string", "enum": ["gpt", "seedream"]},
             "mode": {"type": "string", "enum": list(recipes.MODES), "description": "replace — заменить девушку на фото/кадре видео на модель; new — новый кадр по описанию; carousel — новый кадр той же серии по основе; edit — локальная правка основы; free — свой промпт"},
@@ -785,6 +785,10 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
                 raise RuntimeError("не нашёл исходное фото (source_id)")
         lang = "zh" if eng == "seedream" else "en"
         other = "en" if lang == "zh" else "zh"
+        if no_brief(a) and a.get("label"):
+            # Grok часто кладёт позу только в подпись («карусель 2: 3/4, рука в волосах») — строим описание из неё
+            desc = re.sub(r"^[^:]*:\s*", "", str(a["label"])).strip() or str(a["label"])
+            a[f"brief_{lang}"] = translate_brief({"scene": desc}, lang, cfg)
         if no_brief(a):
             # без описания сцены модель просто повторит основу — не запускаем и не платим
             raise RuntimeError("не запущено: нет brief_en/brief_zh. Для каждого кадра опиши scene (ракурс камеры и крупность), "
@@ -1227,6 +1231,7 @@ def agent_loop(cid, cfg=None):
         chat = load_chat(cid)
         # начало хода = последнее сообщение пользователя
         turn_start = max([i for i, m in enumerate(chat["messages"]) if m["role"] == "user"] or [0])
+        err_streak = 0
         for step in range(cfg["max_steps"]):
             if flag["stop"]:
                 append_msg(cid, {"role": "assistant", "text": "Остановлено."}); break
@@ -1288,6 +1293,16 @@ def agent_loop(cid, cfg=None):
                     append_msg(cid, {"role": "tool", "tool_call_id": c["id"], "name": c["function"]["name"],
                                      "text": text, "images": ids, "videos": vids_by_call.get(c["id"], []),
                                      "dt": round(time.time() - now, 1), "cost": cost_i})
+                loud = [c for c in calls if c["function"]["name"] not in QUIET]
+                if loud and all(str(results.get(c["id"], ("",))[0]).startswith("ОШИБКА") for c in loud):
+                    err_streak += 1
+                else:
+                    err_streak = 0
+                if err_streak >= 2:
+                    update_chat(cid, lambda c: c.__setitem__("jobs", []))
+                    append_msg(cid, {"role": "error", "code": "tool_loop",
+                                     "text": "Остановлено: шаг дважды подряд закончился ошибкой. Уточните запрос или нажмите «Повторить»."})
+                    break
                 if total:
                     add_spend(total)
                     update_chat(cid, lambda c: c.__setitem__("spent", round(c.get("spent", 0) + total, 3)))
