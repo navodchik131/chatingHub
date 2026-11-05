@@ -595,6 +595,30 @@ class Settings(BaseSettings):
     )
     swap_max_image_bytes: int = Field(default=15 * 1024 * 1024, ge=1024 * 1024)
 
+    # --- Новый кабинет · агент (Persona Studio в режиме «хостинг», контейнер agent, /workspace/agent/) ---
+    agent_demo_enabled: bool = Field(default=True, description="Включить /api/agent/* и кнопку в старом кабинете.")
+    agent_demo_require_paid: bool = Field(
+        default=True,
+        description="Пускать только с активной подпиской или кредитами на балансе (админам — всегда).",
+    )
+    agent_internal_token: str = Field(
+        default="",
+        description="Общий секрет с контейнером agent (PS_INTERNAL_TOKEN). Пусто — агент выключен.",
+    )
+    agent_credit_multiplier: float = Field(
+        default=2.0,
+        ge=1.0,
+        le=10.0,
+        description="Кредиты = себестоимость $ × множитель × 100. Покрывает ЮKassa, налог, бонусы и рефералку.",
+    )
+    agent_grok_model: str = Field(default="grok-4", description="Модель Grok для агента.")
+    agent_grok_prices_json: str = Field(
+        default="",
+        description='Цены Grok, $ за 1 млн токенов: {"grok-4": [вход, кэш, выход], ...}. Пусто — встроенные.',
+    )
+    agent_public_path: str = Field(default="/workspace/agent/")
+    agent_billing_url: str = Field(default="/workspace/billing", description="Куда вести «Пополнить баланс».")
+
     @field_validator(
         "wavespeed_platform_api_key",
         "openai_api_key",

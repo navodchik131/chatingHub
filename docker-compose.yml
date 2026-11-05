@@ -49,6 +49,24 @@ services:
       # Cookies IG-бота на хосте (не в git) — без bind mount контейнер их не видит.
       - ./backend/ig-bot:/app/backend/ig-bot:ro
 
+  # Новый кабинет · агент: Persona Studio в режиме «хостинг» (/workspace/agent/ за nginx).
+  # Вход, тариф, ключи и кредиты — через /api/agent/* этого же api (общий секрет AGENT_INTERNAL_TOKEN).
+  agent:
+    build:
+      context: .
+      dockerfile: deploy/agent/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8770:8765"
+    environment:
+      PS_HOSTED_API: http://api:8080/api/agent
+      PS_INTERNAL_TOKEN: ${AGENT_INTERNAL_TOKEN:-}
+    volumes:
+      - agent_data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+
   # Кабинет ModelMate OS. На production за nginx: /workspace/ (см. deploy/nginx-model-mate.online.conf).
   frontend:
     build:
@@ -64,3 +82,4 @@ services:
 volumes:
   chating_pg:
   chating_app_data:
+  agent_data:

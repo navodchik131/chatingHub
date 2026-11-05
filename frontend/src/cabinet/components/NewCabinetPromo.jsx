@@ -6,6 +6,8 @@ import Hoverable from './Hoverable';
 
 /** Отдельная статичная страница нового кабинета (демо), см. frontend/swap/index.html. */
 export const SWAP_APP_URL = '/workspace/swap/';
+/** Persona Studio (агент на Grok + WaveSpeed), отдельный контейнер agent. */
+export const AGENT_APP_URL = '/workspace/agent/';
 
 const SESSION_KEY = 'mm_swap_promo_seen';
 const HIDE_KEY = 'mm_swap_promo_hide';
@@ -18,6 +20,7 @@ const TEXT = {
     note: 'Старый кабинет продолжает работать как раньше — вернуться можно в любой момент.',
     locked: 'Демо доступно на активной подписке.',
     open: 'Открыть новый кабинет',
+    agent: 'Агент: чат с Grok, замена на фото и в видео',
     billing: 'Оформить подписку',
     later: 'Позже',
     hide: 'Больше не показывать',
@@ -29,6 +32,7 @@ const TEXT = {
     note: 'The current workspace keeps working as before — you can come back any time.',
     locked: 'The demo is available with an active subscription.',
     open: 'Open new workspace',
+    agent: 'Agent: Grok chat, photo and video swap',
     billing: 'Get a subscription',
     later: 'Later',
     hide: "Don't show again",
@@ -54,6 +58,7 @@ function writeFlag(storage, key) {
 export default function NewCabinetPromo() {
   const { lang, go } = useApp();
   const [access, setAccess] = useState(null);
+  const [agent, setAgent] = useState(null);
   const [open, setOpen] = useState(false);
   const [hide, setHide] = useState(false);
 
@@ -66,6 +71,12 @@ export default function NewCabinetPromo() {
         if (!alive || !j || !j.enabled) return;
         setAccess(j);
         setOpen(true);
+      })
+      .catch(() => {});
+    apiFetch('/api/agent/access', { timeoutMs: 10000 })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (alive && j && j.enabled && j.allowed) setAgent(j);
       })
       .catch(() => {});
     return () => {
@@ -149,6 +160,22 @@ export default function NewCabinetPromo() {
             {t.later}
           </Hoverable>
         </div>
+        {agent && (
+          <Hoverable
+            style={{
+              marginTop: 8, textAlign: 'center', border: `1px solid ${color.limeInkSoft}`, color: color.lime, fontWeight: 700,
+              fontSize: 13.5, borderRadius: 11, padding: '10px 16px', cursor: 'pointer',
+            }}
+            hover={{ filter: 'brightness(1.08)' }}
+            onClick={() => {
+              writeFlag(window.sessionStorage, SESSION_KEY);
+              if (hide) writeFlag(window.localStorage, HIDE_KEY);
+              window.location.assign(agent.url || AGENT_APP_URL);
+            }}
+          >
+            {t.agent}
+          </Hoverable>
+        )}
 
         <label style={{
           display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 12.5,
