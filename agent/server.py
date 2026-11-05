@@ -632,6 +632,12 @@ def bill(cfg, cid, kind, usd=0.0, usage=None, model=None, meta=None):
     return r
 
 
+def no_brief(a):
+    """Карусель/новый кадр без описания сцены — модель просто повторит основу."""
+    return a.get("mode") in ("carousel", "new") and not any(
+        (a.get(f"brief_{L}") or {}).get(k) for L in ("en", "zh") for k in ("scene", "action") if isinstance(a.get(f"brief_{L}"), dict))
+
+
 def tool_cost(call, cfg, chat=None):
     nm = call["function"]["name"]; a = parse_args(call)
     if nm == "edit_video":
@@ -639,6 +645,8 @@ def tool_cost(call, cfg, chat=None):
         return video_cost(rec.get("dur", 10), a.get("resolution", "480p"), cfg)
     if nm != "generate_image":
         return 0.0
+    if no_brief(a):
+        return 0.0   # не запустится (см. prepare) — не спрашиваем подтверждения и не резервируем
     return gen_price(a.get("engine", "gpt"), len(a.get("image_ids") or []), cfg)
 
 
@@ -776,6 +784,10 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
                 raise RuntimeError("не нашёл исходное фото (source_id)")
         lang = "zh" if eng == "seedream" else "en"
         other = "en" if lang == "zh" else "zh"
+        if no_brief(a):
+            # без описания сцены модель просто повторит основу — не запускаем и не платим
+            raise RuntimeError("не запущено: нет brief_en/brief_zh. Для каждого кадра опиши scene (ракурс камеры и крупность), "
+                               "action (поза, руки, взгляд) и expression — разные у каждого кадра — и вызови заново")
         if mode == "replace" and not ((a.get("brief_en") or {}).get("outfit") or (a.get("brief_zh") or {}).get("outfit")):
             set_status(cid, "running", "Описываю исходник…")
             try:
@@ -1280,8 +1292,20 @@ def agent_loop(cid, cfg=None):
                     update_chat(cid, lambda c: c.__setitem__("spent", round(c.get("spent", 0) + total, 3)))
                 update_chat(cid, lambda c: c.__setitem__("jobs", []))
                 if new_imgs:
-                    append_msg(cid, {"role": "review", "text": "Результаты инструментов для проверки (лицо vs эталоны, руки, одежда, фон). После проверки вызови review:",
-                                     "images": new_imgs, "hidden": True})
+                    text = "Результаты инструментов для проверки (лицо vs эталоны, руки, одежда, фон). После проверки вызови review:"
+                    bases = []
+                    for c in calls:
+                        a_c = parse_args(c)
+                        if c["function"]["name"] == "generate_image" and a_c.get("mode") == "carousel" and a_c.get("source_id") in chat["images"]:
+                            if a_c["source_id"] not in bases:
+                                bases.append(a_c["source_id"])
+                    if bases:
+                        text = ("Карусель. ПЕРВАЯ картинка — основа (" + ", ".join(bases) + "), дальше — новые кадры. "
+                                "Сравни каждый кадр с основой и кадры между собой: поза, руки, ракурс камеры, крупность, эмоция. "
+                                "Если кадр почти повторяет основу или соседний кадр (поменялись только руки) — это брак: "
+                                "в issues «повтор основы: <кадр>», и в этом же ходе переделай такие кадры с другим ракурсом и крупностью. "
+                                "Не пиши «ракурс изменился», если он не изменился. Потом вызови review:")
+                    append_msg(cid, {"role": "review", "text": text, "images": bases + [i for i in new_imgs if i not in bases], "hidden": True})
                 continue
             set_status(cid, "running", "Grok думает…")
             msgs = build_messages(chat, cfg, turn_start)

@@ -37,7 +37,9 @@ def role_of(chat, iid, a, k):
     """('face'|'body'|'cat'|'lineart'|'source'|'texture'|'base'|'other', детали)."""
     p = chat["persona"]; rec = chat["images"].get(iid, {})
     mode = a.get("mode") or "free"
-    if mode in ("edit", "carousel") and k == 0:
+    if mode == "edit" and k == 0:
+        return "base", ""
+    if mode == "carousel" and iid == a.get("source_id"):
         return "base", ""
     if iid in p["faces"]:
         return "face", rec.get("label", "")
@@ -130,7 +132,9 @@ def pick_inputs(chat, a, engine):
             ids = faces + body + cats
         return ids + ([tex] if tex and tex not in ids else [])
     if mode == "carousel":
-        ids = [src] + faces + cats
+        # основа НЕ первой: первая картинка весит больше всех, и с основой на 1-м месте модель
+        # повторяет её позу и кадр. Лица первыми, основа — только как образец одежды/места/света.
+        ids = faces + [src] + cats
         return ids + ([tex] if engine == "seedream" and tex and tex not in ids else [])
     if mode == "edit":
         return [src] + (faces if a.get("with_faces") else []) + cats
@@ -284,8 +288,9 @@ def _render_zh(chat, a, mode, roles, p):
             P.append(f"服装：{_b(b, 'outfit')}。真实面料纹理、自然褶皱、缝线和轻微起球，哑光面料，不要塑料感，衣服上没有其他文字。")
         P.append(f"环境：{_b(b, 'background') or '普通、有生活痕迹的真实地点'}，干净但有生活痕迹。光线：{_b(b, 'light') or '明亮自然的日光'}。背景清晰，不要虚化。")
     elif mode == "carousel":
-        P.append(f"{base}是她在这个地点的照片。同一个女孩，同样的衣服，同样的地点和光线，新的一张：{_b(b, 'scene')}" +
-                 (f"，{_b(b, 'action')}" if _b(b, 'action') else "") + "。")
+        P.append(f"拍一张全新的照片，不是修改{base}：{_b(b, 'scene')}" + (f"，{_b(b, 'action')}" if _b(b, 'action') else "") + "。")
+        P.append(f"{base}只用来参考她的衣服、地点和光线。姿势、手的位置、机位、拍摄角度、景别和构图都必须和{base}明显不同，"
+                 f"不要复制{base}的姿势和构图，不要和{base}几乎一样。")
         if F:
             P.append(f"人物身份（最重要）：她就是{F}中的那位女性，同一个人，脸要和{F}一模一样" + (f"：{card}" if card else "") +
                      f"。脸型和五官比例不要变，不要瘦脸，不要尖下巴。发型、衣服和妆容和{base}一样，不取{F}的衣服、背景和棚拍光线。")
@@ -351,8 +356,9 @@ def _render_en(chat, a, mode, roles, p):
             P.append(f"Outfit: {_b(b, 'outfit')}, real fabric texture, natural wrinkles, seams and slight pilling, matte, no extra text on clothes.")
         P.append(f"Environment: {_b(b, 'background') or 'an ordinary lived-in real place'}, clean but lived-in, everyday details. Light: {_b(b, 'light') or 'bright natural daylight'}.")
     elif mode == "carousel":
-        P.append(f"{base[0].upper() + base[1:]} shows her at this location. Same woman, same clothes, same place and light — a new shot: {_b(b, 'scene')}"
-                 + (f". {_b(b, 'action')}" if _b(b, 'action') else "") + ".")
+        P.append(f"A completely new photo, not an edit of {base}: {_b(b, 'scene')}" + (f". {_b(b, 'action')}" if _b(b, 'action') else "") + ".")
+        P.append(f"Use {base} only for her clothes, the location and the light. Pose, hand placement, camera position, camera angle, "
+                 f"shot size and framing must be clearly different from {base} — do not copy its pose or composition.")
         if F:
             P.append(f"IDENTITY (most important): she is the exact same woman as in {F}" + (f": {card}" if card else "") +
                      f". Hairstyle, clothes and makeup as in {base}; do not take clothes, background or studio light from {F}.")
