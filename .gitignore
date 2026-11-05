@@ -47,3 +47,10 @@ ig-downloader/
 backend/ig-bot/cookies.txt
 backend/data/ig_bot/cookies.txt
 backend/data/ig_bot/cookies.active.txtbackend/data/swap/
+
+# Сессии/cookie и временные выгрузки — не в репозиторий
+cookies.txt
+backend/data/ig_bot_cookies*.txt
+tmp-*
+*.patch
+frontend/dist-chat-root/
