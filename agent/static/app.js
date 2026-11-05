@@ -850,7 +850,7 @@ function renderHostedSettings(cfg){
   const row = (t, v) => `<div class="row-sb"><span>${t}</span><span class="cost">${v}</span></div>`;
   $('#main').innerHTML = `<div class="set scroll">
     <div class="set-h"><button class="btn g sm" data-act="tochat">${ic('chevL')}К студии</button><b>Настройки</b></div>
-    <div class="set-wrap"><div class="set-col">
+    <div class="set-wrap one"><div class="set-col">
       <section class="scard"><h3>Баланс</h3>
         ${row('Сейчас на счёте', (cfg.balance ?? 0) + ' кр.')}
         <span class="meta">${own ? 'Картинки и видео идут через ваш ключ WaveSpeed (тариф Pro) — WaveSpeed списывает с него напрямую. Кредиты тратятся только на Grok: разбор фото, промпты, проверку результата.'

@@ -342,6 +342,7 @@ details.step[open]>summary .chev{transform:rotate(90deg)}
 .set-nav a{height:34px;display:flex;align-items:center;padding:0 12px;border-radius:var(--r-sm);color:var(--muted);font-size:13px}
 .set-nav a:hover,.set-nav a.on{background:var(--hover);color:var(--text)}
 .set-col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.set-wrap.one{grid-template-columns:minmax(0,1fr);max-width:640px}
 .scard{border-radius:var(--r-card);background:var(--raised);border:1px solid var(--line);padding:18px;display:flex;flex-direction:column;gap:14px}
 .scard h3{margin:0;font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
 .keyrow{display:flex;gap:8px}
