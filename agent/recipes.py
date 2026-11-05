@@ -104,6 +104,25 @@ def texture_ref(chat):
     return max(favs)[1] if favs else None
 
 
+FACE_WORDS = ("close-up", "closeup", "close up", "headshot", "portrait shot", "face only", "крупн", "портрет", "特写", "头像", "大头", "脸部")
+FULL_WORDS = ("full-body", "full body", "full-length", "head to toe", "в рост", "в полный рост", "全身")
+FACE_CATS = ("лиц", "волос", "причёс", "прическ", "макияж", "серьг", "очк", "face", "hair", "makeup")
+
+
+def framing_of(a):
+    """face — видно только лицо/плечи; half — по пояс; full — в рост; None — не понятно (берём как раньше)."""
+    f = a.get("framing")
+    if f in ("face", "half", "full"):
+        return f
+    txt = " ".join(str((a.get(f"brief_{L}") or {}).get("scene") or "") for L in ("en", "zh")
+                   if isinstance(a.get(f"brief_{L}"), dict)).lower() + " " + str(a.get("label") or "").lower()
+    if any(w in txt for w in FULL_WORDS):
+        return "full"
+    if any(w in txt for w in FACE_WORDS):
+        return "face"
+    return None
+
+
 def pick_inputs(chat, a, engine):
     """Порядок входов по проверенным рецептам. Возвращает список id (силуэт должен уже существовать)."""
     mode = a.get("mode"); src = a.get("source_id")
@@ -116,6 +135,10 @@ def pick_inputs(chat, a, engine):
             if k.lower() == str(name).lower() and v.get("ids"):
                 cats.append(v["ids"][0])
     cats = cats[:2]
+    if framing_of(a) == "face":
+        # крупный план: тело и категории тела в кадр не попадут — только сбивают композицию и дорожают
+        body = []
+        cats = [c for c in cats if any(w in next((k for k, v in p.get("extra", {}).items() if c in v.get("ids", [])), "").lower() for w in FACE_CATS)]
     tex = a.get("texture_id") or texture_ref(chat)
     if a.get("texture_id") is False or a.get("no_texture"):
         tex = None
