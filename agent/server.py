@@ -258,6 +258,62 @@ def add_video(cid, data, source, label="", meta=None, n_frames=8, ext=".mp4"):
     return vid
 
 
+_CASCADES = {}
+
+
+def _cascade(name):
+    import cv2
+    if name not in _CASCADES:
+        _CASCADES[name] = cv2.CascadeClassifier(cv2.data.haarcascades + name)
+    return _CASCADES[name]
+
+
+def face_score(jpeg):
+    """Насколько хорошо видно лицо: крупнее и анфас — лучше, два открытых глаза — сильно лучше."""
+    import cv2, numpy as np
+    bgr = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+    if bgr is None:
+        return 0.0
+    g = cv2.equalizeHist(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY))
+    h, w = g.shape
+    best = 0.0
+    for (x, y, fw, fh) in _cascade("haarcascade_frontalface_default.xml").detectMultiScale(g, 1.1, 6, minSize=(max(24, w // 30),) * 2):
+        roi = g[y: y + fh // 2 + fh // 8, x: x + fw]
+        eyes = [e for e in _cascade("haarcascade_eye.xml").detectMultiScale(roi, 1.1, 5, minSize=(max(6, fw // 9),) * 2)
+                if e[1] + e[3] / 2 < fh * 0.6]
+        sc = (fw * fh) / (w * h) * (1.0 + 1.5 * min(len(eyes), 2)) * (0.3 if not eyes else 1.0)
+        best = max(best, sc)
+    return best
+
+
+def face_times(cid, vid):
+    """Секунды, где лицо видно лучше всего (анфас, глаза открыты). Кэшируется в записи видео."""
+    chat = load_chat(cid); rec = chat["videos"][vid]
+    if "face_times" in rec:
+        return rec["face_times"]
+    path = video_path(cid, vid, chat); dur = float(rec.get("dur") or 0)
+    step = max(0.25, dur / 32)
+    res = []
+    t = 0.1
+    while t < dur - 0.05:
+        try:
+            sc = face_score(grab_frame(path, t, 960))
+            if sc > 0:
+                res.append((sc, round(t, 2)))
+        except Exception:
+            traceback.print_exc()
+        t += step
+    res.sort(reverse=True)
+    top = []
+    for sc, t in res:   # разнесённые по времени моменты
+        if all(abs(t - u) >= 1.0 for u in top):
+            top.append(t)
+        if len(top) == 3:
+            break
+    update_chat(cid, lambda c: c["videos"][vid].__setitem__("face_times", top))
+    return top
+
+
 def white_ratio(path):
     """Доля почти белых серых пикселей — у силуэта (белая фигура с линиями) она в разы выше, чем у оригинала."""
     im = Image.open(path).convert("RGB"); im.thumbnail((256, 256))
@@ -1238,6 +1294,9 @@ def video_line(r):
         s += f", {r['resolution']}"
     if r.get("label"):
         s += f" «{r['label']}»"
+    if r.get("face_times"):
+        s += "; лицо анфас с открытыми глазами лучше всего видно на " + ", ".join(f"{t} с" for t in r["face_times"]) + \
+             " — ключевые кадры для замены бери отсюда"
     if r.get("frames"):
         s += "; кадры: " + ", ".join(r["frames"])
     return s
@@ -1277,8 +1336,12 @@ def build_messages(chat, cfg, turn_start):
             if m["role"] == "user" and m.get("pair"):
                 pr = m["pair"]
                 text = (f"[Два видео: оригинал {pr['orig']} и ГОТОВЫЙ СИЛУЭТ {pr['sil']} (пользователь сделал сам). lineart_video НЕ делай. "
-                        f"Режим 6 с готовым силуэтом: 1) по кадрам оригинала выбери ОДИН момент, где модель видна лучше всего (лицо анфас, видна одежда) "
-                        f"→ video_frames оригинала в эту секунду; 2) generate_image engine=gpt mode=replace по этому кадру (одежда и место — с оригинала); "
+                        + (f"Ключевой кадр уже вынут приложением: {pr['key']} ({pr['key_t']:.2f} с — лицо анфас, глаза открыты). "
+                           f"Режим 6 с готовым силуэтом: 1) generate_image engine=gpt mode=replace source_id={pr['key']} (одежда и место — с оригинала); "
+                           if pr.get("key") else
+                           f"Режим 6 с готовым силуэтом: 1) выбери ОДИН момент, где лицо анфас и глаза ОТКРЫТЫ (не опущенная голова, не рука на лице) "
+                           f"→ video_frames оригинала; generate_image engine=gpt mode=replace по этому кадру (одежда и место — с оригинала); ")
+                        + f"проверь: лицо на кадре должно совпадать с портретом модели, иначе переделай до видео; "
                         f"3) после проверки кадра — edit_video: video_id={pr['sil']}, image_ids=[кадр с заменой, портрет анфас из «Лицо»], "
                         f"промпт по режиму 6 (одежду словами — с оригинала)."
                         + (f" Длительность различается на {pr['dur_diff']} с — предупреди пользователя." if pr.get("dur_diff", 0) > 0.5 else "")
@@ -1525,10 +1588,31 @@ def agent_loop(cid, cfg=None):
             if last and last["role"] == "user" and len(last.get("videos") or []) == 2 and "pair" not in last:
                 set_status(cid, "running", "Смотрю, где оригинал, а где силуэт…")
                 pair = detect_pair(cid, last["videos"])
+                if pair:
+                    set_status(cid, "running", "Ищу кадр, где лицо видно лучше всего…")
+                    try:
+                        ft = face_times(cid, pair["orig"])
+                        if ft:
+                            t = ft[0]
+                            pair["key"] = add_image(cid, grab_frame(video_path(cid, pair["orig"]), t, 2048), "frame",
+                                                    f"ключевой кадр · {pair['orig']} · {t:.2f}s", {"video": pair["orig"], "vt": t})
+                            pair["key_t"] = t
+                    except Exception:
+                        traceback.print_exc()
 
                 def mark(c, pair=pair):
                     c["messages"][-1]["pair"] = pair
                 update_chat(cid, mark)
+                chat = load_chat(cid); last = chat["messages"][-1]
+            if last and last["role"] == "user" and last.get("videos") and not last.get("faces_done"):
+                set_status(cid, "running", "Ищу кадры, где лицо видно лучше всего…")
+                for v in last["videos"]:
+                    if chat["videos"].get(v, {}).get("source") == "user":
+                        try:
+                            face_times(cid, v)
+                        except Exception:
+                            traceback.print_exc()
+                update_chat(cid, lambda c: c["messages"][-1].__setitem__("faces_done", True))
                 chat = load_chat(cid); last = chat["messages"][-1]
             mt = CAROUSEL_RE.match(last.get("text") or "") if last and last["role"] == "user" else None
             if mt:
