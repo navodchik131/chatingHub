@@ -461,6 +461,8 @@ def http_json(url, key, payload=None, method=None, timeout=180):
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:1500]
         raise RuntimeError(f"HTTP {e.code}: {body}")
+    except (TimeoutError, urllib.error.URLError, ConnectionError) as e:
+        raise RuntimeError(f"NET {type(e).__name__}: {getattr(e, 'reason', e)}")
 
 
 def download(url):
@@ -499,7 +501,13 @@ def ws_upload(cid, iid, key, kind="images"):
 def ws_wait(job_id, key, limit=600, every=3):
     t0 = time.time()
     while True:
-        res = http_json(f"{WS}/predictions/{job_id}/result", key)["data"]
+        try:
+            res = http_json(f"{WS}/predictions/{job_id}/result", key, timeout=60)["data"]
+        except RuntimeError as e:   # сбой сети при опросе — задача оплачена и идёт, не бросаем её
+            if not (str(e).startswith("NET ") or re.match(r"HTTP 5\d\d", str(e))) or time.time() - t0 > limit:
+                raise
+            time.sleep(every)
+            continue
         if res["status"] in ("completed", "failed"):
             break
         if time.time() - t0 > limit:
@@ -724,8 +732,9 @@ def xai_chat(cfg, payload, timeout=180, cid=None, kind="grok"):
             res = http_json(f"{XAI}/chat/completions", cfg["xai_key"], payload, timeout=timeout)
             break
         except RuntimeError as e:
-            if attempt == 2 or not re.match(r"HTTP 5\d\d", str(e)):
-                raise
+            net = str(e).startswith("NET ")
+            if attempt == (1 if net else 2) or not (net or re.match(r"HTTP 5\d\d", str(e))):
+                raise RuntimeError(("Grok не ответил вовремя — попробуйте ещё раз" if net else "Grok временно недоступен") + f" ({e})")
             time.sleep(4 * (attempt + 1))
     if ctx:
         bill(cfg, cid, f"agent_{kind}", usage=res.get("usage"), model=payload.get("model"))
@@ -1309,6 +1318,21 @@ def video_line(r):
     return s
 
 
+HISTORY_TURNS = 6
+SLIM_DROP = ("prompt", "brief_zh", "brief_en", "image_roles", "prepare_error")
+
+
+def slim_call(tc):
+    try:
+        a = json.loads(tc["function"].get("arguments") or "{}")
+    except json.JSONDecodeError:
+        return tc
+    if not isinstance(a, dict):
+        return tc
+    a = {k: v for k, v in a.items() if k not in SLIM_DROP}
+    return {**tc, "function": {**tc["function"], "arguments": json.dumps(a, ensure_ascii=False)}}
+
+
 def build_messages(chat, cfg, turn_start):
     cid = chat["id"]
     msgs = [{"role": "system", "content": system_prompt() + "\n\n" + state_block(chat, cfg)}]
@@ -1329,7 +1353,15 @@ def build_messages(chat, cfg, turn_start):
     # согласовать tool_calls и ответы (после удаления/отката сообщений)
     answered = {m["tool_call_id"] for m in chat["messages"] if m["role"] == "tool"}
     called = set()
+    # история: только последние HISTORY_TURNS ходов — длинный чат иначе даёт ~80k токенов на ход (медленно, дорого, таймауты)
+    starts = [i for i, m in enumerate(chat["messages"]) if m["role"] == "user"]
+    cut = starts[-HISTORY_TURNS] if len(starts) > HISTORY_TURNS else 0
+    if cut:
+        msgs.append({"role": "user", "content": f"[Ранние {cut} сообщений чата скрыты для краткости. Эталоны, карточка модели и все картинки чата доступны по id.]"})
+        msgs.append({"role": "assistant", "content": "Понял."})
     for idx, m in enumerate(chat["messages"]):
+        if idx < cut:
+            continue
         show_imgs = idx >= turn_start   # картинки показываем только в текущем ходе
         if m["role"] in ("user", "review"):
             ids = [i for i in (m.get("images") or []) if i in chat["images"]]
@@ -1384,7 +1416,8 @@ def build_messages(chat, cfg, turn_start):
         elif m["role"] == "assistant":
             d = {"role": "assistant", "content": m.get("text") or ""}
             if m.get("tool_calls"):
-                d["tool_calls"] = m["tool_calls"]
+                # прошлые ходы: без длинных промптов и описаний — Grok нужны только подпись, режим и id
+                d["tool_calls"] = m["tool_calls"] if idx >= turn_start else [slim_call(tc) for tc in m["tool_calls"]]
                 called |= {tc["id"] for tc in m["tool_calls"]}
             msgs.append(d)
             for tc in m.get("tool_calls") or []:
