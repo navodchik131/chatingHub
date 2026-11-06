@@ -258,6 +258,40 @@ def add_video(cid, data, source, label="", meta=None, n_frames=8, ext=".mp4"):
     return vid
 
 
+def white_ratio(path):
+    """Доля почти белых серых пикселей — у силуэта (белая фигура с линиями) она в разы выше, чем у оригинала."""
+    im = Image.open(path).convert("RGB"); im.thumbnail((256, 256))
+    px = list(im.getdata())
+    return sum(1 for r, g, b in px if min(r, g, b) > 228 and max(r, g, b) - min(r, g, b) < 14) / max(len(px), 1)
+
+
+def detect_pair(cid, vids):
+    """Два видео в сообщении: какое из них готовый силуэт. → {"orig", "sil", "dur_diff"} или None."""
+    chat = load_chat(cid)
+    recs = [chat["videos"].get(v) for v in vids]
+    if len(vids) != 2 or not all(recs):
+        return None
+    score = []
+    for v, r in zip(vids, recs):
+        fr = [i for i in r.get("frames", []) if i in chat["images"]][:6]
+        vals = []
+        for i in fr:
+            try:
+                vals.append(white_ratio(image_path(cid, i, chat)))
+            except Exception:
+                traceback.print_exc()
+        score.append(sum(vals) / len(vals) if vals else 0.0)
+    hi = 0 if score[0] >= score[1] else 1
+    lo = 1 - hi
+    orig, sil = vids[lo], vids[hi]
+    dd = round(abs((recs[lo].get("dur") or 0) - (recs[hi].get("dur") or 0)), 2)
+    # у силуэта тот же фон + белая фигура → белого заметно больше; белая стена в оригинале есть в обоих
+    if score[hi] - score[lo] < 0.03 or (dd > 1.0 and score[hi] < 2.0 * score[lo]):
+        return None   # не похоже на «оригинал + силуэт» — пусть разбирается Grok
+    update_chat(cid, lambda c: c["videos"][sil].update(source="lineart", inputs_video=orig, label=f"силуэт (ваш) {orig}"))
+    return {"orig": orig, "sil": sil, "dur_diff": dd, "white": [round(x, 3) for x in score]}
+
+
 def video_path(cid, vid, chat=None):
     chat = chat or load_chat(cid)
     if vid not in chat["videos"]:
@@ -1240,6 +1274,18 @@ def build_messages(chat, cfg, turn_start):
                 else:
                     text = (f"[Фото без текста → замена девушки на модель: сразу generate_image mode=replace, source_id={ids[0]}. "
                             "Без вопросов и без отдельного lineart.]")
+            if m["role"] == "user" and m.get("pair"):
+                pr = m["pair"]
+                text = (f"[Два видео: оригинал {pr['orig']} и ГОТОВЫЙ СИЛУЭТ {pr['sil']} (пользователь сделал сам). lineart_video НЕ делай. "
+                        f"Режим 6 с готовым силуэтом: 1) по кадрам оригинала выбери ОДИН момент, где модель видна лучше всего (лицо анфас, видна одежда) "
+                        f"→ video_frames оригинала в эту секунду; 2) generate_image engine=gpt mode=replace по этому кадру (одежда и место — с оригинала); "
+                        f"3) после проверки кадра — edit_video: video_id={pr['sil']}, image_ids=[кадр с заменой, портрет анфас из «Лицо»], "
+                        f"промпт по режиму 6 (одежду словами — с оригинала)."
+                        + (f" Длительность различается на {pr['dur_diff']} с — предупреди пользователя." if pr.get("dur_diff", 0) > 0.5 else "")
+                        + "]" + ("\n" + text if text and not text.startswith("[Видео без текста") else ""))
+            elif m["role"] == "user" and len(m.get("videos") or []) == 2 and "pair" in m:
+                text = ("[Два видео, но готовый силуэт среди них не распознан — уточни у пользователя, что это за ролики.]"
+                        + ("\n" + text if text and not text.startswith("[Видео без текста") else ""))
             if m.get("engine") and m["engine"] != "auto":
                 text = f"[Движок для этого запроса: {m['engine']}]\n" + text
             if ids:
@@ -1352,6 +1398,7 @@ def pending_summary(calls, cfg, chat=None):
                          "video": a.get("video_id"), "dur": rec.get("dur"),
                          "inputs": a.get("image_ids", []), "roles": a.get("image_roles", []),
                          "resolution": a.get("resolution") if a.get("resolution") in RESOLUTIONS else "480p",
+                         "costs": {r: video_cost(rec.get("dur", 10), r, cfg) for r in RESOLUTIONS},
                          "audio": bool(a.get("generate_audio", False)), "prompt": a.get("prompt", ""),
                          "cost": tool_cost(c, cfg, chat)})
     return {"cost": round(sum(j["cost"] for j in jobs), 2), "jobs": jobs}
@@ -1475,6 +1522,14 @@ def agent_loop(cid, cfg=None):
                                 "Не пиши «ракурс изменился», если он не изменился. Потом вызови review:")
                     append_msg(cid, {"role": "review", "text": text, "images": bases + [i for i in new_imgs if i not in bases], "hidden": True})
                 continue
+            if last and last["role"] == "user" and len(last.get("videos") or []) == 2 and "pair" not in last:
+                set_status(cid, "running", "Смотрю, где оригинал, а где силуэт…")
+                pair = detect_pair(cid, last["videos"])
+
+                def mark(c, pair=pair):
+                    c["messages"][-1]["pair"] = pair
+                update_chat(cid, mark)
+                chat = load_chat(cid); last = chat["messages"][-1]
             mt = CAROUSEL_RE.match(last.get("text") or "") if last and last["role"] == "user" else None
             if mt:
                 try:

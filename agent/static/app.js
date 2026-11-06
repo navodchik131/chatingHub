@@ -503,7 +503,7 @@ function renderConfirm(){
   const pre = vj ? '@image' : (j.engine === 'seedream' ? '图' : 'img');
   return `<section class="confirm" aria-label="Подтверждение генерации">
     <div class="confirm-h"><span class="pill s-wait">Ждёт подтверждения</span>${p.edited ? '<span class="pill s-wait" style="opacity:.8">изменено</span>' : ''}<span style="flex:1"></span>
-      ${vj ? `<span class="meta">Seedance 2.5 Video Edit</span><div class="seg">${['480p', '720p', '1080p'].map(k => `<button class="${j.resolution === k ? 'on' : ''}" data-act="pres" data-v="${k}">${k}</button>`).join('')}</div>`
+      ${vj ? `<span class="meta">Seedance 2.5 Video Edit</span><div class="seg" role="group" aria-label="Качество видео">${['480p', '720p', '1080p'].map(k => `<button class="${j.resolution === k ? 'on' : ''}" data-act="pres" data-v="${k}" aria-pressed="${j.resolution === k}">${k}${j.costs?.[k] != null ? ` · ${wsMoney(j.costs[k])}` : ''}</button>`).join('')}</div>`
         : `<div class="seg">${Object.entries(ENG).map(([k, v]) => `<button class="${j.engine === k ? 'on' : ''}" data-act="penv" data-v="${k}">${v}</button>`).join('')}</div>`}</div>
     <div class="confirm-b">
       ${jobs.length > 1 ? `<div class="chips">${jobs.map((x, k) => `<button class="chip ${k === sel ? 'on' : ''}" data-act="pjob" data-v="${k}">${k + 1} · ${esc(x.label || (ENG[x.engine] || x.engine))}</button>`).join('')}</div>` : (j.label ? `<b style="font-weight:600">${esc(j.label)}</b>` : '')}
