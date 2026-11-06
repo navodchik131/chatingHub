@@ -104,7 +104,8 @@ def texture_ref(chat):
     return max(favs)[1] if favs else None
 
 
-FACE_WORDS = ("close-up", "closeup", "close up", "headshot", "portrait shot", "face only", "крупн", "портрет", "特写", "头像", "大头", "脸部")
+FACE_WORDS = ("headshot", "portrait shot", "face close-up", "close-up of her face", "close-up of the face", "face only", "крупный план лица",
+              "крупно лицо", "портрет", "脸部特写", "面部特写", "头像", "大头")
 FULL_WORDS = ("full-body", "full body", "full-length", "head to toe", "в рост", "в полный рост", "全身")
 FACE_CATS = ("лиц", "волос", "причёс", "прическ", "макияж", "серьг", "очк", "face", "hair", "makeup")
 
@@ -155,9 +156,8 @@ def pick_inputs(chat, a, engine):
             ids = faces + body + cats
         return ids + ([tex] if tex and tex not in ids else [])
     if mode == "carousel":
-        # основа НЕ первой: первая картинка весит больше всех, и с основой на 1-м месте модель
-        # повторяет её позу и кадр. Лица первыми, основа — только как образец одежды/места/света.
-        ids = faces + [src] + cats
+        # как в ручных каруселях: основа 图1 (одежда, место, свет), лица, тело; новизну кадра даёт подробная сцена
+        ids = [src] + faces + body + cats
         return ids + ([tex] if engine == "seedream" and tex and tex not in ids else [])
     if mode == "edit":
         return [src] + (faces if a.get("with_faces") else []) + cats
@@ -311,13 +311,13 @@ def _render_zh(chat, a, mode, roles, p):
             P.append(f"服装：{_b(b, 'outfit')}。真实面料纹理、自然褶皱、缝线和轻微起球，哑光面料，不要塑料感，衣服上没有其他文字。")
         P.append(f"环境：{_b(b, 'background') or '普通、有生活痕迹的真实地点'}，干净但有生活痕迹。光线：{_b(b, 'light') or '明亮自然的日光'}。背景清晰，不要虚化。")
     elif mode == "carousel":
-        P.append(f"拍一张全新的照片，不是修改{base}：{_b(b, 'scene')}" + (f"，{_b(b, 'action')}" if _b(b, 'action') else "") + "。")
+        P.append(f"新拍一张（不是修改{base}）：{_b(b, 'scene')}" + (f"。{_b(b, 'action')}" if _b(b, 'action') else "") + "。")
         P.append(f"{base}只用来参考她的衣服、地点和光线。姿势、手的位置、机位、拍摄角度、景别和构图都必须和{base}明显不同，"
                  f"不要复制{base}的姿势和构图，不要和{base}几乎一样。")
         if F:
             P.append(f"人物身份（最重要）：她就是{F}中的那位女性，同一个人，脸要和{F}一模一样" + (f"：{card}" if card else "") +
                      f"。脸型和五官比例不要变，不要瘦脸，不要尖下巴。发型、衣服和妆容和{base}一样，不取{F}的衣服、背景和棚拍光线。")
-        P.append(f"身材完全按{base}这张照片里她本人的身材，不要变瘦。比例：头部大小自然，头不要变大，只有两只手。")
+        P.append(f"身材完全按{base}这张照片里她本人的身材" + (f"，也参考{B}的身材比例（不取{B}的姿势和衣服）" if B else "") + "，不要变瘦。比例：头部大小自然，头不要变大，只有两只手。")
         if _b(b, "outfit"):
             P.append(f"服装和{base}一样：{_b(b, 'outfit')}。真实面料纹理和自然褶皱，哑光。")
         P.append(f"背景和光线和{base}一样" + (f"：{_b(b, 'background')}" if _b(b, 'background') else "") + "，背景清晰，不要虚化。")
@@ -385,7 +385,7 @@ def _render_en(chat, a, mode, roles, p):
         if F:
             P.append(f"IDENTITY (most important): she is the exact same woman as in {F}" + (f": {card}" if card else "") +
                      f". Hairstyle, clothes and makeup as in {base}; do not take clothes, background or studio light from {F}.")
-        P.append(f"Body exactly as hers in {base}, do not make her thinner. Natural head size, only two hands.")
+        P.append(f"Body exactly as hers in {base}" + (f", proportions also from {B} (not its pose or clothes)" if B else "") + ", do not make her thinner. Natural head size, only two hands.")
         if _b(b, "outfit"):
             P.append(f"Outfit as in {base}: {_b(b, 'outfit')}, real fabric texture.")
         P.append(f"Background and light as in {base}" + (f": {_b(b, 'background')}" if _b(b, 'background') else "") + ".")

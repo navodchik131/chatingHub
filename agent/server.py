@@ -498,6 +498,16 @@ TOOLS = [
             "label": {"type": "string", "description": "Короткая подпись кадра, например 'карусель 2: портрет'"}},
             "required": ["engine", "mode"]}}},
     {"type": "function", "function": {
+        "name": "carousel",
+        "description": "Карусель N кадров по основе. ВСЕГДА используй его для «карусель N» (а не N вызовов generate_image): приложение само смотрит на основу, "
+                       "планирует N разных кадров (ракурс камеры, крупность, поза, эмоция) и запускает их параллельно по проверенному рецепту.",
+        "parameters": {"type": "object", "properties": {
+            "source_id": {"type": "string", "description": "основа — принятый кадр (img_…)"},
+            "n": {"type": "integer", "minimum": 2, "maximum": 8},
+            "engine": {"type": "string", "enum": ["seedream", "gpt"], "description": "по умолчанию — движок основы"},
+            "wishes": {"type": "string", "description": "пожелания пользователя к кадрам, если есть (по-русски)"}},
+            "required": ["n"]}}},
+    {"type": "function", "function": {
         "name": "lineart",
         "description": "Перерисовать человека на фото линейным силуэтом (белый с чёрными линиями, фон настоящий). Бесплатно, локально, ~10-30 с.",
         "parameters": {"type": "object", "properties": {"image_id": {"type": "string"}}, "required": ["image_id"]}}},
@@ -771,6 +781,133 @@ def guess_source(chat, a):
     return max(cands)[1] if cands else None
 
 
+CAROUSEL_TEMPLATE = [   # запасной план, если Grok не ответил: разные ракурс, крупность, поза, эмоция
+    ("крупно, 3/4, улыбка", "face", "34", "34",
+     "近景，镜头在她脸前约半米、略高于眼睛，取景从头顶到锁骨，她的脸转成3/4侧面", "她的一只手轻轻碰着下巴", "被逗笑，自然地笑出来，眼睛微微眯起",
+     "close shot, camera half a meter from her face slightly above eye level, framed from the top of the head to the collarbones, her face turned to a 3/4 angle",
+     "one hand lightly touching her chin", "laughing naturally, eyes slightly squinted"),
+    ("по пояс, профиль, взгляд в сторону", "half", "profile", "side",
+     "中景侧面，镜头在她身体左侧约一米半、胸口高度，取景从头顶到腰部", "她侧身站着，双手把头发拢到一边肩膀上，看向画面外", "放松、若有所思",
+     "medium shot from the side, camera about 1.5 m to her left at chest height, framed from the top of the head to the waist",
+     "standing sideways, gathering her hair over one shoulder with both hands, looking off-frame", "relaxed, thoughtful"),
+    ("в рост, со спины, через плечо", "full", "34", "back34",
+     "全身背面视角，镜头在她身后约三米、腰部高度，取景从头到脚", "她背对镜头站着，把头转过来越过右肩看向镜头，一只手放在腰上", "俏皮的坏笑",
+     "full-body view from behind, camera about 3 m behind her at waist height, framed head to toe",
+     "standing with her back to the camera, turning her head over her right shoulder to look into the lens, one hand on her waist", "playful smirk"),
+    ("сидя, сверху, селфи", "half", "front", "front",
+     "她自己举着手机从上方自拍，镜头比她的头高约三十厘米、向下拍，取景从头顶到大腿", "她坐着，身体微微前倾，另一只手撑在身旁", "挑逗的眼神，嘴角一边略高",
+     "selfie she takes herself from above, phone about 30 cm above her head angled down, framed from the top of the head to the thighs",
+     "sitting, leaning slightly forward, the other hand resting beside her", "teasing look, one corner of the mouth higher"),
+    ("в рост, снизу, в движении", "full", "front", "front",
+     "全身低角度，镜头在她前方约两米、膝盖高度向上拍，取景从头到脚", "她正朝镜头走来，一只脚在前，双臂自然摆动", "自信的微笑，看着镜头",
+     "full-body low angle, camera about 2 m in front of her at knee height angled up, framed head to toe",
+     "walking towards the camera mid-step, arms swinging naturally", "confident smile, looking into the lens"),
+    ("по пояс, сверху, лёжа", "half", "front", "front",
+     "中景俯拍，镜头在她正上方约一米、向下拍，取景从头顶到腰部", "她仰面躺着，头发散开，一只手放在头发旁边", "慵懒、温柔的微笑",
+     "medium shot from directly above, camera about 1 m above her pointing down, framed from the top of the head to the waist",
+     "lying on her back, hair spread out, one hand resting next to her hair", "lazy, soft smile"),
+    ("по пояс, 3/4, смех", "half", "34", "34",
+     "中景3/4侧面，镜头在她右前方约一米半、肩膀高度，取景从头顶到腰部", "她一只手扶着脖子，肩膀微微耸起", "开心地大笑，眼睛弯起来",
+     "medium shot at a 3/4 angle, camera about 1.5 m to her front right at shoulder height, framed from the top of the head to the waist",
+     "one hand on the side of her neck, shoulders slightly raised", "laughing happily, eyes crinkled"),
+    ("крупно, анфас, серьёзный взгляд", "face", "front", "front",
+     "近景正面，镜头在她正前方约四十厘米、与眼睛同高，取景从头顶到肩膀", "她的下巴微微抬起，直视镜头", "认真、自信的眼神，没有笑",
+     "close shot from the front, camera about 40 cm in front of her at eye level, framed from the top of the head to the shoulders",
+     "chin slightly raised, looking straight into the lens", "serious, confident look, no smile"),
+]
+
+
+def tmpl_all(n):
+    return [{"label": f"карусель {k + 1}: {t[0]}", "framing": t[1], "face_angle": t[2], "body_view": t[3],
+             "zh": {"scene": t[4], "action": t[5], "expression": t[6]}, "en": {"scene": t[7], "action": t[8], "expression": t[9]}}
+            for k, t in enumerate(CAROUSEL_TEMPLATE[:n])]
+
+
+def plan_carousel(cid, src, n, wishes, cfg):
+    """План карусели: один запрос Grok по фото основы → N разных кадров (как планируется вручную). Без ответа — шаблон."""
+    tmpl = tmpl_all(n)
+    common = {"zh": {}, "en": {}}
+    if cfg.get("xai_key") in ("", None, "mock"):
+        return tmpl, common
+    sys_p = ("Ты оператор и фотограф. По фото-основе спланируй карусель из N НОВЫХ кадров той же девушки в той же одежде и в том же месте, "
+             "как серия фото с одной съёмки. Кадры обязаны отличаться и от основы, и друг от друга сразу по трём осям: "
+             "ракурс камеры (анфас / 3/4 / профиль / со спины / сверху / снизу), крупность (крупный план / по пояс / в рост / сидя / лёжа), "
+             "поза и эмоция. Ни один кадр не повторяет позу и ракурс основы. Для каждого кадра опиши физически: где стоит камера "
+             "(высота, расстояние, угол), что попадает в кадр «от … до …», что делает тело и руки, куда смотрит, точная эмоция. "
+             "Одежду, место и свет опиши один раз — ровно как на основе, ничего не выдумывай. Селфи в зеркале — все кадры тоже в зеркале с тем же телефоном. "
+             "Верни только JSON: {\"outfit_zh\",\"outfit_en\",\"place_zh\",\"place_en\",\"light_zh\",\"light_en\","
+             "\"frames\":[{\"label_ru\" (коротко: крупность, ракурс, поза),\"framing\" (face|half|full),\"face_angle\" (front|34|profile),"
+             "\"body_view\" (front|34|side|back|back34),\"scene_zh\",\"scene_en\",\"action_zh\",\"action_en\",\"expression_zh\",\"expression_en\"}]}")
+    try:
+        res = xai_chat(cfg, {"model": cfg["chat_model"], "temperature": 0.7, "messages": [
+            {"role": "system", "content": sys_p},
+            {"role": "user", "content": [{"type": "text", "text": f"N = {n}." + (f" Пожелания: {wishes}" if wishes else "") + " Основа:"},
+                                         {"type": "image_url", "image_url": {"url": data_uri(image_path(cid, src), 1024, 88), "detail": "high"}}]}]},
+            timeout=180, cid=cid, kind="grok_carousel")
+        txt = res["choices"][0]["message"].get("content") or ""
+        j = json.loads(txt[txt.find("{"): txt.rfind("}") + 1])
+        frames = []
+        for f in (j.get("frames") or [])[:n]:
+            if not isinstance(f, dict) or not (f.get("scene_zh") or f.get("scene_en")):
+                continue
+            frames.append({"label": f"карусель {len(frames) + 1}: {f.get('label_ru') or ''}".strip(),
+                           "framing": f.get("framing"), "face_angle": f.get("face_angle"), "body_view": f.get("body_view"),
+                           "zh": {k2: f.get(f"{k2}_zh") for k2 in ("scene", "action", "expression") if f.get(f"{k2}_zh")},
+                           "en": {k2: f.get(f"{k2}_en") for k2 in ("scene", "action", "expression") if f.get(f"{k2}_en")}})
+        common = {L: {k: v for k, v in {"outfit": j.get(f"outfit_{L}"), "background": j.get(f"place_{L}"),
+                                         "light": j.get(f"light_{L}")}.items() if v} for L in ("zh", "en")}
+        used = {(f.get("framing"), f.get("body_view")) for f in frames}
+        spare = [t for t in tmpl_all(len(CAROUSEL_TEMPLATE)) if (t["framing"], t["body_view"]) not in used]
+        for t in spare[:max(0, n - len(frames))]:   # добиваем шаблоном — только ракурсами, которых ещё нет
+            frames.append({**t, "label": f"карусель {len(frames) + 1}: " + t["label"].split(": ", 1)[-1]})
+        return frames, common
+    except Exception:
+        traceback.print_exc()
+        return tmpl, common
+
+
+def carousel_base(chat, a):
+    """Основа карусели: указанная → фото из последнего сообщения пользователя → последний ★ кадр → последний сгенерированный."""
+    if a.get("source_id") in chat["images"]:
+        return a["source_id"]
+    last = next((m for m in reversed(chat["messages"]) if m["role"] == "user"), {})
+    imgs = [i for i in last.get("images") or [] if i in chat["images"]]
+    if imgs:
+        return imgs[0]
+    refs = set(all_ref_ids(chat["persona"]))
+    for want_fav in (True, False):
+        c = [(r["t"], i) for i, r in chat["images"].items()
+             if r.get("source") in ("gen", "crop", "post") and i not in refs and (r.get("fav") or not want_fav)]
+        if c:
+            return max(c)[1]
+    return None
+
+
+def expand_carousel(cid, call, cfg):
+    """Один вызов carousel → N вызовов generate_image с готовым описанием каждого кадра."""
+    a = parse_args(call); chat = load_chat(cid)
+    n = max(2, min(8, int(a.get("n") or 4)))
+    src = carousel_base(chat, a)
+    if not src:
+        raise RuntimeError("нет основы для карусели — пришлите кадр или отметьте его ★")
+    eng = a.get("engine") if a.get("engine") in WS_MODELS else (chat["images"][src].get("engine") or "seedream")
+    if eng not in WS_MODELS:
+        eng = "seedream"
+    set_status(cid, "running", f"Планирую карусель из {n} кадров…")
+    frames, common = plan_carousel(cid, src, n, a.get("wishes"), cfg)
+    out = []
+    for f in frames:
+        g = {"engine": eng, "mode": "carousel", "source_id": src, "label": f["label"], "framing": f.get("framing"),
+             "face_angle": f.get("face_angle") or "front", "body_view": f.get("body_view") or "front",
+             "brief_zh": {**common["zh"], **f["zh"]}, "brief_en": {**common["en"], **f["en"]}}
+        out.append({"id": "c" + secrets.token_hex(4), "type": "function",
+                    "function": {"name": "generate_image", "arguments": json.dumps({k: v for k, v in g.items() if v}, ensure_ascii=False)}})
+    return out
+
+
+CAROUSEL_RE = re.compile(r"^\s*карусел\w*\s*(\d+)?\s*$", re.I)
+
+
 def prepare_gen(cid, a, cfg, rebuild_inputs=True):
     """Довести вызов generate_image до готового: входы по рецепту, силуэт, промпт, язык. Меняет a."""
     fix_ids(cid, a)
@@ -824,6 +961,21 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
     a["image_roles"] = [(old.get(i) if mode == "free" and old.get(i) else recipes.role_label(chat, i, a, k))
                         for k, i in enumerate(a.get("image_ids") or [])]
     return a
+
+
+def expand_calls(cid, calls, cfg):
+    out = []
+    for c in calls:
+        if c["function"]["name"] == "carousel":
+            try:
+                out += expand_carousel(cid, c, cfg)
+                continue
+            except Exception as e:
+                traceback.print_exc()
+                a = parse_args(c); a["prepare_error"] = str(e)[:300]
+                c["function"]["arguments"] = json.dumps(a, ensure_ascii=False)
+        out.append(c)
+    return out
 
 
 def prepare_calls(cid, calls, cfg):
@@ -1323,6 +1475,17 @@ def agent_loop(cid, cfg=None):
                                 "Не пиши «ракурс изменился», если он не изменился. Потом вызови review:")
                     append_msg(cid, {"role": "review", "text": text, "images": bases + [i for i in new_imgs if i not in bases], "hidden": True})
                 continue
+            mt = CAROUSEL_RE.match(last.get("text") or "") if last and last["role"] == "user" else None
+            if mt:
+                try:
+                    calls = expand_carousel(cid, {"function": {"name": "carousel", "arguments": json.dumps({"n": int(mt.group(1) or 4)})}}, cfg)
+                    set_status(cid, "running", "Собираю входы и промпт по рецепту…")
+                    prepare_calls(cid, calls, cfg)
+                    append_msg(cid, {"role": "assistant", "text": "План карусели:\n" + "\n".join("· " + parse_args(c).get("label", "") for c in calls),
+                                     "tool_calls": calls})
+                    continue
+                except Exception:
+                    traceback.print_exc()   # нет основы и т. п. — пусть разбирается Grok
             set_status(cid, "running", "Grok думает…")
             msgs = build_messages(chat, cfg, turn_start)
             if cfg["xai_key"] == "mock":   # самопроверка без оплаты
@@ -1340,6 +1503,7 @@ def agent_loop(cid, cfg=None):
                                       "function": {"name": tc["function"]["name"],
                                                    "arguments": tc["function"].get("arguments") or "{}"}}
                                      for tc in m["tool_calls"]]
+                msg["tool_calls"] = expand_calls(cid, msg["tool_calls"], cfg)
                 if any(tc["function"]["name"] == "generate_image" for tc in msg["tool_calls"]):
                     set_status(cid, "running", "Собираю входы и промпт по рецепту…")
                     prepare_calls(cid, msg["tool_calls"], cfg)
