@@ -719,7 +719,14 @@ def xai_chat(cfg, payload, timeout=180, cid=None, kind="grok"):
         prob = hosted.check(ctx, GROK_RESERVE)
         if prob:
             raise hosted.NoCredits(prob[:1].upper() + prob[1:] + ".")
-    res = http_json(f"{XAI}/chat/completions", cfg["xai_key"], payload, timeout=timeout)
+    for attempt in range(3):   # xAI иногда отвечает 5xx «Internal error during token generation» — повторяем
+        try:
+            res = http_json(f"{XAI}/chat/completions", cfg["xai_key"], payload, timeout=timeout)
+            break
+        except RuntimeError as e:
+            if attempt == 2 or not re.match(r"HTTP 5\d\d", str(e)):
+                raise
+            time.sleep(4 * (attempt + 1))
     if ctx:
         bill(cfg, cid, f"agent_{kind}", usage=res.get("usage"), model=payload.get("model"))
     return res
@@ -1336,7 +1343,7 @@ def build_messages(chat, cfg, turn_start):
             if m["role"] == "user" and m.get("pair"):
                 pr = m["pair"]
                 text = (f"[Два видео: оригинал {pr['orig']} и ГОТОВЫЙ СИЛУЭТ {pr['sil']} (пользователь сделал сам). lineart_video НЕ делай. "
-                        + (f"Ключевой кадр уже вынут приложением: {pr['key']} ({pr['key_t']:.2f} с — лицо анфас, глаза открыты). "
+                        + (f"Ключевой кадр уже вынут приложением: {pr['key']} ({pr.get('key_t', 0):.2f} с — лицо анфас, глаза открыты). "
                            f"Режим 6 с готовым силуэтом: 1) generate_image engine=gpt mode=replace source_id={pr['key']} (одежда и место — с оригинала); "
                            if pr.get("key") else
                            f"Режим 6 с готовым силуэтом: 1) выбери ОДИН момент, где лицо анфас и глаза ОТКРЫТЫ (не опущенная голова, не рука на лице) "
@@ -1353,11 +1360,18 @@ def build_messages(chat, cfg, turn_start):
                 text = f"[Движок для этого запроса: {m['engine']}]\n" + text
             if ids:
                 text += ("\n" if text else "") + "[картинки: " + ", ".join(ids) + "]"
+            pr = m.get("pair") or {}
+            if pr.get("key") in chat["images"] and pr["key"] not in ids:
+                ids.append(pr["key"])
             for v in m.get("videos") or []:
                 r = chat.get("videos", {}).get(v)
                 if r:
                     text += ("\n" if text else "") + f"[видео {v}: {video_line(r)}]"
-                    ids += [i for i in r.get("frames", []) if i in chat["images"] and i not in ids]
+                    fr = [i for i in r.get("frames", []) if i in chat["images"] and i not in ids]
+                    if pr:   # пара: хватит 3 кадров оригинала и 2 силуэта — слишком тяжёлый запрос xAI роняет 500-кой
+                        k = 2 if v == pr.get("sil") else 3
+                        fr = fr[::max(1, len(fr) // k)][:k]
+                    ids += fr
             if show_imgs and ids:
                 parts = [{"type": "text", "text": text}]
                 for i in ids[:20]:
