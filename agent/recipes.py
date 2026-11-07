@@ -207,11 +207,15 @@ SKIN_ZH = ("皮肤（重要，像手机直出未修图）：皮肤完全哑光�
            "毛孔清晰可见，雀斑稀疏、深浅大小不一、分布不均，不要均匀的圆点图案，肤色不均，鼻翼和脸颊微微泛红，嘴唇有细小的唇纹，"
            "脸颊有细小的绒毛。不要磨皮，不要美颜，不要蜡像感，不要塑料感，不要CG渲染感，不要偏黄偏橙，不要晒黑。")
 FRAME_ZH = ("画面：像用iPhone 16随手拍的真实照片，24mm等效，柔和、低对比度，自然真实的白平衡和色彩，暗部有轻微数码噪点。"
-            "不要HDR，不要锐化，不要提高清晰度，不要电影感，不要单反感，不要商业广告感，不要过度精致。画面上不要任何文字或水印。")
-REAL_EN = ("Realism: looks like a real unedited iPhone 16 photo, 24mm main camera, natural light, slight sensor noise, no cinematic look. "
-           "Visible pores, uneven sparse freckles, matte skin with no oily shine, fine vellus hair, crisp lashes, iris texture with catchlights, "
-           "both eyes looking the same direction, slightly frizzy matte hair with darker roots and flyaways, real fabric texture and wrinkles. "
-           "No retouching, no beauty filter, no plastic or CGI look, sharp background, no bokeh, no added text or watermark.")
+            "大景深：背景和人物一样清晰对焦，没有背景虚化，没有焦外光斑，前景也不虚化。"
+            "不要HDR，不要锐化，不要提高清晰度，发丝周围不要白边，不要电影感，不要单反感，不要商业广告感，不要过度精致。画面上不要任何文字或水印。")
+REAL_EN = ("Realism: looks like a real unedited iPhone 16 photo, 24mm main camera, natural light, no cinematic look. "
+           "Natural skin texture: fine pores and sparse uneven freckles visible up close, matte skin with no oily shine, natural soft lashes, "
+           "iris texture with catchlights, both eyes looking the same direction, soft natural matte hair with darker roots and a few loose strands, "
+           "real fabric texture and wrinkles. Clean smooth image: no film grain, no noise, no dithering or ripple texture, no oversharpening, "
+           "no halos or white edges around hair, no crunchy or wiry hair, no HDR look, smooth even sky. "
+           "Deep depth of field: the background is as sharp and in focus as she is — no bokeh, no background blur, no blurred foreground. "
+           "No retouching, no beauty filter, no plastic or CGI look, no added text or watermark.")
 
 
 def hair_zh(F):
