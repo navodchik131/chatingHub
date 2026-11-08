@@ -204,16 +204,17 @@ def _b(brief, k):
 EYES_ZH = ("眼睛和神态（重要）：眼睛有神、有光，精神饱满，眼睛里有清晰的反光点，虹膜有放射状纹理和较深的外圈，下睫毛可见，"
            "两只眼睛看向同一方向，眼球不要偏到眼角；上眼皮不要下垂，不要眼袋，不要黑眼圈，不要疲惫感，不要空洞，不要呆滞。")
 SKIN_ZH = ("皮肤（重要，像手机直出未修图）：皮肤完全哑光，脸、肩膀、手臂和腿都没有油光、没有汗湿、没有反光高光，柔和的漫反射；"
-           "毛孔清晰可见，雀斑稀疏、深浅大小不一、分布不均，不要均匀的圆点图案，肤色不均，鼻翼和脸颊微微泛红，嘴唇有细小的唇纹，"
+           "毛孔清晰可见，雀斑稀疏、深浅大小不一、分布不均，不要均匀的圆点图案，鼻翼和脸颊微微泛红，嘴唇有细小的唇纹，"
            "脸颊有细小的绒毛。不要磨皮，不要美颜，不要蜡像感，不要塑料感，不要CG渲染感，不要偏黄偏橙，不要晒黑。")
-FRAME_ZH = ("画面：像用iPhone 16随手拍的真实照片，24mm等效，柔和、低对比度，自然真实的白平衡和色彩，暗部有轻微数码噪点。"
+FRAME_ZH = ("画面：像用iPhone 16随手拍的真实照片，24mm等效，柔和、低对比度，自然真实的白平衡和色彩，手机自带的干净成像，没有可见噪点。画面干净：布料、皮肤和墙面上没有斑驳、斑点或一块一块的纹理，没有胶片颗粒，没有噪点花纹，没有重影和双边。"
             "大景深：背景和人物一样清晰对焦，没有背景虚化，没有焦外光斑，前景也不虚化。"
             "不要HDR，不要锐化，不要提高清晰度，发丝周围不要白边，不要电影感，不要单反感，不要商业广告感，不要过度精致。画面上不要任何文字或水印。")
-REAL_EN = ("Realism: looks like a real unedited iPhone 16 photo, 24mm main camera, natural light, no cinematic look. "
-           "Natural skin texture: fine pores and sparse uneven freckles visible up close, matte skin with no oily shine, natural soft lashes, "
+REAL_EN = ("Realism: looks like a real unedited iPhone 16 photo, 24mm main camera, natural light, "
+           "clean natural phone processing (Smart HDR, no visible noise), no cinematic look. "
+           "Natural skin with fine pores and slight redness, sparse freckles, matte skin with no oily shine, natural soft lashes, "
            "iris texture with catchlights, both eyes looking the same direction, soft natural matte hair with darker roots and a few loose strands, "
-           "real fabric texture and wrinkles. Clean smooth image: no film grain, no noise, no dithering or ripple texture, no oversharpening, "
-           "no halos or white edges around hair, no crunchy or wiry hair, no HDR look, smooth even sky. "
+           "smooth even-coloured fabric with natural folds and wrinkles (soft cotton fleece looks smooth, not knitted or slubby). "
+           "Clean even surfaces: no mottled, blotchy or patchy texture on fabric, skin or walls, no film grain, no noise pattern, no double edges or ghosting. No oversharpening, no halos or white edges around hair, no crunchy or wiry hair, smooth even sky. "
            "Deep depth of field: the background is as sharp and in focus as she is — no bokeh, no background blur, no blurred foreground. "
            "No retouching, no beauty filter, no plastic or CGI look, no added text or watermark.")
 
@@ -299,8 +300,8 @@ def _render_zh(chat, a, mode, roles, p):
         if B:
             P.append(f"身材按{B}（只取身材比例，不取{B}的姿势和衣服），不要沿用原图女子的身材，不要变瘦。")
         if _b(b, "outfit"):
-            P.append(f"服装（线稿里看不出颜色和材质，按文字）：{_b(b, 'outfit')}。真实面料纹理、自然褶皱和缝线，哑光面料，不要塑料感，衣服上没有其他文字。"
-                     if L else f"服装：{_b(b, 'outfit')}，和原图一样。")
+            P.append(f"服装（线稿里看不出颜色和材质，按文字）：{_b(b, 'outfit')}。颜色均匀、表面平整的布料，有自然的褶皱；卫衣和抓绒是光滑的棉质，不是针织或粗纺纹理，哑光面料，不要塑料感，衣服上没有其他文字。"
+                     if L else f"服装：{_b(b, 'outfit')}，和原图一样；颜色均匀、表面平整的布料，有自然的褶皱，不是针织或粗纺纹理。")
         if L:
             P.append("皮肤上没有任何纹身，都是干净的皮肤。")
         P.append(f"背景保持{ref}里的真实背景不变" + (f"：{_b(b, 'background')}" if _b(b, 'background') else "") +
@@ -312,7 +313,7 @@ def _render_zh(chat, a, mode, roles, p):
         if B:
             P.append(f"身材按{B}（只取身材比例，不取{B}的姿势和衣服），不要变瘦。")
         if _b(b, "outfit"):
-            P.append(f"服装：{_b(b, 'outfit')}。真实面料纹理、自然褶皱、缝线和轻微起球，哑光面料，不要塑料感，衣服上没有其他文字。")
+            P.append(f"服装：{_b(b, 'outfit')}。颜色均匀、表面平整的布料，有自然的褶皱；卫衣和抓绒是光滑的棉质，不是针织或粗纺纹理，哑光面料，不要塑料感，衣服上没有其他文字。")
         P.append(f"环境：{_b(b, 'background') or '普通、有生活痕迹的真实地点'}，干净但有生活痕迹。光线：{_b(b, 'light') or '明亮自然的日光'}。背景清晰，不要虚化。")
     elif mode == "carousel":
         P.append(f"新拍一张（不是修改{base}）：{_b(b, 'scene')}" + (f"。{_b(b, 'action')}" if _b(b, 'action') else "") + "。")
@@ -323,7 +324,7 @@ def _render_zh(chat, a, mode, roles, p):
                      f"。脸型和五官比例不要变，不要瘦脸，不要尖下巴。发型、衣服和妆容和{base}一样，不取{F}的衣服、背景和棚拍光线。")
         P.append(f"身材完全按{base}这张照片里她本人的身材" + (f"，也参考{B}的身材比例（不取{B}的姿势和衣服）" if B else "") + "，不要变瘦。比例：头部大小自然，头不要变大，只有两只手。")
         if _b(b, "outfit"):
-            P.append(f"服装和{base}一样：{_b(b, 'outfit')}。真实面料纹理和自然褶皱，哑光。")
+            P.append(f"服装和{base}一样：{_b(b, 'outfit')}。颜色均匀、表面平整的布料，有自然的褶皱；卫衣和抓绒是光滑的棉质，不是针织或粗纺纹理，哑光。")
         P.append(f"背景和光线和{base}一样" + (f"：{_b(b, 'background')}" if _b(b, 'background') else "") + "，背景清晰，不要虚化。")
     elif mode == "edit":
         P.append(f"只修改{base}中的{_b(b, 'change') or _b(b, 'action')}，其余保持{base}完全不变：脸、表情、姿势、衣服、背景、光线和构图都不变。")
@@ -371,7 +372,7 @@ def _render_en(chat, a, mode, roles, p):
         P.append(f"Proportions: same size, position and distance from the camera as the woman in {ref}, natural head size, normal neck and shoulders, only two hands."
                  + (f" Body shape from {B} (only the proportions, not its pose or clothes) — do not keep the original woman's body, do not make her thinner." if B else ""))
         if _b(b, "outfit"):
-            P.append(f"Outfit: {_b(b, 'outfit')} — as in {ref}, real fabric texture, natural wrinkles and seams, matte, no extra text on clothes.")
+            P.append(f"Outfit: {_b(b, 'outfit')} — as in {ref}, smooth even-coloured fabric with natural folds and wrinkles (soft cotton fleece looks smooth, not knitted or slubby), matte, no extra text on clothes.")
         P.append(f"Background (keep from {ref}): {_b(b, 'background') or 'unchanged'}." + (f" Light: {_b(b, 'light')}." if _b(b, 'light') else "")
                  + " She is lit by the same light.")
     elif mode == "new":
@@ -380,7 +381,7 @@ def _render_en(chat, a, mode, roles, p):
         P.append("Proportions: natural head size, normal neck and shoulders, only two hands."
                  + (f" Body shape from {B} (only the proportions, not its pose or clothes), do not make her thinner." if B else ""))
         if _b(b, "outfit"):
-            P.append(f"Outfit: {_b(b, 'outfit')}, real fabric texture, natural wrinkles, seams and slight pilling, matte, no extra text on clothes.")
+            P.append(f"Outfit: {_b(b, 'outfit')}, smooth even-coloured fabric with natural folds and wrinkles (soft cotton fleece looks smooth, not knitted or slubby), matte, no extra text on clothes.")
         P.append(f"Environment: {_b(b, 'background') or 'an ordinary lived-in real place'}, clean but lived-in, everyday details. Light: {_b(b, 'light') or 'bright natural daylight'}.")
     elif mode == "carousel":
         P.append(f"A completely new photo, not an edit of {base}: {_b(b, 'scene')}" + (f". {_b(b, 'action')}" if _b(b, 'action') else "") + ".")
@@ -391,7 +392,7 @@ def _render_en(chat, a, mode, roles, p):
                      f". Hairstyle, clothes and makeup as in {base}; do not take clothes, background or studio light from {F}.")
         P.append(f"Body exactly as hers in {base}" + (f", proportions also from {B} (not its pose or clothes)" if B else "") + ", do not make her thinner. Natural head size, only two hands.")
         if _b(b, "outfit"):
-            P.append(f"Outfit as in {base}: {_b(b, 'outfit')}, real fabric texture.")
+            P.append(f"Outfit as in {base}: {_b(b, 'outfit')}, smooth even-coloured fabric with natural folds and wrinkles (soft cotton fleece looks smooth, not knitted or slubby).")
         P.append(f"Background and light as in {base}" + (f": {_b(b, 'background')}" if _b(b, 'background') else "") + ".")
     elif mode == "edit":
         P.append(f"Edit {base}: only change {_b(b, 'change') or _b(b, 'action')}. Keep everything else in {base} exactly the same — face, expression, pose, clothes, background, light and framing.")
