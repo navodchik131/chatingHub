@@ -774,6 +774,42 @@ def parse_args(call):
         return {}
 
 
+def auto_post(cid, chat, a, eng, new, label):
+    """Проверенная доводка Seedream (иначе холодно, темно и «пластик»):
+    замена → цвет под исходное фото; карусель → под основу; новый кадр по промпту → под ★ кадр GPT модели,
+    а без него — только матовость кожи. GPT и локальная правка — без доводки."""
+    if eng != "seedream" or not new:
+        return [], ""
+    mode = a.get("mode"); src = a.get("source_id")
+    ops, why = None, ""
+    if mode == "replace" and src in chat["images"]:
+        ops, why = [{"op": "color_match", "ref_id": src, "strength": 0.8}], "цвет под исходник"
+    elif mode == "carousel" and src in chat["images"]:
+        ops, why = [{"op": "color_match", "ref_id": src, "strength": 0.7}], "цвет под основу карусели"
+    elif mode in ("new", "free"):
+        ref = recipes.texture_ref(chat)
+        if ref and ref in chat["images"]:
+            ops, why = [{"op": "color_match", "ref_id": ref, "strength": 0.7}, {"op": "matte", "strength": 0.5}], f"цвет под ★ кадр GPT {ref} + матовость"
+        else:
+            ops, why = [{"op": "matte", "strength": 0.5}], "матовость кожи (★ кадра GPT нет — отметь удачный, и цвет будет подгоняться под него)"
+    if not ops:
+        return [], ""
+    post = []
+    for i in new:
+        try:
+            img = Image.open(image_path(cid, i)).convert("RGB")
+            for op in ops:
+                img = apply_op(cid, img, op)
+            buf = io.BytesIO(); img.save(buf, "JPEG", quality=95)
+            post.append(add_image(cid, buf.getvalue(), "post", label or why,
+                                  {"inputs": [i], "engine": eng, "prompt": a.get("prompt"), "ops": [o["op"] for o in ops]}))
+        except Exception:
+            traceback.print_exc()
+    if not post:
+        return [], ""
+    return post, f" Доводка автоматически ({why}): {', '.join(post)} (это основной результат)."
+
+
 def apply_op(cid, img, op):
     import numpy as np
     from PIL import ImageFilter, ImageDraw
@@ -1130,18 +1166,8 @@ def run_tool(cid, call, cfg):
         blobs = gen_wavespeed(cid, eng, a["prompt"], ids, aspect, cfg)
         new = [add_image(cid, b, "gen", label, {"engine": eng, "prompt": a["prompt"], "inputs": ids, "mode": a.get("mode")}) for b in blobs]
         cost = gen_price(eng, len(ids), cfg) * len(new)
-        extra = ""
-        src = a.get("source_id")
-        if eng == "seedream" and a.get("mode") == "replace" and src in chat["images"]:
-            # проверенный шаг: цвет Seedream под настоящее фото (иначе холодно, темно и «пластик»)
-            post = []
-            for i in new:
-                img = apply_op(cid, Image.open(image_path(cid, i)).convert("RGB"), {"op": "color_match", "ref_id": src, "strength": 0.8})
-                buf = io.BytesIO(); img.save(buf, "JPEG", quality=95)
-                post.append(add_image(cid, buf.getvalue(), "post", label or "цвет под исходник",
-                                      {"inputs": [i], "engine": eng, "prompt": a["prompt"], "ops": ["color_match"]}))
-            extra = f" Цвет подогнан под исходник автоматически: {', '.join(post)} (это основной результат)."
-            new += post
+        post, extra = auto_post(cid, chat, a, eng, new, label)
+        new += post
         return f"Готово ({eng}): {', '.join(new)}.{extra} Посмотри результат, проверь лицо и вызови review.", new, cost
     if name == "lineart":
         iid = make_lineart(cid, a["image_id"])
