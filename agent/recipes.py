@@ -1,12 +1,15 @@
-"""Проверенные рецепты: подбор входов и сборка промптов для GPT Image 2.5 и Seedream V5.0 Pro.
+"""Проверенные рецепты: подбор входов и сборка промптов для Seedream 5.5 (основной), Seedream V5.0 Pro (правка) и GPT Image 2.5.
 
 Grok описывает только сцену (brief_en / brief_zh), а входы, их порядок, нумерацию 图N / image N
 и все абзацы реализма собирает код — так промпт не «худеет» и всегда совпадает с картинками.
 """
 import re
 
-MODES = ("replace", "new", "carousel", "edit", "free")
-BRIEF_KEYS = ("scene", "action", "expression", "outfit", "background", "light", "change", "extra")
+MODES = ("replace", "new", "carousel", "edit", "free", "bodyref")
+BRIEF_KEYS = ("scene", "action", "expression", "outfit", "hair", "camera", "background", "light", "orig_hair", "change", "extra")
+BODYREF_VIEWS = ("front", "back", "side", "half")
+BODYREF_RU = {"front": "фигура спереди", "back": "фигура сзади", "side": "фигура сбоку", "half": "по пояс"}
+VIEW_ZH = {"front": "正面", "back": "背面", "side": "侧面"}
 ROLE_RU = {"face": "лицо", "body": "тело", "lineart": "силуэт", "source": "исходник", "texture": "фактура ★",
            "base": "основа", "other": "картинка"}
 CJK = re.compile(r"[一-鿿]")
@@ -124,9 +127,46 @@ def framing_of(a):
     return None
 
 
+def live_body(chat):
+    """Живые эталоны фигуры из GPT (спереди, сзади, сбоку) — по порядку."""
+    p = chat["persona"]; out = []
+    for v in ("front", "back", "side"):
+        i = next((i for i in p["body"] if chat["images"].get(i, {}).get("bodyref") == v), None)
+        if i:
+            out.append(i)
+    return out
+
+
+def is_55(engine, a):
+    """Seedream 5.5 — всё, кроме локальной правки (она пока на 5.0) и mode=free с явным 5.0."""
+    return engine == "seedream" and a.get("mode") != "edit"
+
+
 def pick_inputs(chat, a, engine):
     """Порядок входов по проверенным рецептам. Возвращает список id (силуэт должен уже существовать)."""
     mode = a.get("mode"); src = a.get("source_id")
+    if mode == "bodyref":   # эталоны фигуры через GPT: на вход только лица, фигура — текстом
+        return [i for i in ordered_faces(chat, "front") if not chat["images"].get(i, {}).get("bodyref")][:3]
+    if is_55(engine, a) and mode in ("replace", "new", "carousel"):
+        p = chat["persona"]
+        body = live_body(chat) or pick_body(chat, a.get("body_view"))
+        half = next((i for i in p["faces"] if chat["images"].get(i, {}).get("bodyref") == "half"), None)
+        faces = ([half] if half else []) + [i for i in ordered_faces(chat, a.get("face_angle")) if i != half]
+        faces = faces[:2]
+        cats = []
+        for name in a.get("categories") or []:
+            for k, v in p.get("extra", {}).items():
+                if k.lower() == str(name).lower() and v.get("ids"):
+                    cats.append(v["ids"][0])
+        if framing_of(a) == "face":
+            body = []
+            cats = [c for c in cats if any(w in next((k for k, v in p.get("extra", {}).items() if c in v.get("ids", [])), "").lower() for w in FACE_CATS)]
+        lead = [src] if mode in ("replace", "carousel") and src else []
+        ids = []
+        for i in lead + body + faces + cats[:2]:
+            if i not in ids:
+                ids.append(i)
+        return ids[:10]
     faces = ordered_faces(chat, a.get("face_angle"))
     body = pick_body(chat, a.get("body_view"))
     cats = []
@@ -273,6 +313,10 @@ def render(chat, a, engine):
         return a.get("prompt", "")
     roles = [role_of(chat, i, a, k) for k, i in enumerate(ids)]
     p = chat["persona"]
+    if mode == "bodyref":
+        return _render_bodyref(a, roles, p)
+    if is_55(engine, a):
+        return _render_55(chat, a, mode, roles, ids, p)
     if engine == "seedream":
         return _render_zh(chat, a, mode, roles, p)
     out = _render_en(chat, a, mode, roles, p)
@@ -411,6 +455,139 @@ def _render_en(chat, a, mode, roles, p):
     if _b(b, "extra"):
         P.append(_b(b, "extra") + ".")
     return "\n".join(P)
+
+
+# ---------------- Seedream 5.5 (опыт AI-чаттера) ----------------
+ANATOMY_ZH = ("人体结构（必须正确）：画面里只有她一个人。她正好有两只手臂、两只手、两条腿、两只脚，不多不少；每只手正好五根手指，"
+              "手指长短自然、关节正确，不粘连、不交叉、不多指、不缺指。拿手机的那只手和那只手臂只有一个，另一只手按场景描述放好。"
+              "手臂和腿都连在身体正确的位置上，比例自然，没有扭曲、拉长或折断的四肢，没有多余的手、手臂、腿或脚，"
+              "画面边缘也不能出现别人的手或身体部位。镜子里的倒影和她本人完全对应，不多出一个人。")
+STYLE55_ZH = ("用iPhone 16主摄随手拍的手机照片：24mm等效广角，手机自带的干净成像，没有可见噪点。大景深：背景和人物一样清晰对焦，"
+              "没有背景虚化，没有焦外光斑，前景也不虚化。画面柔和、低对比度，明亮、温暖的自然光，阴影里保留细节、不死黑，高光不过曝。"
+              "不要HDR，不要锐化，不要提高清晰度，不要电影感，不要单反感，不要冷色调。\n"
+              "眼睛和神态：精神饱满，眼神明亮，眼睛里有清晰的反光点，虹膜有放射状纹理，眼睛颜色自然，不过度饱和；不要空洞，不要呆滞。\n"
+              "皮肤：完全哑光，毛孔清晰，肤色不均、鼻翼微微泛红，细小绒毛；没有油光、没有汗湿、没有反光高光；不要磨皮，不要美颜，"
+              "不要塑料感，不要蜡像感，不要CG渲染感，不要偏黄偏橙。\n"
+              "头发：柔软、哑光，一根一根分明，有碎发和飞丝，发根略深，不要沙龙发，不要像假发，不要结成一束一束，不要稻草感。\n"
+              "衣服：颜色均匀、表面平整的布料，有自然的褶皱。\n"
+              "画面干净：布料、皮肤和墙面上没有斑驳、斑点或一块一块的纹理，没有胶片颗粒，没有噪点花纹，没有重影和双边。画面里没有文字、水印和标志。")
+COVER_ZH = "胸部和私处必须被布料完全遮住：不能露出乳头和私处，不能全裸。"
+
+
+def body55_zh(chat, roles, ids, p):
+    ns = _idx(roles, "body")
+    if not ns:
+        return ""
+    B = zh_ref(ns); fig = (p.get("figure_zh") or "").strip().rstrip("。")
+    views = [VIEW_ZH.get(chat["images"].get(ids[n - 1], {}).get("bodyref")) for n in ns]
+    if all(views):
+        return (f"{B}是她本人的全身照片（{'、'.join(views)}）：身材完全按这些照片" + (f"——{fig}" if fig else "") +
+                "，肩膀和手臂的粗细也和照片一样。不要变瘦，不要缩小胯部和臀部，不要把胸部画大。只取她的身材，不取衣服、姿势和背景。")
+    return (f"身材按{B}（只取身材比例，不取{B}的姿势、衣服和背景）" + (f"：{fig}" if fig else "") +
+            "。不要变瘦，不要缩小胯部和臀部，不要把胸部画大。")
+
+
+def face55_zh(F, card):
+    return (f"人物身份（最重要）：她就是{F}中的那位女性，同一个人，脸要和{F}一模一样：脸型、五官比例和细微的不对称都相同。"
+            f"只取脸、肤色和发色，不取发型、衣服、背景和棚拍光线。她是成年女性，不是少女。" + (f"{card}。" if card else "") +
+            "脸型和五官比例完全按参考图：脸不要变窄，下巴不要变尖，不要瘦脸，不要V脸，脸颊保持原来的饱满度，不要变年轻。")
+
+
+def _scene55(b):
+    s = [x for x in (_b(b, "scene"), _b(b, "action")) if x]
+    if _b(b, "expression"):
+        s.append(f"表情：{_b(b, 'expression')}")
+    if _b(b, "hair"):
+        s.append(f"发型：{_b(b, 'hair')}")
+    if _b(b, "background"):
+        s.append(f"环境：{_b(b, 'background')}")
+    if _b(b, "light"):
+        s.append(f"光线：{_b(b, 'light')}")
+    return ("场景：" + "。".join(s) + "。") if s else ""
+
+
+def _render_55(chat, a, mode, roles, ids, p):
+    b = a.get("brief_zh") or {}
+    F = zh_ref(_idx(roles, "face")); S = zh_ref(_idx(roles, "source")); base = zh_ref(_idx(roles, "base"))
+    who = zh_ref(_idx(roles, "body", "face"))
+    card = clean_card(p.get("card_zh"))
+    P = []
+    if mode == "replace":
+        P.append(f"{S}是要修改的照片。只把{S}中的女子换成{who or F}中的这位女性，{S}里其余的一切保持完全不变。")
+        keep = [f"必须保持{S}的姿势" + (f"：{_b(b, 'action')}" if _b(b, "action") else "")]
+        if _b(b, "expression"):
+            keep.append(f"表情：{_b(b, 'expression')}")
+        if _b(b, "outfit"):
+            keep.append(f"衣服和饰品：{_b(b, 'outfit')}")
+        if _b(b, "background"):
+            keep.append(f"地点：{_b(b, 'background')}")
+        if _b(b, "light"):
+            keep.append(f"光线：{_b(b, 'light')}")
+        if _b(b, "scene"):
+            keep.append(f"拍摄方式：{_b(b, 'scene')}")
+        P.append("。".join(keep) + f"。构图、透视、光线和颜色都和{S}一样。")
+        if body55_zh(chat, roles, ids, p):
+            P.append(body55_zh(chat, roles, ids, p))
+        if F:
+            P.append(face55_zh(F, card))
+            P.append(f"发色按{F}，不是{S}里女子的发色" + (f"（不是{_b(b, 'orig_hair')}）" if _b(b, "orig_hair") else "") + "。")
+    else:
+        if mode == "carousel":
+            P.append(f"延续：{base}是她几分钟前拍的照片。新照片是一分钟后在同一个位置拍的：保留{base}环境里所有能认出来的东西、同样的天气、同样的光线和时间；"
+                     f"同样的衣服、面料和颜色（除了下面场景里写的她拉开或脱下的部分）。只改变拍摄角度、姿势和场景里描述的动作："
+                     f"姿势、机位和构图都必须和{base}明显不同，不要复制{base}的姿势。"
+                     f"地点、天气、光线和衣服按{base}；她的脸和身材按身份参考图。画面里只有她一个人：没有别人，没有别人的手或胳膊。")
+        else:
+            P.append("一张竖屏手机照片。")
+        if body55_zh(chat, roles, ids, p):
+            P.append(body55_zh(chat, roles, ids, p))
+        if F:
+            P.append(face55_zh(F, card))
+        if _scene55(b):
+            P.append(_scene55(b))
+        if _b(b, "outfit"):
+            P.append(f"穿着：{_b(b, 'outfit')}。")
+        if _b(b, "camera"):
+            P.append(f"拍摄方式：{_b(b, 'camera')}。")
+    P += cats_zh(chat, roles)
+    P.append(ANATOMY_ZH)
+    P.append(STYLE55_ZH)
+    if _b(b, "extra"):
+        P.append(_b(b, "extra") + "。")
+    P.append(COVER_ZH)
+    return "\n".join(P)
+
+
+# ---------------- эталоны фигуры через GPT ----------------
+BODYREF_SHOT = {
+    "front": ("a plain full-body photo on a phone on a tripod in a bright simple room with a white wall and wooden floor, she stands straight facing the camera, "
+              "arms relaxed at her sides, feet slightly apart, whole body from head to feet in the frame, neutral relaxed face looking into the camera, even soft daylight",
+              "a fitted black tank top and high-waisted black leggings, barefoot"),
+    "back": ("a plain full-body photo on a phone on a tripod in a bright simple room with a white wall and wooden floor, she stands with her back to the camera, "
+             "head turned slightly over her shoulder, arms relaxed at her sides, whole body from head to feet in the frame, even soft daylight",
+             "a fitted black tank top and high-waisted black leggings, barefoot"),
+    "side": ("a plain full-body photo on a phone on a tripod in a bright simple room with a white wall and wooden floor, she stands sideways in strict profile to the camera, "
+             "arms relaxed, whole body from head to feet in the frame, even soft daylight",
+             "a fitted black tank top and high-waisted black leggings, barefoot"),
+    "half": ("a plain photo on a phone on a tripod in a bright simple room with a white wall, framed from the top of her head to mid-thigh, "
+             "standing facing the camera, natural slight smile, even soft daylight",
+             "a fitted plain white t-shirt and grey high-waisted leggings"),
+}
+
+
+def _render_bodyref(a, roles, p):
+    view = a.get("view") if a.get("view") in BODYREF_SHOT else "front"
+    shot, outfit = BODYREF_SHOT[view]
+    F = en_ref(_idx(roles, "face"))
+    fig = (a.get("figure_en") or p.get("figure_en") or "").strip().rstrip(".")
+    card = clean_card(p.get("card_en"))
+    return "\n".join([
+        f"A{shot[1:]}. No mirror. Outfit: {outfit}.",
+        identity_en(F, card),
+        "BODY (as important as the face): " + (f"{fig}. " if fig else "") +
+        "Keep exactly these proportions: do NOT make her slimmer, skinny or a thin model type, and do not exaggerate her curves or enlarge her bust; "
+        f"real proportions of a real woman. Her face exactly as in {F}.",
+        REAL_EN])
 
 
 # ---------------- ручные промпты: перенумерация ----------------

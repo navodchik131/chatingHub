@@ -58,7 +58,7 @@ const S = {
   cardTab: 'card', jobSel: 0, promptOpen: false, balance: null, spend: null,
   settingsTab: 'system', promptsCache: {}, lastSig: '',
 };
-const ENG = {gpt: 'GPT Image 2.5', seedream: 'Seedream V5.0 Pro'};
+const ENG = {gpt: 'GPT Image 2.5', seedream: 'Seedream 5.5'};
 const ENGX = {...ENG, seedance: 'Seedance 2.5'};
 const vUrl = (id, chat = S.chat) => chat?.videos?.[id] ? `${BASE}files/${chat.id}/${chat.videos[id].file}` : '';
 const vThUrl = (id, chat = S.chat) => chat?.videos?.[id] ? `${BASE}thumbs/${chat.id}/${chat.videos[id].file}` : '';
@@ -821,7 +821,7 @@ async function renderSettings(){
           <span class="lbl" style="margin-top:4px">Цена за кадр — для оценки</span>
           <div class="grid2">
             <label class="lab">GPT Image 2.5<div class="money-in"><span>$</span><input class="field" id="pGpt" type="number" step="0.01" value="${cfg.prices.gpt}"></div></label>
-            <label class="lab">Seedream V5.0 Pro<div class="money-in"><span>$</span><input class="field" id="pSd" type="number" step="0.01" value="${cfg.prices.seedream}"></div></label></div>
+            <label class="lab">Seedream 5.5 (база; + $0.008 за вход)<div class="money-in"><span>$</span><input class="field" id="pSd" type="number" step="0.01" value="${cfg.prices.seedream}"></div></label></div>
           <span class="lbl" style="margin-top:4px">Seedance 2.5 видео — цена за секунду (вход + выход)</span>
           <div class="grid2" style="grid-template-columns:repeat(3,1fr)">
             ${[['pV480', '480p', 'seedance_480p'], ['pV720', '720p', 'seedance_720p'], ['pV1080', '1080p', 'seedance_1080p']].map(([i, t, k]) => `<label class="lab">${t}<div class="money-in"><span>$</span><input class="field" id="${i}" type="number" step="0.01" value="${cfg.prices[k] ?? ''}"></div></label>`).join('')}</div>
@@ -857,7 +857,7 @@ function renderHostedSettings(cfg){
           : 'Кредиты тратятся на генерации WaveSpeed и на работу Grok (разбор фото, промпты, проверка результата) — по факту, только за то, что реально выполнено.'}</span>
         <div><a class="btn p sm" href="${esc(cfg.billing_url)}" target="_top">Пополнить баланс</a></div></section>
       <section class="scard"><h3>Примерная цена</h3>
-        ${row('Кадр Seedream V5.0 Pro', wsMoney(cfg.prices.seedream))}
+        ${row('Кадр Seedream 5.5', wsMoney(cfg.prices.seedream))}
         ${row('Кадр GPT Image 2.5', wsMoney(cfg.prices.gpt))}
         ${row('Видео Seedance 2.5, 5 с 720p', wsMoney((5 + 5) * (cfg.prices.seedance_720p || 0)))}
         ${row('Ход Grok (разбор, промпт, проверка)', '≈ ' + cr(0.05).replace(' кр.', '') + '–' + cr(cfg.grok_reserve || 0.15))}

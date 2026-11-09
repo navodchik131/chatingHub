@@ -27,8 +27,9 @@ GROK_RESERVE = 0.15        # хостинг: запас на один вызов
 
 XAI = "https://api.x.ai/v1"
 WS = "https://api.wavespeed.ai/api/v3"
-WS_MODELS = {"gpt": "openai/gpt-image-2.5-sunburst/edit", "seedream": "bytedance/seedream-v5.0-pro/edit"}
-ENGINE_NAMES = {"gpt": "GPT Image 2.5", "seedream": "Seedream V5.0 Pro"}
+WS_MODELS = {"gpt": "openai/gpt-image-2.5-sunburst/edit", "seedream": "bytedance/seedream-v5.5/edit"}
+SEEDREAM50 = "bytedance/seedream-v5.0-pro/edit"   # локальная правка (mode=edit) пока на 5.0 — на 5.5 не проверена
+ENGINE_NAMES = {"gpt": "GPT Image 2.5", "seedream": "Seedream 5.5"}
 VIDEO_MODEL = "bytedance/seedance-2.5/video-edit"
 VIDEO_EXT = (".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi")
 RESOLUTIONS = ("480p", "720p", "1080p")
@@ -38,7 +39,7 @@ DEFAULT_CONFIG = {
     "chat_model": "grok-4",
     "autorun": False,           # False = спрашивать перед платной генерацией
     # seedance_* — цена за секунду (вход + выход)
-    "prices": {"gpt": 0.22, "seedream": 0.10, "seedance_480p": 0.11, "seedance_720p": 0.22, "seedance_1080p": 0.55},
+    "prices": {"gpt": 0.22, "seedream": 0.07, "seedance_480p": 0.11, "seedance_720p": 0.22, "seedance_1080p": 0.55},
     "limits": {"per_message": 0, "per_day": 0},   # 0 = без лимита
     "max_steps": 12,
 }
@@ -535,7 +536,7 @@ def gen_video(cid, vid, prompt, image_ids, resolution, audio, cfg, on_submit=Non
     return download(res["outputs"][0])
 
 
-def gen_wavespeed(cid, engine, prompt, image_ids, aspect, cfg):
+def gen_wavespeed(cid, engine, prompt, image_ids, aspect, cfg, mode=None):
     key = cfg["wavespeed_key"]
     if not key:
         raise RuntimeError("Нет ключа WaveSpeed — движки gpt/seedream недоступны")
@@ -546,13 +547,21 @@ def gen_wavespeed(cid, engine, prompt, image_ids, aspect, cfg):
         return [image_path(cid, image_ids[0]).read_bytes()]
     urls = [ws_upload(cid, i, key) for i in image_ids]
     payload = {"images": urls, "prompt": prompt, "resolution": "2k"}
+    model = WS_MODELS[engine]
     if engine == "gpt":
         payload.update(quality="high")
         if aspect and aspect != "auto":
             payload["aspect_ratio"] = aspect
-    else:
+    elif mode == "edit":
+        model = SEEDREAM50
         payload["prompt_optimization_mode"] = "standard"
-    job = http_json(f"{WS}/{WS_MODELS[engine]}", key, payload)["data"]
+    else:   # Seedream 5.5: prompt_optimization_mode у неё нет (у 5.0 он «украшал» и стройнил лицо)
+        payload.update(output_format="jpeg", enable_sync_mode=False, enable_base64_output=False)
+        if aspect and aspect != "auto":
+            payload["aspect_ratio"] = aspect
+        elif mode not in ("replace", "carousel"):
+            payload["aspect_ratio"] = "3:4"   # пусто = пропорции первой картинки (исходник или основа)
+    job = http_json(f"{WS}/{model}", key, payload)["data"]
     res = ws_wait(job["id"], key)
     return [download(u) for u in res["outputs"]]
 
@@ -561,24 +570,30 @@ def gen_wavespeed(cid, engine, prompt, image_ids, aspect, cfg):
 TOOLS = [
     {"type": "function", "function": {
         "name": "generate_image",
-        "description": "Сгенерировать кадр через WaveSpeed (GPT Image 2.5 или Seedream V5.0 Pro). В режимах replace/new/carousel/edit входы (лица, тело, силуэт, фактура) и полный промпт с абзацами реализма собирает ПРИЛОЖЕНИЕ по проверенному рецепту — ты даёшь только mode, source_id и описание сцены brief_en + brief_zh (для carousel и new — ОБЯЗАТЕЛЬНО, у каждого кадра своё: scene с ракурсом и крупностью, action, expression; одной подписи label мало). Силуэт для Seedream-замены приложение сделает само. mode=free — только для особых случаев (создание эталонов модели, детализирующий проход, дорисовка серой области): тогда сам пишешь prompt и image_ids. Несколько вызовов в одном ответе идут параллельно.",
+        "description": "Сгенерировать кадр через WaveSpeed (Seedream 5.5 — основной; GPT Image 2.5 — запасной). В режимах replace/new/carousel/edit входы (лица, тело, силуэт, фактура) и полный промпт с абзацами реализма собирает ПРИЛОЖЕНИЕ по проверенному рецепту — ты даёшь только mode, source_id и описание сцены brief_en + brief_zh (для carousel и new — ОБЯЗАТЕЛЬНО, у каждого кадра своё: scene с ракурсом и крупностью, action, expression; одной подписи label мало). mode=free — только для особых случаев (создание эталонов модели, детализирующий проход, дорисовка серой области): тогда сам пишешь prompt и image_ids. Несколько вызовов в одном ответе идут параллельно.",
         "parameters": {"type": "object", "properties": {
             "engine": {"type": "string", "enum": ["gpt", "seedream"]},
-            "mode": {"type": "string", "enum": list(recipes.MODES), "description": "replace — заменить девушку на фото/кадре видео на модель; new — новый кадр по описанию; carousel — новый кадр той же серии по основе; edit — локальная правка основы; free — свой промпт"},
+            "mode": {"type": "string", "enum": list(recipes.MODES), "description": "replace — заменить девушку на фото/кадре видео на модель; new — новый кадр по описанию; carousel — продолжение основы (тот же образ минуту спустя); edit — локальная правка основы (Seedream 5.0); free — свой промпт; bodyref — эталон фигуры (лучше инструмент body_refs)"},
             "source_id": {"type": "string", "description": "replace: исходное фото/кадр (не силуэт); carousel/edit: основа"},
             "brief_en": {"type": "object", "properties": {
-                "scene": {"type": "string", "description": "что за кадр и кто снимает: селфи в зеркале / подруга снимает снизу / в рост на стадионе"},
-                "action": {"type": "string", "description": "поза, куда смотрит, что делают руки, что в руках"},
+                "scene": {"type": "string", "description": "5–8 простых предложений по порядку: 1) камера — кто и как держит телефон (правая/левая вытянутая рука, телефон у зеркала, штатив с таймером), высота, угол, расстояние; 2) что в кадре сверху донизу («от подбородка до колен»); 3) где она и поза, на какой ноге вес; для кадров 2+ — что изменилось с прошлого"},
+                "action": {"type": "string", "description": "конечности по одной: что делает правая рука, что левая (одна держит телефон в селфи), где правая и левая нога, куда смотрит; у неё ровно по две"},
                 "expression": {"type": "string", "description": "эмоция словами точно как на исходнике"},
-                "outfit": {"type": "string", "description": "одежда, обувь, аксессуары: цвета, ткань, крой, принты"},
+                "outfit": {"type": "string", "description": "КАЖДАЯ вещь и её точное состояние в этом кадре (цвет, ткань, длина рукава, обувь) — только вещи, без рук и действий"},
+                "hair": {"type": "string", "description": "причёска в этом кадре (распущены / хвост / пучок)"},
+                "camera": {"type": "string", "description": "способ съёмки, если не сказан в scene"},
+                "orig_hair": {"type": "string", "description": "replace: цвет и причёска девушки на ИСХОДНИКЕ — чтобы сказать «не как на исходнике»"},
                 "background": {"type": "string", "description": "что на фоне (для замены — что сохранить)"},
                 "light": {"type": "string", "description": "свет и время суток"},
                 "change": {"type": "string", "description": "только для mode=edit: что именно поменять"},
                 "extra": {"type": "string", "description": "особые указания: убрать тату, зеркальное отражение, другие люди не трогать…"}}}, "brief_zh": {"type": "object", "properties": {
-                "scene": {"type": "string", "description": "что за кадр и кто снимает: селфи в зеркале / подруга снимает снизу / в рост на стадионе"},
-                "action": {"type": "string", "description": "поза, куда смотрит, что делают руки, что в руках"},
+                "scene": {"type": "string", "description": "5–8 простых предложений по порядку: 1) камера — кто и как держит телефон (правая/левая вытянутая рука, телефон у зеркала, штатив с таймером), высота, угол, расстояние; 2) что в кадре сверху донизу («от подбородка до колен»); 3) где она и поза, на какой ноге вес; для кадров 2+ — что изменилось с прошлого"},
+                "action": {"type": "string", "description": "конечности по одной: что делает правая рука, что левая (одна держит телефон в селфи), где правая и левая нога, куда смотрит; у неё ровно по две"},
                 "expression": {"type": "string", "description": "эмоция словами точно как на исходнике"},
-                "outfit": {"type": "string", "description": "одежда, обувь, аксессуары: цвета, ткань, крой, принты"},
+                "outfit": {"type": "string", "description": "КАЖДАЯ вещь и её точное состояние в этом кадре (цвет, ткань, длина рукава, обувь) — только вещи, без рук и действий"},
+                "hair": {"type": "string", "description": "причёска в этом кадре (распущены / хвост / пучок)"},
+                "camera": {"type": "string", "description": "способ съёмки, если не сказан в scene"},
+                "orig_hair": {"type": "string", "description": "replace: цвет и причёска девушки на ИСХОДНИКЕ — чтобы сказать «не как на исходнике»"},
                 "background": {"type": "string", "description": "что на фоне (для замены — что сохранить)"},
                 "light": {"type": "string", "description": "свет и время суток"},
                 "change": {"type": "string", "description": "только для mode=edit: что именно поменять"},
@@ -588,13 +603,24 @@ TOOLS = [
             "framing": {"type": "string", "enum": ["face", "half", "full"], "description": "крупность кадра: face — лицо/плечи (эталоны тела и категории тела НЕ берутся), half — по пояс, full — в рост"},
             "categories": {"type": "array", "items": {"type": "string"}, "description": "доп. категории эталонов — ТОЛЬКО то, что реально видно в этом кадре (ноги — если ноги в кадре), максимум 2; лишний эталон сбивает композицию и дорожает"},
             "with_faces": {"type": "boolean", "description": "edit: добавить портреты (если правка касается лица)"},
-            "no_texture": {"type": "boolean", "description": "не класть ★ кадр GPT как референс фактуры"},
+            "no_texture": {"type": "boolean", "description": "только GPT/правка: не класть ★ кадр GPT как референс фактуры"},
+            "view": {"type": "string", "enum": list(recipes.BODYREF_VIEWS), "description": "только mode=bodyref (лучше инструмент body_refs)"},
             "prompt": {"type": "string", "description": "только для mode=free: полный промпт (английский для gpt, китайский для seedream)"},
             "image_ids": {"type": "array", "items": {"type": "string"}, "description": "только для mode=free: входы по порядку"},
             "image_roles": {"type": "array", "items": {"type": "string"}},
             "aspect_ratio": {"type": "string", "enum": ["auto", "1:1", "3:4", "4:5", "2:3", "9:16", "4:3", "16:9"]},
             "label": {"type": "string", "description": "Короткая подпись кадра, например 'карусель 2: портрет'"}},
             "required": ["engine", "mode"]}}},
+    {"type": "function", "function": {
+        "name": "body_refs",
+        "description": "Платно, один раз на модель: 4 эталона фигуры через GPT Image (спереди, сзади, сбоку в чёрном топе и легинсах у белой стены + по пояс в белой футболке). "
+                       "Seedream копирует фигуру с КАРТИНОК, а со студийных развёрток стройнит модель — после этого он берёт фигуру с этих живых фото. "
+                       "На вход GPT идут только эталоны лица, фигура — текстом из figure_en. Результаты сами лягут в эталоны (тело и лицо «по пояс»).",
+        "parameters": {"type": "object", "properties": {
+            "figure_en": {"type": "string", "description": "фигура модели по-английски конкретно: рост/сложение, талия, бёдра, ягодицы, бёдра ног, руки и плечи, размер груди словами «MEDIUM bust (not large, not enhanced)» — иначе GPT перебарщивает"},
+            "figure_zh": {"type": "string", "description": "та же фигура по-китайски для Seedream: «细腰、宽胯、圆润饱满的臀部、丰满的大腿、中等胸部»"},
+            "views": {"type": "array", "items": {"type": "string", "enum": list(recipes.BODYREF_VIEWS)}, "description": "по умолчанию все 4"}},
+            "required": ["figure_en"]}}},
     {"type": "function", "function": {
         "name": "carousel",
         "description": "Карусель N кадров по основе. ВСЕГДА используй его для «карусель N» (а не N вызовов generate_image): приложение само смотрит на основу, "
@@ -644,14 +670,15 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "postprocess",
         "description": "Бесплатная локальная обработка картинки, результат — новая картинка. Операции по порядку: "
-                       "color_match {ref_id, strength 0..1} — подогнать цвет, яркость и контраст под эталонный кадр (исходник при замене или удачный кадр GPT); "
+                       "color_match {ref_id, strength 0..1} — подогнать цвет, яркость и контраст под эталонный кадр; "
+                       "phone_tone {strength 0..1} — яркость, контраст и тёплость как у кадров GPT (к кадрам Seedream 5.5 приложение применяет само); "
                        "matte {strength 0..1} — приглушить жирный блеск на коже; grain {amount 3..10} — мягкий шум телефона; "
                        "upscale {factor 2..4} — увеличить маленький исходник перед силуэтом; "
                        "gray_mask {polygon [[x,y],...] в долях 0..1} — закрасить область серым, чтобы потом попросить генератор дорисовать её.",
         "parameters": {"type": "object", "properties": {
             "image_id": {"type": "string"},
             "ops": {"type": "array", "items": {"type": "object", "properties": {
-                "op": {"type": "string", "enum": ["color_match", "matte", "grain", "upscale", "gray_mask"]},
+                "op": {"type": "string", "enum": ["color_match", "phone_tone", "matte", "grain", "upscale", "gray_mask"]},
                 "ref_id": {"type": "string"}, "strength": {"type": "number"}, "amount": {"type": "number"},
                 "factor": {"type": "number"}, "polygon": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}}},
                 "required": ["op"]}},
@@ -700,11 +727,16 @@ PAID = ("generate_image", "edit_video")
 QUIET = ("set_persona", "review", "add_reference", "remove_reference")
 
 
-def gen_price(engine, n_images, cfg):
-    """Цена одной картинки WaveSpeed. В хостинге — точная (2k, high; + за каждый доп. вход), локально — из настроек."""
+def gen_price(engine, n_images, cfg, mode=None):
+    """Цена одной картинки WaveSpeed. В хостинге — точная (2k; + за каждый вход), локально — из настроек.
+    Seedream 5.5: $0.027 за кадр 2k + $0.008 за каждую входную картинку; правка (5.0): $0.09 + $0.003 за доп. вход."""
+    n = max(1, int(n_images or 1))
     if cfg.get("_ctx"):
-        n = max(1, int(n_images or 1))
-        return (0.165 + 0.015 * (n - 1)) if engine == "gpt" else (0.09 + 0.003 * (n - 1))
+        if engine == "gpt":
+            return 0.165 + 0.015 * (n - 1)
+        return (0.09 + 0.003 * (n - 1)) if mode == "edit" else (0.027 + 0.008 * n)
+    if engine == "seedream" and mode != "edit":
+        return round(0.027 + 0.008 * n, 3)
     return cfg["prices"].get(engine, 0.1)
 
 
@@ -764,7 +796,7 @@ def tool_cost(call, cfg, chat=None):
         return 0.0
     if no_brief(a):
         return 0.0   # не запустится (см. prepare) — не спрашиваем подтверждения и не резервируем
-    return gen_price(a.get("engine", "gpt"), len(a.get("image_ids") or []), cfg)
+    return gen_price(a.get("engine", "seedream"), len(a.get("image_ids") or []), cfg, a.get("mode"))
 
 
 def parse_args(call):
@@ -775,39 +807,26 @@ def parse_args(call):
 
 
 def auto_post(cid, chat, a, eng, new, label):
-    """Проверенная доводка Seedream (иначе холодно, темно и «пластик»):
-    замена → цвет под исходное фото; карусель → под основу; новый кадр по промпту → под ★ кадр GPT модели,
-    а без него — только матовость кожи. GPT и локальная правка — без доводки."""
-    if eng != "seedream" or not new:
-        return [], ""
-    mode = a.get("mode"); src = a.get("source_id")
-    ops, why = None, ""
-    if mode == "replace" and src in chat["images"]:
-        ops, why = [{"op": "color_match", "ref_id": src, "strength": 0.8}], "цвет под исходник"
-    elif mode == "carousel" and src in chat["images"]:
-        ops, why = [{"op": "color_match", "ref_id": src, "strength": 0.7}], "цвет под основу карусели"
-    elif mode in ("new", "free"):
-        ref = recipes.texture_ref(chat)
-        if ref and ref in chat["images"]:
-            ops, why = [{"op": "color_match", "ref_id": ref, "strength": 0.7}, {"op": "matte", "strength": 0.5}], f"цвет под ★ кадр GPT {ref} + матовость"
-        else:
-            ops, why = [{"op": "matte", "strength": 0.5}], "матовость кожи (★ кадра GPT нет — отметь удачный, и цвет будет подгоняться под него)"
-    if not ops:
+    """Доводка Seedream 5.5 (сырой кадр темнее, холоднее и контрастнее GPT): каждый кадр подтягиваем к замерам кадров GPT
+    (яркость 118, разброс 49, тёплость R−B +15, сила 0.8), потом 2048 по длинной стороне и JPEG 90, как с телефона.
+    GPT и локальная правка (5.0) — без доводки."""
+    if eng != "seedream" or not new or a.get("mode") == "edit":
         return [], ""
     post = []
     for i in new:
         try:
-            img = Image.open(image_path(cid, i)).convert("RGB")
-            for op in ops:
-                img = apply_op(cid, img, op)
-            buf = io.BytesIO(); img.save(buf, "JPEG", quality=95)
-            post.append(add_image(cid, buf.getvalue(), "post", label or why,
-                                  {"inputs": [i], "engine": eng, "prompt": a.get("prompt"), "ops": [o["op"] for o in ops]}))
+            img = apply_op(cid, Image.open(image_path(cid, i)).convert("RGB"), {"op": "phone_tone", "strength": 0.8})
+            if max(img.size) > 2048:
+                k = 2048 / max(img.size)
+                img = img.resize((round(img.width * k), round(img.height * k)), Image.LANCZOS)
+            buf = io.BytesIO(); img.save(buf, "JPEG", quality=90)
+            post.append(add_image(cid, buf.getvalue(), "post", label or "цвет как у GPT",
+                                  {"inputs": [i], "engine": eng, "prompt": a.get("prompt"), "ops": ["phone_tone"], "mode": a.get("mode")}))
         except Exception:
             traceback.print_exc()
     if not post:
         return [], ""
-    return post, f" Доводка автоматически ({why}): {', '.join(post)} (это основной результат)."
+    return post, f" Доводка автоматически (цвет и яркость как у кадров GPT, 2048 px, JPEG 90): {', '.join(post)} (это основной результат)."
 
 
 def apply_op(cid, img, op):
@@ -815,6 +834,19 @@ def apply_op(cid, img, op):
     from PIL import ImageFilter, ImageDraw
     kind = op.get("op")
     a = np.asarray(img).astype(np.float32)
+    if kind == "phone_tone":
+        s = float(op.get("strength", 0.8))
+        sm = img.copy(); sm.thumbnail((256, 256))
+        m = np.asarray(sm).astype(np.float32)
+        lum = 0.299 * m[..., 0] + 0.587 * m[..., 1] + 0.114 * m[..., 2]
+        mean, std = float(lum.mean()), max(float(lum.std()), 1e-3)
+        mc = m.reshape(-1, 3).mean(0)
+        gain = min(max(1 + s * (49 / std - 1), 0.8), 1.1)
+        shift = s * (118 - mean)
+        warm = s * (15 - (mc[0] - mc[2])) / 2
+        res = (a - mc) * gain + mc + shift
+        res[..., 0] += warm; res[..., 2] -= warm
+        return Image.fromarray(np.clip(res, 0, 255).astype(np.uint8))
     if kind == "color_match":
         ref = Image.open(image_path(cid, op["ref_id"])).convert("RGB").resize((400, 700))
         r = np.asarray(ref).astype(np.float32); s = float(op.get("strength", 0.8))
@@ -895,13 +927,16 @@ def auto_brief(cid, src, cfg):
     """Страховка: Grok не дал описание сцены — отдельный короткий запрос описывает исходник для рецепта замены."""
     if cfg.get("xai_key") in ("", None, "mock"):
         return {}
-    keys = ["scene", "action", "expression", "outfit", "background", "light"]
+    keys = ["scene", "action", "expression", "outfit", "background", "light", "orig_hair"]
     res = xai_chat(cfg, {"model": cfg["chat_model"], "temperature": 0.2, "messages": [
         {"role": "system", "content": "Ты описываешь фото для замены девушки на другую модель. Описывай ТОЛЬКО то, что реально видно, ничего не выдумывай. "
                                       "Верни JSON {\"en\": {...}, \"zh\": {...}} с одинаковыми по смыслу полями: "
                                       "scene (что за кадр, кто снимает, ракурс и крупность), action (поза, куда смотрит, что делают руки, что в руках), "
                                       "expression (эмоция точно), outfit (вся одежда, обувь, аксессуары: цвета, ткань, крой, принты), "
-                                      "background (что на фоне), light (свет и время суток). Коротко, без внешности лица и волос. Только JSON."},
+                                      "background (что на фоне: место и все предметы), light (свет и время суток), "
+                                      "orig_hair (только цвет и причёска её волос — чтобы потом сказать «не такие»). "
+                                      "scene начинай с того, как снято (чья рука с телефоном в кадре, зеркало, кто-то снимает). action — каждая рука и нога по отдельности, наклон головы, взгляд. "
+                                      "Без описания лица и фигуры. Только JSON."},
         {"role": "user", "content": [{"type": "text", "text": "Опиши фото:"},
                                      {"type": "image_url", "image_url": {"url": data_uri(image_path(cid, src), 1024, 88), "detail": "high"}}]}]}, timeout=120, cid=cid, kind="grok_brief")
     out = (res["choices"][0]["message"].get("content") or "").strip()
@@ -976,8 +1011,14 @@ def plan_carousel(cid, src, n, wishes, cfg):
              "ракурс камеры (анфас / 3/4 / профиль / со спины / сверху / снизу), крупность (крупный план / по пояс / в рост / сидя / лёжа), "
              "поза и эмоция. Ни один кадр не повторяет позу и ракурс основы. Для каждого кадра опиши физически: где стоит камера "
              "(высота, расстояние, угол), что попадает в кадр «от … до …», что делает тело и руки, куда смотрит, точная эмоция. "
-             "Одежду, место и свет опиши один раз — ровно как на основе, ничего не выдумывай. Селфи в зеркале — все кадры тоже в зеркале с тем же телефоном. "
-             "Верни только JSON: {\"outfit_zh\",\"outfit_en\",\"place_zh\",\"place_en\",\"light_zh\",\"light_en\","
+             "Сцену каждого кадра пиши 5–8 простыми предложениями по порядку: камера (кто и как держит телефон: правая/левая вытянутая рука, телефон у зеркала, "
+             "штатив с таймером; высота, угол, расстояние); что в кадре сверху донизу; где она и поза, на какой ноге вес; что делает правая рука и что левая "
+             "(одна держит телефон в селфи), где ноги; что изменилось с основы. Не делай кадр «POV сверху вниз»; кадр сзади — без зеркала "
+             "(селфи через плечо или телефон на полке с таймером), зеркало — только когда она к нему лицом. "
+             "Одежду, причёску, место и свет опиши один раз — ровно как на основе, ничего не выдумывай: причёска (распущены/хвост), каждая вещь (цвет, ткань, длина рукава), "
+             "обувь, место и предметы вокруг, поверхности (мокрые/сухие), погода, время. Одежда — только состояние вещей, без рук и действий. "
+             "Селфи в зеркале — все кадры тоже в зеркале с тем же телефоном. "
+             "Верни только JSON: {\"outfit_zh\",\"outfit_en\",\"hair_zh\",\"hair_en\",\"place_zh\",\"place_en\",\"light_zh\",\"light_en\","
              "\"frames\":[{\"label_ru\" (коротко: крупность, ракурс, поза),\"framing\" (face|half|full),\"face_angle\" (front|34|profile),"
              "\"body_view\" (front|34|side|back|back34),\"scene_zh\",\"scene_en\",\"action_zh\",\"action_en\",\"expression_zh\",\"expression_en\"}]}")
     try:
@@ -996,7 +1037,7 @@ def plan_carousel(cid, src, n, wishes, cfg):
                            "framing": f.get("framing"), "face_angle": f.get("face_angle"), "body_view": f.get("body_view"),
                            "zh": {k2: f.get(f"{k2}_zh") for k2 in ("scene", "action", "expression") if f.get(f"{k2}_zh")},
                            "en": {k2: f.get(f"{k2}_en") for k2 in ("scene", "action", "expression") if f.get(f"{k2}_en")}})
-        common = {L: {k: v for k, v in {"outfit": j.get(f"outfit_{L}"), "background": j.get(f"place_{L}"),
+        common = {L: {k: v for k, v in {"outfit": j.get(f"outfit_{L}"), "hair": j.get(f"hair_{L}"), "background": j.get(f"place_{L}"),
                                          "light": j.get(f"light_{L}")}.items() if v} for L in ("zh", "en")}
         used = {(f.get("framing"), f.get("body_view")) for f in frames}
         spare = [t for t in tmpl_all(len(CAROUSEL_TEMPLATE)) if (t["framing"], t["body_view"]) not in used]
@@ -1032,9 +1073,7 @@ def expand_carousel(cid, call, cfg):
     src = carousel_base(chat, a)
     if not src:
         raise RuntimeError("нет основы для карусели — пришлите кадр или отметьте его ★")
-    eng = a.get("engine") if a.get("engine") in WS_MODELS else (chat["images"][src].get("engine") or "seedream")
-    if eng not in WS_MODELS:
-        eng = "seedream"
+    eng = a.get("engine") if a.get("engine") in WS_MODELS else "seedream"
     set_status(cid, "running", f"Планирую карусель из {n} кадров…")
     frames, common = plan_carousel(cid, src, n, a.get("wishes"), cfg)
     out = []
@@ -1053,7 +1092,9 @@ CAROUSEL_RE = re.compile(r"^\s*карусел\w*\s*(\d+)?\s*$", re.I)
 def prepare_gen(cid, a, cfg, rebuild_inputs=True):
     """Довести вызов generate_image до готового: входы по рецепту, силуэт, промпт, язык. Меняет a."""
     fix_ids(cid, a)
-    eng = a.get("engine") if a.get("engine") in WS_MODELS else "gpt"; a["engine"] = eng
+    eng = a.get("engine") if a.get("engine") in WS_MODELS else "seedream"; a["engine"] = eng
+    if a.get("mode") == "bodyref":
+        eng = a["engine"] = "gpt"   # эталоны фигуры — только GPT: он слушается описания фигуры
     mode = a.get("mode") if a.get("mode") in recipes.MODES else ("free" if a.get("prompt") else "new")
     a["mode"] = mode
     chat = load_chat(cid)
@@ -1064,6 +1105,15 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
                 raise RuntimeError("не нашёл исходное фото (source_id)")
         lang = "zh" if eng == "seedream" else "en"
         other = "en" if lang == "zh" else "zh"
+        if mode == "bodyref":
+            a["image_ids"] = [i for i in recipes.pick_inputs(chat, a, eng) if i in chat["images"]]
+            if not a["image_ids"]:
+                raise RuntimeError("нет эталонов лица — сначала добавьте портреты модели")
+            a["auto_inputs"] = True
+            a["aspect_ratio"] = "3:4" if a.get("view") == "half" else "2:3"
+            a["prompt"] = recipes.render(chat, a, eng)
+            a["image_roles"] = [recipes.role_label(chat, i, a, k) for k, i in enumerate(a["image_ids"])]
+            return a
         if no_brief(a) and a.get("label"):
             # Grok часто кладёт позу только в подпись («карусель 2: 3/4, рука в волосах») — строим описание из неё
             desc = re.sub(r"^[^:]*:\s*", "", str(a["label"])).strip() or str(a["label"])
@@ -1083,13 +1133,10 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
                 traceback.print_exc()
         if not a.get(f"brief_{lang}") and a.get(f"brief_{other}"):
             a[f"brief_{lang}"] = translate_brief(a[f"brief_{other}"], lang, cfg)
-        if mode == "replace" and eng == "seedream" and rebuild_inputs and not recipes.find_lineart(chat, a["source_id"]):
-            set_status(cid, "running", "Делаю силуэт исходника…")
-            make_lineart(cid, a["source_id"]); chat = load_chat(cid)
         if rebuild_inputs:
             a["image_ids"] = [i for i in recipes.pick_inputs(chat, a, eng) if i in chat["images"]]
             a["auto_inputs"] = True
-        if mode == "replace" and eng == "gpt" and a.get("aspect_ratio") in (None, "", "auto"):
+        if mode == "replace" and a.get("aspect_ratio") in (None, "", "auto"):
             r = chat["images"][a["source_id"]]
             if r.get("w") and r.get("h"):
                 a["aspect_ratio"] = recipes.aspect_for(r["w"], r["h"])
@@ -1105,9 +1152,43 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
     return a
 
 
+def expand_body_refs(cid, call):
+    """Один вызов body_refs → до 4 вызовов generate_image engine=gpt mode=bodyref; фигура сохраняется в модель."""
+    a = parse_args(call)
+    views = [v for v in (a.get("views") or recipes.BODYREF_VIEWS) if v in recipes.BODYREF_VIEWS] or list(recipes.BODYREF_VIEWS)
+
+    def f(c):
+        for k in ("figure_en", "figure_zh"):
+            if a.get(k):
+                c["persona"][k] = a[k].strip()
+    update_chat(cid, f)
+    return [{"id": "b" + secrets.token_hex(4), "type": "function", "function": {"name": "generate_image", "arguments": json.dumps(
+        {"engine": "gpt", "mode": "bodyref", "view": v, "figure_en": a.get("figure_en"), "label": "эталон: " + recipes.BODYREF_RU[v]},
+        ensure_ascii=False)}} for v in dict.fromkeys(views)]
+
+
+def save_bodyref(cid, a, iid):
+    """Живой эталон фигуры: спереди/сзади/сбоку — в тело (вместо прежнего живого того же ракурса), по пояс — в лица."""
+    view = a.get("view") if a.get("view") in recipes.BODYREF_VIEWS else "front"
+
+    def f(c):
+        p = c["persona"]; rec = c["images"][iid]
+        rec["bodyref"] = view; rec["label"] = recipes.BODYREF_RU[view]
+        key = "faces" if view == "half" else "body"
+        old = [i for i in p[key] if c["images"].get(i, {}).get("bodyref") == view]
+        p[key] = [iid] + [i for i in p[key] if i not in old] if key == "body" else [i for i in p[key] if i not in old] + [iid]
+    update_chat(cid, f)
+    where = "лица (по пояс)" if view == "half" else "тело"
+    return (f"Эталон фигуры ({recipes.BODYREF_RU[view]}) готов: {iid}, сохранён в «{where}». Seedream 5.5 теперь берёт фигуру с живых эталонов. "
+            "Проверь: лицо как на эталонах, фигура как в описании (не худее и без преувеличений), нет зеркал; брак — переделай этот ракурс.")
+
+
 def expand_calls(cid, calls, cfg):
     out = []
     for c in calls:
+        if c["function"]["name"] == "body_refs":
+            out += expand_body_refs(cid, c)
+            continue
         if c["function"]["name"] == "carousel":
             try:
                 out += expand_carousel(cid, c, cfg)
@@ -1163,12 +1244,16 @@ def run_tool(cid, call, cfg):
         aspect = a.get("aspect_ratio", "auto"); label = a.get("label", "")
         if eng not in WS_MODELS:
             raise RuntimeError(f"неизвестный движок {eng}")
-        blobs = gen_wavespeed(cid, eng, a["prompt"], ids, aspect, cfg)
+        blobs = gen_wavespeed(cid, eng, a["prompt"], ids, aspect, cfg, a.get("mode"))
         new = [add_image(cid, b, "gen", label, {"engine": eng, "prompt": a["prompt"], "inputs": ids, "mode": a.get("mode")}) for b in blobs]
-        cost = gen_price(eng, len(ids), cfg) * len(new)
+        cost = gen_price(eng, len(ids), cfg, a.get("mode")) * len(new)
+        if a.get("mode") == "bodyref" and new:
+            return save_bodyref(cid, a, new[0]), new, cost
         post, extra = auto_post(cid, chat, a, eng, new, label)
         new += post
-        return f"Готово ({eng}): {', '.join(new)}.{extra} Посмотри результат, проверь лицо и вызови review.", new, cost
+        return (f"Готово ({'Seedream V5.0 Pro' if eng == 'seedream' and a.get('mode') == 'edit' else ENGINE_NAMES.get(eng, eng)}): {', '.join(new)}.{extra} Посмотри результат и проверь: сходство лица с эталонами, "
+                "лишние или недостающие руки/ноги/пальцы, CGI-кожа, фигура не худее эталона, надписи. Брак — пересними Seedream (до 3 попыток), "
+                "и вызови review."), new, cost
     if name == "lineart":
         iid = make_lineart(cid, a["image_id"])
         return f"Силуэт готов: {iid}", [iid], 0.0
@@ -1294,11 +1379,11 @@ def run_tool(cid, call, cfg):
 # ---------------- agent ----------------
 def state_block(chat, cfg):
     p = chat["persona"]
-    engines = ["gpt", "seedream"] if cfg["wavespeed_key"] else []
+    engines = ["seedream (5.5, основной)", "gpt (запасной и эталоны фигуры)"] if cfg["wavespeed_key"] else []
     pr = cfg["prices"]
     lines = ["# Состояние",
              f"Модель (чат): {chat['name']}",
-             f"Движки генерации (WaveSpeed): {', '.join(engines + (['seedance (видео)'] if engines else [])) or 'НЕТ — ключ WaveSpeed не задан, генерировать нельзя: попроси пользователя вписать его в настройках'}. Цены за кадр ≈ gpt ${pr['gpt']}, seedream ${pr['seedream']}. "
+             f"Движки генерации (WaveSpeed): {', '.join(engines + (['seedance (видео)'] if engines else [])) or 'НЕТ — ключ WaveSpeed не задан, генерировать нельзя: попроси пользователя вписать его в настройках'}. Цены за кадр ≈ gpt ${gen_price('gpt', 5, cfg):.2f}, seedream 5.5 ${gen_price('seedream', 5, cfg):.3f} (5 входов; $0.027 + $0.008 за каждую картинку). "
              f"Seedance за секунду (вход+выход): 480p ${pr.get('seedance_480p')}, 720p ${pr.get('seedance_720p')}, 1080p ${pr.get('seedance_1080p')}.",
              f"Подтверждение перед генерацией: {'выключено (запускай сразу)' if cfg['autorun'] else 'включено — приложение само спросит пользователя, просто вызывай инструмент'}.",
              "Эталоны модели по категориям:\n" + "\n".join(
@@ -1310,6 +1395,11 @@ def state_block(chat, cfg):
         lines.append("Identity EN:\n" + p["card_en"])
     if p.get("card_zh"):
         lines.append("人物身份 ZH:\n" + p["card_zh"])
+    live = recipes.live_body(chat)
+    lines.append(("Живые эталоны фигуры для Seedream 5.5: " + ", ".join(live)) if live else
+                 "Живых эталонов фигуры НЕТ — Seedream 5.5 возьмёт фигуру со студийных фото и сделает её стройнее. Перед первыми кадрами Seedream предложи body_refs (4 кадра GPT).")
+    if p.get("figure_en"):
+        lines.append("Фигура: " + p["figure_en"])
     favs = [i for i, r in chat["images"].items() if r.get("fav") and r.get("source") in ("gen", "crop", "post")]
     if favs:
         lines.append("Удачные кадры (★ — годятся как референс фактуры): " + ", ".join(
@@ -1402,10 +1492,10 @@ def build_messages(chat, cfg, turn_start):
                 pr = m["pair"]
                 text = (f"[Два видео: оригинал {pr['orig']} и ГОТОВЫЙ СИЛУЭТ {pr['sil']} (пользователь сделал сам). lineart_video НЕ делай. "
                         + (f"Ключевой кадр уже вынут приложением: {pr['key']} ({pr.get('key_t', 0):.2f} с — лицо анфас, глаза открыты). "
-                           f"Режим 6 с готовым силуэтом: 1) generate_image engine=gpt mode=replace source_id={pr['key']} (одежда и место — с оригинала); "
+                           f"Режим 6 с готовым силуэтом: 1) generate_image engine=seedream mode=replace source_id={pr['key']} (одежда и место — с оригинала); "
                            if pr.get("key") else
                            f"Режим 6 с готовым силуэтом: 1) выбери ОДИН момент, где лицо анфас и глаза ОТКРЫТЫ (не опущенная голова, не рука на лице) "
-                           f"→ video_frames оригинала; generate_image engine=gpt mode=replace по этому кадру (одежда и место — с оригинала); ")
+                           f"→ video_frames оригинала; generate_image engine=seedream mode=replace по этому кадру (одежда и место — с оригинала); ")
                         + f"проверь: лицо на кадре должно совпадать с портретом модели, иначе переделай до видео; "
                         f"3) после проверки кадра — edit_video: video_id={pr['sil']}, image_ids=[кадр с заменой, портрет анфас из «Лицо»], "
                         f"промпт по режиму 6 (одежду словами — с оригинала)."
