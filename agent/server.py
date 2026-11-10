@@ -605,12 +605,14 @@ TOOLS = [
             "with_faces": {"type": "boolean", "description": "edit: добавить портреты (если правка касается лица)"},
             "no_texture": {"type": "boolean", "description": "только GPT/правка: не класть ★ кадр GPT как референс фактуры"},
             "view": {"type": "string", "enum": list(recipes.BODYREF_VIEWS), "description": "только mode=bodyref (лучше инструмент body_refs)"},
+            "retry_of": {"type": "string", "description": "ПРАВКА СЛОВАМИ: id кадра (img_…), который пользователь просит переделать. Приложение возьмёт ровно тот же вызов (исходник, режим, описание, прошлые правки) и добавит fix первым абзацем. Остальные поля можно не передавать"},
+            "fix": {"type": "string", "description": "с retry_of: что не так и как должно быть, по-русски, конкретно и словами пользователя («на исходнике белая футболка без куртки — куртку убрать», «лицо не её — нос меньше, глаза зелёные»)"},
             "prompt": {"type": "string", "description": "только для mode=free: полный промпт (английский для gpt, китайский для seedream)"},
             "image_ids": {"type": "array", "items": {"type": "string"}, "description": "только для mode=free: входы по порядку"},
             "image_roles": {"type": "array", "items": {"type": "string"}},
             "aspect_ratio": {"type": "string", "enum": ["auto", "1:1", "3:4", "4:5", "2:3", "9:16", "4:3", "16:9"]},
             "label": {"type": "string", "description": "Короткая подпись кадра, например 'карусель 2: портрет'"}},
-            "required": ["engine", "mode"]}}},
+            "required": []}}},
     {"type": "function", "function": {
         "name": "body_refs",
         "description": "Платно, один раз на модель: 4 эталона фигуры через GPT Image (спереди, сзади, сбоку в чёрном топе и легинсах у белой стены + по пояс в белой футболке). "
@@ -932,11 +934,12 @@ def auto_brief(cid, src, cfg):
         {"role": "system", "content": "Ты описываешь фото для замены девушки на другую модель. Описывай ТОЛЬКО то, что реально видно, ничего не выдумывай. "
                                       "Верни JSON {\"en\": {...}, \"zh\": {...}} с одинаковыми по смыслу полями: "
                                       "scene (что за кадр, кто снимает, ракурс и крупность), action (поза, куда смотрит, что делают руки, что в руках), "
-                                      "expression (эмоция точно), outfit (вся одежда, обувь, аксессуары: цвета, ткань, крой, принты), "
+                                      "expression (эмоция точно), outfit (КАЖДАЯ вещь по отдельности сверху вниз: что это, цвет, ткань, длина рукава и штанин, что расстёгнуто или подвёрнуто, "
+                                      "какая кожа открыта; обувь; украшения, очки, сумка, телефон. Если чего-то нет (куртки, обуви, украшений) — так и напиши «без куртки», «босиком»), "
                                       "background (что на фоне: место и все предметы), light (свет и время суток), "
                                       "orig_hair (только цвет и причёска её волос — чтобы потом сказать «не такие»). "
                                       "scene начинай с того, как снято (чья рука с телефоном в кадре, зеркало, кто-то снимает). action — каждая рука и нога по отдельности, наклон головы, взгляд. "
-                                      "Без описания лица и фигуры. Только JSON."},
+                                      "Без описания лица и фигуры. Пиши подробно и точно — по этому описанию фото будут переделывать, любая выдуманная или пропущенная вещь испортит результат. Только JSON."},
         {"role": "user", "content": [{"type": "text", "text": "Опиши фото:"},
                                      {"type": "image_url", "image_url": {"url": data_uri(image_path(cid, src), 1024, 88), "detail": "high"}}]}]}, timeout=120, cid=cid, kind="grok_brief")
     out = (res["choices"][0]["message"].get("content") or "").strip()
@@ -1089,9 +1092,57 @@ def expand_carousel(cid, call, cfg):
 CAROUSEL_RE = re.compile(r"^\s*карусел\w*\s*(\d+)?\s*$", re.I)
 
 
+ARG_KEEP = ("engine", "mode", "source_id", "brief_en", "brief_zh", "face_angle", "body_view", "framing", "categories",
+            "with_faces", "aspect_ratio", "view", "figure_en", "described", "fixes", "fixes_en", "fixes_zh")
+
+
+def gen_args(chat, iid):
+    """Аргументы вызова, которым сделан кадр (для доводки/обрезки — у исходного кадра генерации)."""
+    for _ in range(4):
+        rec = chat["images"].get(iid)
+        if not rec:
+            return None
+        if rec.get("args"):
+            return rec["args"]
+        if rec.get("source") in ("post", "crop") and rec.get("inputs"):
+            iid = rec["inputs"][0]
+            continue
+        return None
+    return None
+
+
+def apply_retry(cid, a, cfg):
+    """Правка словами: тот же вызов, что сделал кадр retry_of, + новая правка первым абзацем промпта."""
+    chat = load_chat(cid)
+    prev = gen_args(chat, a["retry_of"])
+    if not prev:
+        raise RuntimeError(f"{a['retry_of']} сделан не генерацией в этом чате — передай mode, source_id и описание сцены заново")
+    mine = {k: v for k, v in a.items() if v not in (None, "", [], {}) and k not in ("retry_of", "fix", "image_ids", "image_roles", "prompt", "auto_inputs")}
+    merged = json.loads(json.dumps(prev))
+    for L in ("en", "zh"):
+        if isinstance(mine.get(f"brief_{L}"), dict):
+            merged[f"brief_{L}"] = {**(merged.get(f"brief_{L}") or {}), **{k: v for k, v in mine.pop(f"brief_{L}").items() if v}}
+    merged.update(mine)
+    fx = (a.get("fix") or "").strip()
+    if fx:
+        merged["fixes"] = (merged.get("fixes") or []) + [fx]
+        merged["fixes_zh"] = (merged.get("fixes_zh") or []) + [grok_translate(fx, "zh", cfg)]
+        merged["fixes_en"] = (merged.get("fixes_en") or []) + [grok_translate(fx, "en", cfg)]
+    if not a.get("label"):
+        merged["label"] = (chat["images"][a["retry_of"]].get("label") or "кадр") + " · правка"
+    else:
+        merged["label"] = a["label"]
+    keep = {"retry_of": a["retry_of"], "fix": fx}
+    a.clear(); a.update(merged); a.update(keep); a["retry_done"] = True
+    a.pop("prompt_manual", None)
+    return a
+
+
 def prepare_gen(cid, a, cfg, rebuild_inputs=True):
     """Довести вызов generate_image до готового: входы по рецепту, силуэт, промпт, язык. Меняет a."""
     fix_ids(cid, a)
+    if a.get("retry_of") and not a.get("retry_done"):
+        apply_retry(cid, a, cfg)
     eng = a.get("engine") if a.get("engine") in WS_MODELS else "seedream"; a["engine"] = eng
     if a.get("mode") == "bodyref":
         eng = a["engine"] = "gpt"   # эталоны фигуры — только GPT: он слушается описания фигуры
@@ -1122,13 +1173,17 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
             # без описания сцены модель просто повторит основу — не запускаем и не платим
             raise RuntimeError("не запущено: нет brief_en/brief_zh. Для каждого кадра опиши scene (ракурс камеры и крупность), "
                                "action (поза, руки, взгляд) и expression — разные у каждого кадра — и вызови заново")
-        if mode == "replace" and not ((a.get("brief_en") or {}).get("outfit") or (a.get("brief_zh") or {}).get("outfit")):
+        if mode == "replace" and not a.get("described"):
+            # замена всегда идёт по строгому описанию исходника «только то, что видно»: поза, одежда, фон, свет, как снято.
+            # Оно важнее описания Grok — тот на ходу додумывает одежду и детали.
             set_status(cid, "running", "Описываю исходник…")
             try:
                 auto = auto_brief(cid, a["source_id"], cfg)
-                for L in ("en", "zh"):
-                    cur = a.get(f"brief_{L}") or {}
-                    a[f"brief_{L}"] = {**(auto.get(L) or {}), **{k: v for k, v in cur.items() if v}}
+                if auto.get("en") or auto.get("zh"):
+                    for L in ("en", "zh"):
+                        cur = a.get(f"brief_{L}") or {}
+                        a[f"brief_{L}"] = {**{k: v for k, v in cur.items() if v}, **(auto.get(L) or {})}
+                    a["described"] = True
             except Exception:
                 traceback.print_exc()
         if not a.get(f"brief_{lang}") and a.get(f"brief_{other}"):
@@ -1245,12 +1300,20 @@ def run_tool(cid, call, cfg):
         if eng not in WS_MODELS:
             raise RuntimeError(f"неизвестный движок {eng}")
         blobs = gen_wavespeed(cid, eng, a["prompt"], ids, aspect, cfg, a.get("mode"))
-        new = [add_image(cid, b, "gen", label, {"engine": eng, "prompt": a["prompt"], "inputs": ids, "mode": a.get("mode")}) for b in blobs]
+        args = {k: a[k] for k in ARG_KEEP if k in a}
+        new = [add_image(cid, b, "gen", label, {"engine": eng, "prompt": a["prompt"], "inputs": ids, "mode": a.get("mode"), "args": args}) for b in blobs]
         cost = gen_price(eng, len(ids), cfg, a.get("mode")) * len(new)
         if a.get("mode") == "bodyref" and new:
             return save_bodyref(cid, a, new[0]), new, cost
         post, extra = auto_post(cid, chat, a, eng, new, label)
         new += post
+        if a.get("mode") == "replace" and a.get("described"):
+            be = a.get("brief_en") or {}
+            extra += " Описание исходника, по которому сохранялись поза, одежда и фон: " + "; ".join(
+                f"{k}: {be[k]}" for k in ("scene", "action", "outfit", "background") if be.get(k))[:900] + "."
+        if a.get("fixes"):
+            extra += " Учтены правки: " + " | ".join(a["fixes"]) + "."
+        extra += f" Если пользователь пишет, что не так, — generate_image retry_of={new[-1]} fix=«…»."
         return (f"Готово ({'Seedream V5.0 Pro' if eng == 'seedream' and a.get('mode') == 'edit' else ENGINE_NAMES.get(eng, eng)}): {', '.join(new)}.{extra} Посмотри результат и проверь: сходство лица с эталонами, "
                 "лишние или недостающие руки/ноги/пальцы, CGI-кожа, фигура не худее эталона, надписи. Брак — пересними Seedream (до 3 попыток), "
                 "и вызови review."), new, cost

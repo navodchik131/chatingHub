@@ -137,6 +137,26 @@ def live_body(chat):
     return out
 
 
+LIVE_VIEW = {"front": "front", "34": "front", "side": "side", "back": "back", "back34": "back"}
+
+
+def pick_body55(chat, view):
+    """Одна фигура под ракурс тела: живой эталон этого ракурса, иначе студийный."""
+    want = LIVE_VIEW.get(view or "front", "front")
+    for v in (want, "front"):
+        i = next((i for i in chat["persona"]["body"] if chat["images"].get(i, {}).get("bodyref") == v), None)
+        if i:
+            return [i]
+    studio = [i for i in chat["persona"]["body"] if not chat["images"].get(i, {}).get("bodyref")]
+    if not studio:
+        return []
+    for v in (view or "front", "front", "34"):
+        for i in studio:
+            if body_view_of(chat["images"].get(i, {}).get("label")) == v:
+                return [i]
+    return studio[:1]
+
+
 def is_55(engine, a):
     """Seedream 5.5 — всё, кроме локальной правки (она пока на 5.0) и mode=free с явным 5.0."""
     return engine == "seedream" and a.get("mode") != "edit"
@@ -148,11 +168,12 @@ def pick_inputs(chat, a, engine):
     if mode == "bodyref":   # эталоны фигуры через GPT: на вход только лица, фигура — текстом
         return [i for i in ordered_faces(chat, "front") if not chat["images"].get(i, {}).get("bodyref")][:3]
     if is_55(engine, a) and mode in ("replace", "new", "carousel"):
+        # минимум входов: один портрет под ракурс лица + одна фигура под ракурс тела (если тело в кадре).
+        # Лишние эталоны в своей одежде (топ, легинсы, футболка) Seedream тащит в кадр и меняет одежду исходника.
         p = chat["persona"]
-        body = live_body(chat) or pick_body(chat, a.get("body_view"))
-        half = next((i for i in p["faces"] if chat["images"].get(i, {}).get("bodyref") == "half"), None)
-        faces = ([half] if half else []) + [i for i in ordered_faces(chat, a.get("face_angle")) if i != half]
-        faces = faces[:2]
+        portraits = [i for i in ordered_faces(chat, a.get("face_angle")) if not chat["images"].get(i, {}).get("bodyref")]
+        faces = portraits[:1] or [i for i in p["faces"]][:1]
+        body = [] if mode == "carousel" else pick_body55(chat, a.get("body_view"))   # карусель: фигура — с самой основы
         cats = []
         for name in a.get("categories") or []:
             for k, v in p.get("extra", {}).items():
@@ -163,7 +184,7 @@ def pick_inputs(chat, a, engine):
             cats = [c for c in cats if any(w in next((k for k, v in p.get("extra", {}).items() if c in v.get("ids", [])), "").lower() for w in FACE_CATS)]
         lead = [src] if mode in ("replace", "carousel") and src else []
         ids = []
-        for i in lead + body + faces + cats[:2]:
+        for i in lead + faces + body + cats[:2]:
             if i not in ids:
                 ids.append(i)
         return ids[:10]
@@ -188,7 +209,7 @@ def pick_inputs(chat, a, engine):
             la = find_lineart(chat, src)
             ids = faces + body + cats + ([la] if la else [src])
             return ids + ([tex] if tex and tex not in ids else [])
-        return [src] + faces + body + cats
+        return [src] + faces[:2] + body + cats
     if mode == "new":
         if engine == "seedream":
             ids = body + faces + cats
@@ -318,9 +339,11 @@ def render(chat, a, engine):
     if is_55(engine, a):
         return _render_55(chat, a, mode, roles, ids, p)
     if engine == "seedream":
-        return _render_zh(chat, a, mode, roles, p)
+        out = _render_zh(chat, a, mode, roles, p)
+        return (fixes_zh(a) + "\n" + out) if fixes_zh(a) else out
     out = _render_en(chat, a, mode, roles, p)
-    return out[:1].upper() + out[1:]
+    out = out[:1].upper() + out[1:]
+    return (fixes_en(a) + "\n" + out) if fixes_en(a) else out
 
 
 def _render_zh(chat, a, mode, roles, p):
@@ -506,26 +529,45 @@ def _scene55(b):
     return ("场景：" + "。".join(s) + "。") if s else ""
 
 
+def fixes_zh(a):
+    """Правки пользователя словами — первым абзацем, важнее всего остального."""
+    fx = [x.strip().rstrip("。.") for x in (a.get("fixes_zh") or []) if isinstance(x, str) and x.strip()]
+    if not fx:
+        return ""
+    return "这次必须改正（最重要，优先于下面所有描述）：" + "；".join(fx) + "。"
+
+
+def fixes_en(a):
+    fx = [x.strip().rstrip(".") for x in (a.get("fixes_en") or []) if isinstance(x, str) and x.strip()]
+    if not fx:
+        return ""
+    return "MUST FIX THIS TIME (most important, overrides everything below): " + "; ".join(fx) + "."
+
+
 def _render_55(chat, a, mode, roles, ids, p):
     b = a.get("brief_zh") or {}
     F = zh_ref(_idx(roles, "face")); S = zh_ref(_idx(roles, "source")); base = zh_ref(_idx(roles, "base"))
     who = zh_ref(_idx(roles, "body", "face"))
     card = clean_card(p.get("card_zh"))
     P = []
+    fixes = fixes_zh(a)
+    if fixes:
+        P.append(fixes)
     if mode == "replace":
         P.append(f"{S}是要修改的照片。只把{S}中的女子换成{who or F}中的这位女性，{S}里其余的一切保持完全不变。")
         keep = [f"必须保持{S}的姿势" + (f"：{_b(b, 'action')}" if _b(b, "action") else "")]
         if _b(b, "expression"):
             keep.append(f"表情：{_b(b, 'expression')}")
-        if _b(b, "outfit"):
-            keep.append(f"衣服和饰品：{_b(b, 'outfit')}")
         if _b(b, "background"):
             keep.append(f"地点：{_b(b, 'background')}")
         if _b(b, "light"):
             keep.append(f"光线：{_b(b, 'light')}")
         if _b(b, "scene"):
             keep.append(f"拍摄方式：{_b(b, 'scene')}")
-        P.append("。".join(keep) + f"。构图、透视、光线和颜色都和{S}一样。")
+        P.append("。".join(keep) + f"。构图、透视、光线和颜色都和{S}一样：人物在画面中的大小、位置、离镜头的距离、头部角度和手的位置都和{S}完全一致。")
+        P.append(f"衣服和饰品完全按{S}" + (f"：{_b(b, 'outfit')}" if _b(b, "outfit") else "") +
+                 f"。不要添加、去掉或改变任何衣服、鞋子和饰品，不要多出外套、上衣或配饰，衣服的颜色、长度、款式和露出的皮肤范围都和{S}一样。"
+                 + (f"其他参考图只取她的脸和身材，不取它们的衣服。" if who else ""))
         if body55_zh(chat, roles, ids, p):
             P.append(body55_zh(chat, roles, ids, p))
         if F:
@@ -541,12 +583,16 @@ def _render_55(chat, a, mode, roles, ids, p):
             P.append("一张竖屏手机照片。")
         if body55_zh(chat, roles, ids, p):
             P.append(body55_zh(chat, roles, ids, p))
+        elif mode == "carousel":
+            P.append(f"身材完全按{base}这张照片里她本人的身材，不要变瘦，不要缩小胯部和臀部，不要把胸部画大。")
         if F:
             P.append(face55_zh(F, card))
         if _scene55(b):
             P.append(_scene55(b))
         if _b(b, "outfit"):
-            P.append(f"穿着：{_b(b, 'outfit')}。")
+            P.append(f"穿着：{_b(b, 'outfit')}。" + (f"衣服完全和{base}一样，不要添加或去掉任何衣服和饰品。" if mode == "carousel" else ""))
+        elif mode == "carousel":
+            P.append(f"穿着：和{base}完全一样，不要添加或去掉任何衣服和饰品。")
         if _b(b, "camera"):
             P.append(f"拍摄方式：{_b(b, 'camera')}。")
     P += cats_zh(chat, roles)
