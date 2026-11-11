@@ -361,10 +361,15 @@ def render(chat, a, engine):
     """Промпт по рецепту + правила платформы последним абзацем (их нельзя потерять ни в одном режиме)."""
     out = _render_core(chat, a, engine)
     lang = "zh" if engine == "seedream" else "en"
-    if a.get("mode") not in ("free", "bodyref") and draped(a):
-        sl = SLEEVES_ZH if lang == "zh" else SLEEVES_EN
-        if sl not in out:
-            out = out.rstrip() + "\n" + sl
+    if a.get("mode") not in ("free", "bodyref"):
+        # анатомия — в КАЖДОМ рецепте и на любом движке: лишние/недостающие руки и ноги — самый частый брак
+        an = ANATOMY_ZH if lang == "zh" else ANATOMY_EN
+        if an not in out:
+            out = out.rstrip() + "\n" + an
+        if draped(a):
+            sl = SLEEVES_ZH if lang == "zh" else SLEEVES_EN
+            if sl not in out:
+                out = out.rstrip() + "\n" + sl
     rules = rules_prompt(lang)
     if not rules or rules in out:
         return out
@@ -531,7 +536,14 @@ def _render_en(chat, a, mode, roles, p):
 ANATOMY_ZH = ("人体结构（必须正确）：画面里只有她一个人。她正好有两只手臂、两只手、两条腿、两只脚，不多不少；每只手正好五根手指，"
               "手指长短自然、关节正确，不粘连、不交叉、不多指、不缺指。拿手机的那只手和那只手臂只有一个，另一只手按场景描述放好。"
               "手臂和腿都连在身体正确的位置上，比例自然，没有扭曲、拉长或折断的四肢，没有多余的手、手臂、腿或脚，"
-              "画面边缘也不能出现别人的手或身体部位。镜子里的倒影和她本人完全对应，不多出一个人。")
+              "画面边缘也不能出现别人的手或身体部位。镜子里的倒影和她本人完全对应，不多出一个人。"
+              "每只手都能顺着手臂一直连到她自己的肩膀；每条袖子里最多只有一只手臂，没有手臂的袖子是空的、软软垂下。")
+ANATOMY_EN = ("ANATOMY (must be correct): she is the only person in the image. She has exactly two arms, two hands, two legs and two feet — "
+              "no more, no less; each hand has exactly five fingers with natural length and joints, not fused, not crossed, no extra or missing fingers. "
+              "Only one hand and one arm hold the phone; the other hand is placed as the scene says. Limbs attach at the right places with natural "
+              "proportions, nothing twisted, stretched or broken, no extra hands, arms, legs or feet, and no other person's hand at the frame edges. "
+              "Every hand traces along its arm back to her own shoulder; each sleeve holds at most one arm, and a sleeve without an arm is empty and hangs limp. "
+              "A mirror reflection matches her exactly, with no extra person.")
 STYLE55_ZH = ("用iPhone 16主摄随手拍的手机照片：24mm等效广角，手机自带的干净成像，没有可见噪点。大景深：背景和人物一样清晰对焦，"
               "没有背景虚化，没有焦外光斑，前景也不虚化。画面柔和、低对比度，明亮、温暖的自然光，阴影里保留细节、不死黑，高光不过曝。"
               "不要HDR，不要锐化，不要提高清晰度，不要电影感，不要单反感，不要冷色调。\n"
@@ -741,7 +753,6 @@ def _render_outfit(chat, a, roles, p, engine):
             P.append(f"脸保持{base}里的样子，和{F}是同一个人，不要变成别人，不取{F}的衣服和背景。")
         if F and not has_tattoo(p):   # чужое фото — тату не трогаем
             P.append("皮肤上没有纹身。")
-        P.append("只有两只手、两条腿，手指自然。")
         if _b(b, "extra"):
             P.append(_b(b, "extra") + "。")
         return "\n".join(P)

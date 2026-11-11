@@ -523,6 +523,10 @@ def with_rules(prompt, lang):
     """Правила платформы обязательны в любом промпте — и в рецептах, и в своём (free) или правленом вручную."""
     rules = recipes.rules_prompt(lang)
     p = prompt or ""
+    # анатомия — всегда, даже в своём промпте пользователя: лишние руки и ноги — самый частый брак
+    an = recipes.ANATOMY_ZH if lang == "zh" else recipes.ANATOMY_EN
+    if an not in p:
+        p = p.rstrip() + "\n" + an
     return p if not rules or rules in p else p.rstrip() + "\n" + rules
 
 
