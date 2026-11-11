@@ -722,6 +722,7 @@ TOOLS = [
             "image_roles": {"type": "array", "items": {"type": "string"}},
             "resolution": {"type": "string", "enum": list(RESOLUTIONS), "description": "по умолчанию 480p"},
             "generate_audio": {"type": "boolean", "description": "false (по умолчанию) — оставить исходный звук и липсинк"},
+            "allow_original": {"type": "boolean", "description": "только если пользователь ПРЯМО просит менять без силуэта (по оригиналу). Иначе приложение само подставит силуэт"},
             "label": {"type": "string"}},
             "required": ["video_id", "prompt", "image_ids"]}}},
 ]
@@ -1263,8 +1264,85 @@ def expand_calls(cid, calls, cfg):
     return out
 
 
+STRICT_MARK = "严格要求（最重要）："
+
+
+def silhouettes(chat):
+    """Видео-силуэты: сделанные lineart_video и присланные пользователем готовые силуэты (пара «оригинал + силуэт»)."""
+    s = {k for k, r in chat.get("videos", {}).items() if r.get("source") == "lineart"}
+    for m in chat["messages"]:
+        if (m.get("pair") or {}).get("sil"):
+            s.add(m["pair"]["sil"])
+    return s
+
+
+def prepare_video(cid, a, cfg):
+    """Защита замены в видео: в Seedance уходит только силуэт и только кадры с моделью; строгий абзац «лицо и одежда — с @image1»."""
+    fix_ids(cid, a)
+    chat = load_chat(cid); vids = chat.get("videos", {}); notes = []
+    v = a.get("video_id"); sil = silhouettes(chat)
+    if v in vids and v not in sil and not a.get("allow_original"):
+        cand = [k for k, r in vids.items() if r.get("source") == "lineart" and r.get("inputs_video") == v]
+        cand += [m["pair"]["sil"] for m in chat["messages"] if (m.get("pair") or {}).get("orig") == v and m["pair"].get("sil") in vids]
+        if not cand:
+            raise RuntimeError(f"{v} — оригинал, а не силуэт: с ним Seedance оставит лицо и одежду исходной девушки. "
+                               "Сначала lineart_video (или возьми готовый силуэт пользователя). Оригинал — только если пользователь прямо просит: allow_original=true")
+        a["video_id"] = cand[-1]; notes.append(f"видео {v} заменено на силуэт {cand[-1]}")
+    p = chat["persona"]
+    refs = set(p.get("faces", [])) | set(p.get("body", [])) | {i for g in p.get("extra", {}).values() for i in g.get("ids", [])}
+    old = list(a.get("image_ids") or []); keep = []
+    for i in old:
+        r = chat["images"].get(i) or {}
+        if i in refs or r.get("source") in ("gen", "post", "crop", "ref"):
+            keep.append(i)
+    dropped = [i for i in old if i not in keep]
+    if dropped:
+        notes.append("убраны кадры с исходной девушкой (кадры видео/загрузки/силуэты): " + ", ".join(dropped))
+    keys = [i for i in keep if i not in refs]
+    portraits = [i for i in keep if i in p.get("faces", [])]
+    if not portraits and p.get("faces"):
+        keep.append(p["faces"][0]); portraits = [p["faces"][0]]
+    if not keys:
+        raise RuntimeError("нет ключевого кадра с уже заменённой моделью: сначала generate_image mode=replace по кадру видео, проверь лицо, потом edit_video с этим кадром первым")
+    keep = keys + [i for i in keep if i not in keys]
+    if keep != old:
+        pr = a.get("prompt", "")
+        for n in sorted({old.index(i) + 1 for i in dropped}, reverse=True):
+            # убранные картинки: фразы-определения «@imageN是…» выкидываем целиком, остальные упоминания — вместе с «、/和»,
+            # иначе их номер достанется другой картинке
+            pr = re.sub(rf"(^|(?<=[。\n；;，,]))\s*[（(]?@image{n}(?!\d)\s*(是|为|：|:|=)[^。\n；;]*[。；;]?", r"\1", pr)
+            pr = re.sub(rf"@image{n}(?!\d)\s*[、和,，]\s*|\s*[、和,，]\s*@image{n}(?!\d)|@image{n}(?!\d)", "", pr)
+        a["prompt"] = recipes.remap(pr, old, keep)[0] if old else pr
+    a["image_ids"] = keep
+    a["image_roles"] = [("ключевой кадр" if i in keys else recipes.role_label(chat, i, a, k)) for k, i in enumerate(keep)]
+    # строгий абзац первым: лицо — с портрета и ключевых кадров, одежда — только с @image1 и не меняется по ходу ролика
+    k1 = keep.index(keys[0]) + 1; fn = keep.index(portraits[0]) + 1 if portraits else None
+    outfit = ((gen_args(chat, keys[0]) or {}).get("brief_zh") or {}).get("outfit", "")
+    kref = "、".join(f"@image{keep.index(i) + 1}" for i in keys)
+    block = (STRICT_MARK + f"人物只按{kref}" + (f"和@image{fn}" if fn else "") + "：她的脸、五官、发型、发色和身材只取自这些图片，"
+             "绝对不要保留或参考输入视频里原来那个人的脸、五官、发型和身材。"
+             + (f"脸以@image{fn}为准。" if fn else "")
+             + f"衣服和配饰只按@image{k1}" + (f"：{outfit}" if outfit else "") + "。整条视频从第一帧到最后一帧衣服完全不变："
+             "不要在中途添加、更换、穿上或脱下任何衣服，不要多出外套、上衣、裙子或配饰。"
+             + ("" if recipes.has_tattoo(p) else "皮肤上没有任何纹身。"))
+    pr = a.get("prompt", "")
+    if pr.startswith(STRICT_MARK):
+        pr = pr.split("\n", 1)[1] if "\n" in pr else ""
+    a["prompt"] = block + "\n" + pr
+    if notes:
+        a["video_notes"] = "; ".join(notes)
+    return a
+
+
 def prepare_calls(cid, calls, cfg):
     for c in calls:
+        if c["function"]["name"] == "edit_video":
+            a = parse_args(c)
+            try:
+                prepare_video(cid, a, cfg)
+            except Exception as e:
+                traceback.print_exc(); a["prepare_error"] = str(e)[:400]
+            c["function"]["arguments"] = json.dumps(a, ensure_ascii=False)
         if c["function"]["name"] == "generate_image":
             a = parse_args(c)
             try:
@@ -1425,6 +1503,8 @@ def run_tool(cid, call, cfg):
         r = load_chat(cid)["videos"][nv]
         return f"Силуэт видео готов: {nv} ({r['dur']} с). Кадры для проверки: {', '.join(r['frames'])}", r["frames"], 0.0
     if name == "edit_video":
+        if a.get("prepare_error"):
+            raise RuntimeError(a["prepare_error"])
         chat = load_chat(cid); vid = a["video_id"]
         rec = chat["videos"].get(vid)
         if not rec:
@@ -1442,6 +1522,7 @@ def run_tool(cid, call, cfg):
         r = load_chat(cid)["videos"][nv]
         cost = video_cost(rec["dur"], res, cfg)
         return (f"Видео готово (Seedance {res}): {nv}, {r['dur']} с. Кадры результата: {', '.join(r['frames'])}. "
+                + (f"Приложение поправило вызов: {a['video_notes']}. " if a.get("video_notes") else "") +
                 "Проверь лицо в каждом плане против эталонов, остатки линий, одежду, руки, фон — и вызови review с video_ids."), r["frames"], cost
     raise RuntimeError(f"неизвестный инструмент {name}")
 
@@ -1665,6 +1746,12 @@ def edit_call(cid, call, e, cfg):
         a["prompt"] = renumber(chat, a, old_ids, "video")
         roles = dict(zip(old_ids, a.get("image_roles") or []))
         a["image_roles"] = [roles.get(i) or recipes.role_label(chat, i, a, k) for k, i in enumerate(a["image_ids"])]
+    if nm == "edit_video":
+        a.pop("prepare_error", None)
+        try:
+            prepare_video(cid, a, cfg)
+        except Exception as e:
+            a["prepare_error"] = str(e)[:400]
     call["function"]["arguments"] = json.dumps(a, ensure_ascii=False)
     call["edited"] = True
 
