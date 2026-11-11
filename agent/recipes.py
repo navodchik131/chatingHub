@@ -343,10 +343,28 @@ def cats_en(chat, roles):
 
 
 # ---------------- сборка ----------------
+_DRAPED = re.compile(r"披|搭在肩|滑落|空袖|draped|off[- ]the[- ]shoulder|over (?:her|the|both) shoulders?|slipp(?:ing|ed) off|empty sleeve|накинут|сполза|спущен[аы]? с плеч|пуст\w* рукав", re.I)
+SLEEVES_ZH = ("袖子（严格）：外套是披在肩上的，空着的袖子软软地垂下来，袖口里没有手、没有手臂。她只有自己的两只手臂，"
+              "每只手只在场景里写的位置；空袖子不能变成第三只手臂或第三只手。")
+SLEEVES_EN = ("SLEEVES (strict): the jacket is draped over her shoulders; any empty sleeve hangs limp with no hand or arm inside. "
+              "She has only her own two arms, each hand exactly where the scene says; an empty sleeve must never become a third arm or hand.")
+
+
+def draped(a):
+    """Одежда накинута на плечи — пустые рукава Seedream/GPT «заполняют» лишней рукой."""
+    txt = " ".join(str(v) for L in ("en", "zh") for k, v in ((a.get(f"brief_{L}") or {}).items())
+                   if k in ("outfit", "action", "scene", "change", "extra") and v)
+    return bool(_DRAPED.search(txt))
+
+
 def render(chat, a, engine):
     """Промпт по рецепту + правила платформы последним абзацем (их нельзя потерять ни в одном режиме)."""
     out = _render_core(chat, a, engine)
     lang = "zh" if engine == "seedream" else "en"
+    if a.get("mode") not in ("free", "bodyref") and draped(a):
+        sl = SLEEVES_ZH if lang == "zh" else SLEEVES_EN
+        if sl not in out:
+            out = out.rstrip() + "\n" + sl
     rules = rules_prompt(lang)
     if not rules or rules in out:
         return out
