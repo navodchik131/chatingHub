@@ -182,9 +182,16 @@ def pick_inputs(chat, a, engine):
         if framing_of(a) == "face":
             body = []
             cats = [c for c in cats if any(w in next((k for k, v in p.get("extra", {}).items() if c in v.get("ids", [])), "").lower() for w in FACE_CATS)]
-        lead = [src] if mode in ("replace", "carousel") and src else []
+        if mode == "replace":
+            # замена: исходник уходит СИЛУЭТОМ (линии поверх настоящего фона) — с настоящего фото Seedream копирует
+            # лицо, фигуру и тату исходной девушки. Лица — два портрета (ракурс кадра + анфас), силуэт последним.
+            la = find_lineart(chat, src)
+            faces = portraits[:2] or [i for i in p["faces"]][:2]
+            order = faces + body + cats[:2] + [la or src]
+        else:
+            order = ([src] if mode == "carousel" and src else []) + faces + body + cats[:2]
         ids = []
-        for i in lead + faces + body + cats[:2]:
+        for i in order:
             if i not in ids:
                 ids.append(i)
         return ids[:10]
@@ -529,6 +536,14 @@ def _scene55(b):
     return ("场景：" + "。".join(s) + "。") if s else ""
 
 
+def has_tattoo(p):
+    """Есть ли у модели тату по карточке — тогда тату не запрещаем."""
+    txt = " ".join(str(p.get(k) or "") for k in ("card_zh", "card_en", "figure_zh", "figure_en")).lower()
+    if any(w in txt for w in ("没有纹身", "无纹身", "no tattoo", "without tattoo")):
+        return False
+    return any(w in txt for w in ("纹身", "tattoo", "тату"))
+
+
 def fixes_zh(a):
     """Правки пользователя словами — первым абзацем, важнее всего остального."""
     fx = [x.strip().rstrip("。.") for x in (a.get("fixes_zh") or []) if isinstance(x, str) and x.strip()]
@@ -554,7 +569,14 @@ def _render_55(chat, a, mode, roles, ids, p):
     if fixes:
         P.append(fixes)
     if mode == "replace":
-        P.append(f"{S}是要修改的照片。只把{S}中的女子换成{who or F}中的这位女性，{S}里其余的一切保持完全不变。")
+        L = zh_ref(_idx(roles, "lineart"))
+        if L:
+            # силуэт: настоящий фон, человек — белый с чёрными линиями. Лицо, фигуру и тату взять неоткуда — только с эталонов.
+            S = L
+            P.append(f"一张真实的手机照片。{L}是一张线稿参考：白色剪影加黑色线条只提供人物的动作、姿势、表情和构图，背景是真实的照片，保持不变。"
+                     f"把线稿里的人变成真人，她就是{who or F}中的这位女性。画面里不能留下任何线稿、白色剪影或黑色描边。")
+        else:
+            P.append(f"{S}是要修改的照片。只把{S}中的女子换成{who or F}中的这位女性，{S}里其余的一切保持完全不变。")
         keep = [f"必须保持{S}的姿势" + (f"：{_b(b, 'action')}" if _b(b, "action") else "")]
         if _b(b, "expression"):
             keep.append(f"表情：{_b(b, 'expression')}")
@@ -565,14 +587,21 @@ def _render_55(chat, a, mode, roles, ids, p):
         if _b(b, "scene"):
             keep.append(f"拍摄方式：{_b(b, 'scene')}")
         P.append("。".join(keep) + f"。构图、透视、光线和颜色都和{S}一样：人物在画面中的大小、位置、离镜头的距离、头部角度和手的位置都和{S}完全一致。")
-        P.append(f"衣服和饰品完全按{S}" + (f"：{_b(b, 'outfit')}" if _b(b, "outfit") else "") +
-                 f"。不要添加、去掉或改变任何衣服、鞋子和饰品，不要多出外套、上衣或配饰，衣服的颜色、长度、款式和露出的皮肤范围都和{S}一样。"
-                 + (f"其他参考图只取她的脸和身材，不取它们的衣服。" if who else ""))
+        if L:
+            P.append(f"衣服和饰品（线稿里看不出颜色和材质，严格按文字）" + (f"：{_b(b, 'outfit')}" if _b(b, "outfit") else "") +
+                     f"。衣服的款式、长度和露出的皮肤范围和{L}的线条一致；不要添加、去掉或改变任何衣服、鞋子和饰品，不要多出外套、上衣或配饰。"
+                     "其他参考图只取她的脸和身材，不取它们的衣服。")
+        else:
+            P.append(f"衣服和饰品完全按{S}" + (f"：{_b(b, 'outfit')}" if _b(b, "outfit") else "") +
+                     f"。不要添加、去掉或改变任何衣服、鞋子和饰品，不要多出外套、上衣或配饰，衣服的颜色、长度、款式和露出的皮肤范围都和{S}一样。"
+                     + (f"其他参考图只取她的脸和身材，不取它们的衣服。" if who else ""))
         if body55_zh(chat, roles, ids, p):
-            P.append(body55_zh(chat, roles, ids, p))
+            P.append(body55_zh(chat, roles, ids, p) + "不要沿用原图女子的身材。")
         if F:
             P.append(face55_zh(F, card))
-            P.append(f"发色按{F}，不是{S}里女子的发色" + (f"（不是{_b(b, 'orig_hair')}）" if _b(b, "orig_hair") else "") + "。")
+            P.append(f"发色按{F}，不是原图女子的发色" + (f"（不是{_b(b, 'orig_hair')}）" if _b(b, "orig_hair") else "") + "。")
+        if not has_tattoo(p):
+            P.append("皮肤上没有任何纹身、贴纸或图案，手臂、腿、身体都是干净的皮肤（原图女子的纹身不要保留）。")
     else:
         if mode == "carousel":
             P.append(f"延续：{base}是她几分钟前拍的照片。新照片是一分钟后在同一个位置拍的：保留{base}环境里所有能认出来的东西、同样的天气、同样的光线和时间；"

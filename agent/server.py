@@ -939,7 +939,7 @@ def auto_brief(cid, src, cfg):
                                       "background (что на фоне: место и все предметы), light (свет и время суток), "
                                       "orig_hair (только цвет и причёска её волос — чтобы потом сказать «не такие»). "
                                       "scene начинай с того, как снято (чья рука с телефоном в кадре, зеркало, кто-то снимает). action — каждая рука и нога по отдельности, наклон головы, взгляд. "
-                                      "Без описания лица и фигуры. Пиши подробно и точно — по этому описанию фото будут переделывать, любая выдуманная или пропущенная вещь испортит результат. Только JSON."},
+                                      "Без описания лица и фигуры, без тату, родинок, пирсинга на теле и макияжа — это черты исходной девушки, у модели их нет. Пиши подробно и точно — по этому описанию фото будут переделывать, любая выдуманная или пропущенная вещь испортит результат. Только JSON."},
         {"role": "user", "content": [{"type": "text", "text": "Опиши фото:"},
                                      {"type": "image_url", "image_url": {"url": data_uri(image_path(cid, src), 1024, 88), "detail": "high"}}]}]}, timeout=120, cid=cid, kind="grok_brief")
     out = (res["choices"][0]["message"].get("content") or "").strip()
@@ -1188,6 +1188,13 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
                 traceback.print_exc()
         if not a.get(f"brief_{lang}") and a.get(f"brief_{other}"):
             a[f"brief_{lang}"] = translate_brief(a[f"brief_{other}"], lang, cfg)
+        if mode == "replace" and eng == "seedream" and rebuild_inputs and not recipes.find_lineart(chat, a["source_id"]):
+            # силуэт обязателен: с настоящего фото Seedream оставляет лицо, фигуру и тату исходной девушки
+            set_status(cid, "running", "Делаю силуэт исходника…")
+            try:
+                make_lineart(cid, a["source_id"]); chat = load_chat(cid)
+            except Exception:
+                traceback.print_exc()
         if rebuild_inputs:
             a["image_ids"] = [i for i in recipes.pick_inputs(chat, a, eng) if i in chat["images"]]
             a["auto_inputs"] = True
