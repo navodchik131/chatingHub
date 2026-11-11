@@ -7,7 +7,6 @@ import { fmtMoney } from './api/helpers';
 
 import Overview from './pages/Overview';
 import Guide, { MediaModal } from './pages/Guide';
-import Dialogs from './pages/Dialogs';
 import Images, { Lightbox } from './pages/Images';
 import Video from './pages/Video';
 import SeedanceProbe from './pages/SeedanceProbe';
@@ -33,7 +32,6 @@ import NewCabinetPromo from './components/NewCabinetPromo';
 const pages = {
   overview: Overview,
   guide: Guide,
-  dialogs: Dialogs,
   images: Images,
   video: Video,
   'seedance-probe': SeedanceProbe,

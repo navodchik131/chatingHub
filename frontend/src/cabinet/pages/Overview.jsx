@@ -1,8 +1,8 @@
 import Hoverable from '../components/Hoverable';
-import { IcoSpark, IcoChat, IcoImage, IcoFilm, IcoStar } from '../components/Icons';
-import { Fade, PageTitle, Eyebrow, Panel, Avatar, IconBox, LimeButton } from '../components/ui';
+import { IcoSpark, IcoImage, IcoFilm, IcoStar } from '../components/Icons';
+import { Fade, PageTitle, Eyebrow, Panel, IconBox, LimeButton } from '../components/ui';
 import { useApp } from '../hooks/useApp';
-import { color, line, font, avG } from '../styles/tokens';
+import { color, line, font } from '../styles/tokens';
 import { borderHoverOff } from '../styles/mixins';
 import { guideDefs } from '../data/catalog';
 import { fmtCreditsWithUsd, fmtToday, resolveDonationBalances } from '../api/helpers';
@@ -12,8 +12,6 @@ import {
   formatDemoCounterLong,
   isCreditsPlanWithDemo,
 } from '../../billing/demoCounter';
-import { mapDialogRow } from '../api/mappers';
-import { sumOutboundMessages } from '../api/studioHelpers';
 import { archiveThumbUrl } from '../api/actions';
 import TelegramAccountLink from '../components/TelegramAccountLink';
 import { subscriptionBadgeProps } from '../../billing/planLabels';
@@ -39,7 +37,7 @@ const KpiCard = ({ children, onClick, accent }) => (
 
 export default function Overview() {
   const { t, lang, go, cabinet } = useApp();
-  const { me, conversations, donationOverview, donationEvents, archiveImages, chatterStats, health, refreshAll } = cabinet;
+  const { me, donationOverview, donationEvents, archiveImages, health, refreshAll } = cabinet;
 
   const credits = fmtCreditsWithUsd(me?.credits_balance, lang);
   const creditsNum = Math.max(0, Math.round(Number(me?.credits_balance) || 0));
@@ -51,14 +49,10 @@ export default function Overview() {
   const planName = me?.plan_display_name || me?.plan_tier || '—';
   const subBadge = subscriptionBadgeProps(me, lang === 'en' ? 'en' : 'ru');
   const subBadgeStyle = subBadge.tone === 'active' ? stActive : stWarn;
-  const recentDialogs = conversations.slice(0, 4).map((c, i) => mapDialogRow(c, i));
   const recentFrames = archiveImages.slice(0, 4);
   const donationBalances = resolveDonationBalances(donationOverview, donationEvents)
   const donationAvail = donationBalances.availableLabel
   const donationTotal = donationBalances.totalLabel
-  const dialogCount = conversations.length;
-  const teamReplies = sumOutboundMessages(chatterStats);
-  const unreadTotal = conversations.reduce((a, c) => a + (c.unread_count || 0), 0);
   const helloName = (me?.email || '').split('@')[0] || '—';
   const hello = lang === 'ru' ? `С возвращением, ${helloName}` : `Welcome back, ${helloName}`;
 
@@ -138,18 +132,6 @@ export default function Overview() {
             <span style={{ display: 'flex', width: 15, height: 15 }}><IcoSpark /></span>
             {t.newFrame}
           </LimeButton>
-          <Hoverable
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, background: color.raised,
-              border: `1px solid ${line.mid}`, fontWeight: 700, fontSize: 13,
-              borderRadius: 10, padding: '10px 16px', cursor: 'pointer',
-            }}
-            hover={{ borderColor: borderHoverOff }}
-            onClick={go('dialogs')}
-          >
-            <span style={{ display: 'flex', width: 15, height: 15, color: color.textDim }}><IcoChat /></span>
-            {t.openDialogs}
-          </Hoverable>
         </div>
       </div>
 
@@ -203,13 +185,6 @@ export default function Overview() {
           <div style={{ fontSize: 11.5, color: color.pink, marginTop: 6 }}>{t.toPayout}: {donationAvail} →</div>
         </KpiCard>
 
-        <KpiCard onClick={go('dialogs')}>
-          <Eyebrow style={{ marginBottom: 10 }}>{t.kpiDialogs}</Eyebrow>
-          <div style={{ fontFamily: font.display, fontWeight: 600, fontSize: 20 }}>{dialogCount}</div>
-          <div style={{ fontSize: 11.5, color: color.textDim, marginTop: 6 }}>
-            {unreadTotal ? `${unreadTotal} ${lang === 'ru' ? 'новых' : 'new'}` : t.allRead} · {teamReplies} {t.teamReplies}
-          </div>
-        </KpiCard>
       </div>
 
       <TelegramAccountLink
@@ -297,46 +272,6 @@ export default function Overview() {
 
       {/* recents */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12 }}>
-        <Panel style={{ padding: '16px 18px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontWeight: 800, fontSize: 14 }}>{t.recentDialogs}</span>
-            <Hoverable as="span" style={{ fontSize: 11.5, fontWeight: 700, color: color.lime, cursor: 'pointer' }} hover={{ color: color.limeHi }} onClick={go('dialogs')}>
-              {t.all} →
-            </Hoverable>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {recentDialogs.length ? recentDialogs.map((d) => (
-              <Hoverable
-                key={d.id}
-                style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '9px 6px', borderRadius: 10, cursor: 'pointer' }}
-                hover={{ background: 'rgba(255,255,255,.04)' }}
-                onClick={go('dialogs')}
-              >
-                <Avatar size={32} grad={avG[d.av % 5]}>{d.name[0]}</Avatar>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', gap: 7, alignItems: 'baseline' }}>
-                    <span style={{ fontWeight: 700, fontSize: 12.5 }}>{d.name}</span>
-                    <span
-                      style={{
-                        fontFamily: font.mono, fontSize: 8.5, letterSpacing: '1px',
-                        color: d.platform === 'FANVUE' ? color.pink : color.blue,
-                      }}
-                    >
-                      {d.platform}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11.5, color: color.textDim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {d.last}
-                  </div>
-                </div>
-                <span style={{ fontFamily: font.mono, fontSize: 10, color: color.textGhost }}>{d.time}</span>
-              </Hoverable>
-            )) : (
-              <div style={{ fontSize: 12, color: color.textDim, padding: '8px 6px' }}>{lang === 'ru' ? 'Диалогов пока нет' : 'No dialogs yet'}</div>
-            )}
-          </div>
-        </Panel>
-
         <Panel style={{ padding: '16px 18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontWeight: 800, fontSize: 14 }}>{t.recentFrames}</span>

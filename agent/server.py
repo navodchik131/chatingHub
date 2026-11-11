@@ -1183,6 +1183,18 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
             raise RuntimeError("не запущено: нет brief_en/brief_zh. Для каждого кадра опиши scene (ракурс камеры и крупность), "
                                "action (поза, руки, взгляд) и expression — разные у каждого кадра — и вызови заново")
         if mode == "outfit" and not any(((a.get(f"brief_{L}") or {}).get(k)) for L in ("en", "zh") for k in ("change", "outfit")):
+            # Grok часто кладёт просьбу не в brief.change, а в change / prompt / подпись — или не кладёт вовсе.
+            # Тогда берём слова пользователя как есть: поле change, описание сцены, подпись, последнее сообщение.
+            ch = next((str(x).strip() for x in (
+                a.get("change"), a.get("fix"),
+                *[(a.get(f"brief_{L}") or {}).get(k) for L in ("en", "zh") for k in ("action", "scene", "extra")],
+                a.get("prompt") if not a.get("prompt_manual") else None,
+                re.sub(r"^[^:]*:\s*", "", str(a.get("label") or "")),
+                next((m.get("text") for m in reversed(chat["messages"]) if m["role"] == "user" and (m.get("text") or "").strip()), None),
+            ) if x and str(x).strip()), "")
+            if ch:
+                a.setdefault(f"brief_{lang}", {})["change"] = ch
+        if mode == "outfit" and not any(((a.get(f"brief_{L}") or {}).get(k)) for L in ("en", "zh") for k in ("change", "outfit")):
             raise RuntimeError("не запущено: для mode=outfit нужен brief.change — какую одежду сделать или что снять, словами пользователя")
         if mode == "replace" and not a.get("described"):
             # замена всегда идёт по строгому описанию исходника «только то, что видно»: поза, одежда, фон, свет, как снято.

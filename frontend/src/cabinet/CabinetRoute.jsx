@@ -1,20 +1,11 @@
-import { useEffect } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthCheckingScreen } from '../auth/AuthCheckingScreen'
 import { useAuthSessionGate } from '../auth/useAuthSessionGate'
 import { appendPartnerAttributionToLoginPath } from '../marketing/partnerAttribution'
-import { CHAT_APP_URL } from '../marketing/workspaceEntry'
 import CabinetApp from './App'
 import { CabinetDataProvider } from './api/CabinetDataProvider'
 import './styles/global.css'
 
-/** Старый URL /workspace/dialogs → Unibox на /chat/ (полная перезагрузка). */
-function RedirectToChat() {
-  useEffect(() => {
-    window.location.replace(CHAT_APP_URL)
-  }, [])
-  return <AuthCheckingScreen variant="cabinet" />
-}
 
 /** Защита /workspace/* — без валидной сессии на /login. */
 export function CabinetRoute() {
@@ -27,14 +18,15 @@ export function CabinetRoute() {
 
   if (session === 'anonymous') {
     const page = pageFromPathname(location.pathname)
-    const rawNext = page === 'dialogs' ? CHAT_APP_URL : `${location.pathname}${location.search}`
+    const rawNext = page === 'dialogs' ? '/workspace' : `${location.pathname}${location.search}`
     const next = encodeURIComponent(rawNext)
     const loginPath = appendPartnerAttributionToLoginPath(`/login?next=${next}`)
     return <Navigate to={loginPath} replace />
   }
 
+  // Диалоги из кабинета убраны — старые ссылки ведут на обзор
   if (pageFromPathname(location.pathname) === 'dialogs') {
-    return <RedirectToChat />
+    return <Navigate to="/workspace" replace />
   }
 
   return (
@@ -95,11 +87,7 @@ export function useCabinetNavigation() {
       window.location.assign(WORKFLOW_APP_URL)
       return
     }
-    if (nextPage === 'dialogs') {
-      window.location.assign(CHAT_APP_URL)
-      return
-    }
-    navigate(pathnameFromPage(nextPage))
+    navigate(pathnameFromPage(nextPage === 'dialogs' ? 'overview' : nextPage))
   }
 
   return { page, go, pathname: location.pathname }

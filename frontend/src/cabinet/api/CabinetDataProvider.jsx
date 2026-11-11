@@ -522,8 +522,9 @@ export function CabinetDataProvider({ children }) {
       ] = await Promise.all([
         apiJson('/api/auth/me'),
         apiJsonOptional('/api/health', {}, null),
-        apiJsonOptional('/api/conversations', {}, []),
-        apiJsonOptional('/api/conversation-folders', {}, []),
+        // Диалоги из кабинета убраны: список диалогов и папок больше не грузим при входе (был самым долгим запросом)
+        Promise.resolve([]),
+        Promise.resolve([]),
         apiJsonOptional('/api/studio/models', {}, null),
         actions.refreshArchiveImages(0).catch(() => ({ items: [], has_more: false })),
         actions.refreshArchiveVideos(0, { videoBackend: 'wavespeed' }).catch(() => ({ items: [], has_more: false })),
@@ -1822,7 +1823,7 @@ export function CabinetDataProvider({ children }) {
                 (c) => Number(c.id) === convId,
               )
               if (!knownConv) {
-                void loadConversations()
+                // Диалоги из кабинета убраны: список диалогов на каждое сообщение больше не перезагружаем
                 if (activeId && convId === activeId) {
                   void loadMessages(activeId)
                 }
