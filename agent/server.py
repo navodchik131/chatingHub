@@ -559,7 +559,7 @@ def gen_wavespeed(cid, engine, prompt, image_ids, aspect, cfg, mode=None):
         payload.update(output_format="jpeg", enable_sync_mode=False, enable_base64_output=False)
         if aspect and aspect != "auto":
             payload["aspect_ratio"] = aspect
-        elif mode not in ("replace", "carousel"):
+        elif mode not in ("replace", "carousel", "outfit"):
             payload["aspect_ratio"] = "3:4"   # пусто = пропорции первой картинки (исходник или основа)
     job = http_json(f"{WS}/{model}", key, payload)["data"]
     res = ws_wait(job["id"], key)
@@ -573,7 +573,7 @@ TOOLS = [
         "description": "Сгенерировать кадр через WaveSpeed (Seedream 5.5 — основной; GPT Image 2.5 — запасной). В режимах replace/new/carousel/edit входы (лица, тело, силуэт, фактура) и полный промпт с абзацами реализма собирает ПРИЛОЖЕНИЕ по проверенному рецепту — ты даёшь только mode, source_id и описание сцены brief_en + brief_zh (для carousel и new — ОБЯЗАТЕЛЬНО, у каждого кадра своё: scene с ракурсом и крупностью, action, expression; одной подписи label мало). mode=free — только для особых случаев (создание эталонов модели, детализирующий проход, дорисовка серой области): тогда сам пишешь prompt и image_ids. Несколько вызовов в одном ответе идут параллельно.",
         "parameters": {"type": "object", "properties": {
             "engine": {"type": "string", "enum": ["gpt", "seedream"]},
-            "mode": {"type": "string", "enum": list(recipes.MODES), "description": "replace — заменить девушку на фото/кадре видео на модель; new — новый кадр по описанию; carousel — продолжение основы (тот же образ минуту спустя); edit — локальная правка основы (Seedream 5.0); free — свой промпт; bodyref — эталон фигуры (лучше инструмент body_refs)"},
+            "mode": {"type": "string", "enum": list(recipes.MODES), "description": "replace — заменить девушку на фото/кадре видео на модель; new — новый кадр по описанию; carousel — продолжение основы (тот же образ минуту спустя); edit — локальная правка основы (Seedream 5.0); outfit — сменить/снять одежду на присланном фото или готовом кадре (brief.change — словами пользователя; на кадре модели приложение само добавит её лицо и фигуру); free — свой промпт; bodyref — эталон фигуры (лучше инструмент body_refs)"},
             "source_id": {"type": "string", "description": "replace: исходное фото/кадр (не силуэт); carousel/edit: основа"},
             "brief_en": {"type": "object", "properties": {
                 "scene": {"type": "string", "description": "5–8 простых предложений по порядку: 1) камера — кто и как держит телефон (правая/левая вытянутая рука, телефон у зеркала, штатив с таймером), высота, угол, расстояние; 2) что в кадре сверху донизу («от подбородка до колен»); 3) где она и поза, на какой ноге вес; для кадров 2+ — что изменилось с прошлого"},
@@ -585,7 +585,7 @@ TOOLS = [
                 "orig_hair": {"type": "string", "description": "replace: цвет и причёска девушки на ИСХОДНИКЕ — чтобы сказать «не как на исходнике»"},
                 "background": {"type": "string", "description": "что на фоне (для замены — что сохранить)"},
                 "light": {"type": "string", "description": "свет и время суток"},
-                "change": {"type": "string", "description": "только для mode=edit: что именно поменять"},
+                "change": {"type": "string", "description": "mode=edit: что поменять; mode=outfit: какую одежду сделать / что снять — словами пользователя"},
                 "extra": {"type": "string", "description": "особые указания: убрать тату, зеркальное отражение, другие люди не трогать…"}}}, "brief_zh": {"type": "object", "properties": {
                 "scene": {"type": "string", "description": "5–8 простых предложений по порядку: 1) камера — кто и как держит телефон (правая/левая вытянутая рука, телефон у зеркала, штатив с таймером), высота, угол, расстояние; 2) что в кадре сверху донизу («от подбородка до колен»); 3) где она и поза, на какой ноге вес; для кадров 2+ — что изменилось с прошлого"},
                 "action": {"type": "string", "description": "конечности по одной: что делает правая рука, что левая (одна держит телефон в селфи), где правая и левая нога, куда смотрит; у неё ровно по две"},
@@ -596,13 +596,14 @@ TOOLS = [
                 "orig_hair": {"type": "string", "description": "replace: цвет и причёска девушки на ИСХОДНИКЕ — чтобы сказать «не как на исходнике»"},
                 "background": {"type": "string", "description": "что на фоне (для замены — что сохранить)"},
                 "light": {"type": "string", "description": "свет и время суток"},
-                "change": {"type": "string", "description": "только для mode=edit: что именно поменять"},
+                "change": {"type": "string", "description": "mode=edit: что поменять; mode=outfit: какую одежду сделать / что снять — словами пользователя"},
                 "extra": {"type": "string", "description": "особые указания: убрать тату, зеркальное отражение, другие люди не трогать…"}}},
             "face_angle": {"type": "string", "enum": ["front", "34", "profile"], "description": "ракурс лица в кадре — этот портрет пойдёт первым"},
             "body_view": {"type": "string", "enum": ["front", "34", "side", "back", "back34"], "description": "ракурс тела в кадре — какой эталон тела взять"},
             "framing": {"type": "string", "enum": ["face", "half", "full"], "description": "крупность кадра: face — лицо/плечи (эталоны тела и категории тела НЕ берутся), half — по пояс, full — в рост"},
             "categories": {"type": "array", "items": {"type": "string"}, "description": "доп. категории эталонов — ТОЛЬКО то, что реально видно в этом кадре (ноги — если ноги в кадре), максимум 2; лишний эталон сбивает композицию и дорожает"},
             "with_faces": {"type": "boolean", "description": "edit: добавить портреты (если правка касается лица)"},
+            "with_model": {"type": "boolean", "description": "outfit: на фото модель (добавить её лицо и фигуру). По умолчанию — да для готовых кадров, нет для присланных фото"},
             "no_texture": {"type": "boolean", "description": "только GPT/правка: не класть ★ кадр GPT как референс фактуры"},
             "view": {"type": "string", "enum": list(recipes.BODYREF_VIEWS), "description": "только mode=bodyref (лучше инструмент body_refs)"},
             "retry_of": {"type": "string", "description": "ПРАВКА СЛОВАМИ: id кадра (img_…), который пользователь просит переделать. Приложение возьмёт ровно тот же вызов (исходник, режим, описание, прошлые правки) и добавит fix первым абзацем. Остальные поля можно не передавать"},
@@ -813,7 +814,7 @@ def auto_post(cid, chat, a, eng, new, label):
     """Доводка Seedream 5.5 (сырой кадр темнее, холоднее и контрастнее GPT): каждый кадр подтягиваем к замерам кадров GPT
     (яркость 118, разброс 49, тёплость R−B +15, сила 0.8), потом 2048 по длинной стороне и JPEG 90, как с телефона.
     GPT и локальная правка (5.0) — без доводки."""
-    if eng != "seedream" or not new or a.get("mode") == "edit":
+    if eng != "seedream" or not new or a.get("mode") in ("edit", "outfit"):   # смена одежды: цвета как на кадре
         return [], ""
     post = []
     for i in new:
@@ -1094,7 +1095,7 @@ CAROUSEL_RE = re.compile(r"^\s*карусел\w*\s*(\d+)?\s*$", re.I)
 
 
 ARG_KEEP = ("engine", "mode", "source_id", "brief_en", "brief_zh", "face_angle", "body_view", "framing", "categories",
-            "with_faces", "aspect_ratio", "view", "figure_en", "described", "fixes", "fixes_en", "fixes_zh")
+            "with_faces", "with_model", "aspect_ratio", "view", "figure_en", "described", "fixes", "fixes_en", "fixes_zh")
 
 
 def gen_args(chat, iid):
@@ -1151,7 +1152,7 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
     a["mode"] = mode
     chat = load_chat(cid)
     if mode != "free":
-        if mode in ("replace", "carousel", "edit"):
+        if mode in ("replace", "carousel", "edit", "outfit"):
             a["source_id"] = guess_source(chat, a)
             if not a["source_id"]:
                 raise RuntimeError("не нашёл исходное фото (source_id)")
@@ -1174,6 +1175,8 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
             # без описания сцены модель просто повторит основу — не запускаем и не платим
             raise RuntimeError("не запущено: нет brief_en/brief_zh. Для каждого кадра опиши scene (ракурс камеры и крупность), "
                                "action (поза, руки, взгляд) и expression — разные у каждого кадра — и вызови заново")
+        if mode == "outfit" and not any(((a.get(f"brief_{L}") or {}).get(k)) for L in ("en", "zh") for k in ("change", "outfit")):
+            raise RuntimeError("не запущено: для mode=outfit нужен brief.change — какую одежду сделать или что снять, словами пользователя")
         if mode == "replace" and not a.get("described"):
             # замена всегда идёт по строгому описанию исходника «только то, что видно»: поза, одежда, фон, свет, как снято.
             # Оно важнее описания Grok — тот на ходу додумывает одежду и детали.
@@ -1189,6 +1192,13 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
                 traceback.print_exc()
         if not a.get(f"brief_{lang}") and a.get(f"brief_{other}"):
             a[f"brief_{lang}"] = translate_brief(a[f"brief_{other}"], lang, cfg)
+        if mode == "outfit":
+            bl = a.setdefault(f"brief_{lang}", {})
+            ch = bl.get("change") or (a.get(f"brief_{other}") or {}).get("change") or ""
+            if ch and re.search(r"[а-яА-ЯёЁ]", ch):   # слова пользователя по-русски — переводим для модели
+                ch = grok_translate(ch, lang, cfg)
+            if ch:
+                bl["change"] = ch
         if mode == "replace" and eng == "seedream" and rebuild_inputs and not recipes.find_lineart(chat, a["source_id"]):
             # силуэт обязателен: с настоящего фото Seedream оставляет лицо, фигуру и тату исходной девушки
             set_status(cid, "running", "Делаю силуэт исходника…")
@@ -1199,7 +1209,7 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
         if rebuild_inputs:
             a["image_ids"] = [i for i in recipes.pick_inputs(chat, a, eng) if i in chat["images"]]
             a["auto_inputs"] = True
-        if mode == "replace" and a.get("aspect_ratio") in (None, "", "auto"):
+        if mode in ("replace", "outfit") and a.get("aspect_ratio") in (None, "", "auto"):
             r = chat["images"][a["source_id"]]
             if r.get("w") and r.get("h"):
                 a["aspect_ratio"] = recipes.aspect_for(r["w"], r["h"])

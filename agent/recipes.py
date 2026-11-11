@@ -5,7 +5,7 @@ Grok описывает только сцену (brief_en / brief_zh), а вхо
 """
 import re
 
-MODES = ("replace", "new", "carousel", "edit", "free", "bodyref")
+MODES = ("replace", "new", "carousel", "edit", "outfit", "free", "bodyref")
 BRIEF_KEYS = ("scene", "action", "expression", "outfit", "hair", "camera", "background", "light", "orig_hair", "change", "extra")
 BODYREF_VIEWS = ("front", "back", "side", "half")
 BODYREF_RU = {"front": "фигура спереди", "back": "фигура сзади", "side": "фигура сбоку", "half": "по пояс"}
@@ -40,7 +40,7 @@ def role_of(chat, iid, a, k):
     """('face'|'body'|'cat'|'lineart'|'source'|'texture'|'base'|'other', детали)."""
     p = chat["persona"]; rec = chat["images"].get(iid, {})
     mode = a.get("mode") or "free"
-    if mode == "edit" and k == 0:
+    if mode in ("edit", "outfit") and k == 0:
         return "base", ""
     if mode == "carousel" and iid == a.get("source_id"):
         return "base", ""
@@ -167,6 +167,16 @@ def pick_inputs(chat, a, engine):
     mode = a.get("mode"); src = a.get("source_id")
     if mode == "bodyref":   # эталоны фигуры через GPT: на вход только лица, фигура — текстом
         return [i for i in ordered_faces(chat, "front") if not chat["images"].get(i, {}).get("bodyref")][:3]
+    if mode == "outfit":
+        # смена одежды: кадр первым; если на кадре модель — её портрет и фигура (открытое тело и лицо — её), чужое фото — только кадр
+        rec = chat["images"].get(src, {}); p = chat["persona"]
+        refs = set(p["faces"]) | set(p["body"])
+        mine = a.get("with_model") if a.get("with_model") is not None else (rec.get("source") in ("gen", "post", "crop", "ref") or src in refs)
+        if not mine:
+            return [src]
+        face = [i for i in ordered_faces(chat, a.get("face_angle")) if not chat["images"].get(i, {}).get("bodyref")][:1] or p["faces"][:1]
+        body = [] if framing_of(a) == "face" else pick_body55(chat, a.get("body_view"))
+        return [i for k, i in enumerate([src] + face + body) if i and i not in ([src] + face + body)[:k]]
     if is_55(engine, a) and mode in ("replace", "new", "carousel"):
         # минимум входов: один портрет под ракурс лица + одна фигура под ракурс тела (если тело в кадре).
         # Лишние эталоны в своей одежде (топ, легинсы, футболка) Seedream тащит в кадр и меняет одежду исходника.
@@ -343,6 +353,8 @@ def render(chat, a, engine):
     p = chat["persona"]
     if mode == "bodyref":
         return _render_bodyref(a, roles, p)
+    if mode == "outfit":
+        return _render_outfit(chat, a, roles, p, engine)
     if is_55(engine, a):
         return _render_55(chat, a, mode, roles, ids, p)
     if engine == "seedream":
@@ -631,6 +643,45 @@ def _render_55(chat, a, mode, roles, ids, p):
         P.append(_b(b, "extra") + "。")
     P.append(COVER_ZH)
     return "\n".join(P)
+
+
+def _render_outfit(chat, a, roles, p, engine):
+    """Смена одежды на готовом кадре: меняем только одежду словами пользователя, остальное — как на кадре."""
+    zh = engine == "seedream"
+    b = a.get("brief_zh" if zh else "brief_en") or {}
+    change = _b(b, "change") or _b(b, "outfit") or _b(b, "action")
+    if zh:
+        base = zh_ref(_idx(roles, "base")); F = zh_ref(_idx(roles, "face")); B = zh_ref(_idx(roles, "body"))
+        P = [fixes_zh(a)] if fixes_zh(a) else []
+        P.append(f"只修改{base}中女子的衣服：{change}。")
+        P.append(f"其余保持{base}完全不变：她的脸、表情、发型、姿势、手的位置、身材比例、背景、光线、颜色和构图都不变，画面里其他东西都不动。"
+                 f"画质、清晰度和颜色和{base}一样，不要重新渲染整张照片。")
+        P.append(f"新衣服合身自然：真实的布料质感和自然的褶皱，受到和{base}一样的光照和阴影；脱下的衣服不留下痕迹，衣服下面露出的身体和衣服按场景自然补全。")
+        if B:
+            P.append(f"露出的身体是她本人的身材，按{B}（只取身材，不取{B}的衣服、姿势和背景），不要变瘦。")
+        if F:
+            P.append(f"脸保持{base}里的样子，和{F}是同一个人，不要变成别人，不取{F}的衣服和背景。")
+        if F and not has_tattoo(p):   # чужое фото — тату не трогаем
+            P.append("皮肤上没有纹身。")
+        P.append("只有两只手、两条腿，手指自然。")
+        P.append(COVER_ZH)
+        if _b(b, "extra"):
+            P.append(_b(b, "extra") + "。")
+        return "\n".join(P)
+    base = en_ref(_idx(roles, "base")); F = en_ref(_idx(roles, "face")); B = en_ref(_idx(roles, "body"))
+    P = [fixes_en(a)] if fixes_en(a) else []
+    P.append(f"Edit only the woman's clothing in {base}: {change}.")
+    P.append(f"Keep everything else in {base} exactly the same: her face, expression, hair, pose, hand positions, body proportions, background, lighting, colors and framing. "
+             f"Same image quality and colors as {base}, do not re-render the whole photo.")
+    P.append(f"The new clothing fits naturally with real fabric texture and natural folds, lit like the rest of {base}; removed garments leave no trace.")
+    if B:
+        P.append(f"Any newly visible body is her own figure as in {B} (figure only, not the clothes or pose); do not make her slimmer.")
+    if F:
+        P.append(f"Her face stays as in {base} and is the same person as in {F}.")
+    if F and not has_tattoo(p):
+        P.append("No tattoos on her skin.")
+    P.append("Breasts and intimate areas stay fully covered by fabric; no nudity.")
+    return " ".join(P)
 
 
 # ---------------- эталоны фигуры через GPT ----------------
