@@ -2303,3 +2303,28 @@ class SwapTask(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class AgentContentRule(Base):
+    """Правила генерации Persona Studio (агента): что запрещено. Редактируются в админке.
+
+    title — правило словами (видит админ, получает Grok как обязательный запрет);
+    prompt_zh / prompt_en — строка, которую агент дописывает в каждый промпт Seedream / GPT;
+    locked — базовое правило (несовершеннолетние, реальные люди): его нельзя выключить или удалить.
+    """
+
+    __tablename__ = "agent_content_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    code: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    title: Mapped[str] = mapped_column(Text)
+    prompt_zh: Mapped[str] = mapped_column(Text, default="")
+    prompt_en: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort: Mapped[int] = mapped_column(Integer, default=100)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

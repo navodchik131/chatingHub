@@ -344,6 +344,16 @@ def cats_en(chat, roles):
 
 # ---------------- сборка ----------------
 def render(chat, a, engine):
+    """Промпт по рецепту + правила платформы последним абзацем (их нельзя потерять ни в одном режиме)."""
+    out = _render_core(chat, a, engine)
+    lang = "zh" if engine == "seedream" else "en"
+    rules = rules_prompt(lang)
+    if not rules or rules in out:
+        return out
+    return out.rstrip() + "\n" + rules
+
+
+def _render_core(chat, a, engine):
     """Собрать промпт по рецепту. a — аргументы generate_image (mode, image_ids, brief_en/brief_zh…)."""
     mode = a.get("mode") or "free"
     ids = a.get("image_ids") or []
@@ -515,6 +525,57 @@ STYLE55_ZH = ("用iPhone 16主摄随手拍的手机照片：24mm等效广角，�
               "画面干净：布料、皮肤和墙面上没有斑驳、斑点或一块一块的纹理，没有胶片颗粒，没有噪点花纹，没有重影和双边。画面里没有文字、水印和标志。")
 COVER_ZH = "胸部和私处必须被布料完全遮住：不能露出乳头和私处，不能全裸。"
 
+# ---------------- правила платформы (что запрещено) ----------------
+# В хостинге список приходит из админки model-mate (/api/agent/session → rules); локально — эти правила по умолчанию.
+# Базовые правила (несовершеннолетние, реальные люди) действуют всегда, даже если админка их не прислала.
+LOCKED_RULES = [
+    {"title": "Никаких несовершеннолетних: все люди в кадре — взрослые 18+ и выглядят взрослыми.",
+     "prompt_zh": "画面中所有人物都是成年人（18岁以上），外表明显是成年人；不能出现任何未成年人、儿童或少女的样子，不要把她画得更年轻。",
+     "prompt_en": "Everyone in the image is a clearly adult person (18+); no minors, no childlike or teen appearance, do not make her look younger."},
+    {"title": "Без реальных людей: лицо только вымышленной модели из эталонов.",
+     "prompt_zh": "人物的脸只取自模特参考图，不要生成任何真实名人或可识别的真实人物的脸。",
+     "prompt_en": "Her face comes only from the model reference images; do not depict any celebrity or identifiable real person."},
+]
+DEFAULT_RULES = LOCKED_RULES + [
+    {"title": "Без наготы: грудь и интимные зоны всегда закрыты тканью; «сними одежду» — до белья или купальника.",
+     "prompt_zh": COVER_ZH, "prompt_en": "Breasts and intimate areas stay fully covered by fabric; no nudity."},
+    {"title": "Без сексуальных действий и порнографии.", "prompt_zh": "没有任何性行为或色情动作，只是普通的拍照姿势。",
+     "prompt_en": "No sexual acts or pornographic poses, only ordinary photo posing."},
+    {"title": "Без насилия и крови.", "prompt_zh": "画面里没有血、伤口或暴力，没有指向人的武器。",
+     "prompt_en": "No blood, wounds or violence, no weapons pointed at anyone."},
+    {"title": "Без символики ненависти и экстремизма.", "prompt_zh": "画面里没有纳粹、极端主义或仇恨符号和侮辱性文字。",
+     "prompt_en": "No Nazi, extremist or hate symbols and no offensive text."},
+    {"title": "Без наркотиков.", "prompt_zh": "画面里没有毒品或吸毒用具。", "prompt_en": "No drugs or drug paraphernalia."},
+    {"title": "Без самоповреждений.", "prompt_zh": "画面里没有自残或自杀的内容。", "prompt_en": "No self-harm or suicide imagery."},
+]
+RULES = list(DEFAULT_RULES)
+
+
+def set_rules(rules):
+    """Правила из админки. Базовые добавляются всегда; не-список — не трогаем текущие."""
+    global RULES
+    if not isinstance(rules, list):
+        return
+    clean = [{"title": str(r.get("title") or "").strip(), "prompt_zh": str(r.get("prompt_zh") or "").strip(),
+              "prompt_en": str(r.get("prompt_en") or "").strip()} for r in rules if isinstance(r, dict) and r.get("title")]
+    have = {r["prompt_zh"] for r in clean}
+    RULES = [r for r in LOCKED_RULES if r["prompt_zh"] not in have] + clean
+
+
+def rules_prompt(lang):
+    """Строки правил для промпта модели (zh — Seedream, en — GPT)."""
+    k = "prompt_zh" if lang == "zh" else "prompt_en"
+    out = []
+    for r in RULES:
+        t = (r.get(k) or "").strip()
+        if t and t not in out:
+            out.append(t)
+    return "\n".join(out) if lang == "zh" else " ".join(out)
+
+
+def rules_titles():
+    return [r["title"] for r in RULES if r.get("title")]
+
 
 def body55_zh(chat, roles, ids, p):
     ns = _idx(roles, "body")
@@ -641,7 +702,6 @@ def _render_55(chat, a, mode, roles, ids, p):
     P.append(STYLE55_ZH)
     if _b(b, "extra"):
         P.append(_b(b, "extra") + "。")
-    P.append(COVER_ZH)
     return "\n".join(P)
 
 
@@ -664,7 +724,6 @@ def _render_outfit(chat, a, roles, p, engine):
         if F and not has_tattoo(p):   # чужое фото — тату не трогаем
             P.append("皮肤上没有纹身。")
         P.append("只有两只手、两条腿，手指自然。")
-        P.append(COVER_ZH)
         if _b(b, "extra"):
             P.append(_b(b, "extra") + "。")
         return "\n".join(P)
@@ -680,7 +739,6 @@ def _render_outfit(chat, a, roles, p, engine):
         P.append(f"Her face stays as in {base} and is the same person as in {F}.")
     if F and not has_tattoo(p):
         P.append("No tattoos on her skin.")
-    P.append("Breasts and intimate areas stay fully covered by fabric; no nudity.")
     return " ".join(P)
 
 

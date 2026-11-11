@@ -10,6 +10,7 @@ import { AdminEmailTab } from './AdminEmailTab'
 import { AdminExifBotTab } from './AdminExifBotTab'
 import { AdminIgBotTab } from './AdminIgBotTab'
 import { AdminLoginBotTab } from './AdminLoginBotTab'
+import { AdminAgentRulesTab } from './AdminAgentRulesTab'
 import { AdminOverview } from './AdminOverview'
 import { AdminPurchasesTab } from './AdminPurchasesTab'
 import { AdminPartnerPayoutsTab } from './AdminPartnerPayoutsTab'
@@ -35,6 +36,7 @@ const TAB_TITLES: Record<AdminTabId, string> = {
   ig_bot: 'igBotTitle',
   creator_donations: 'creatorDonationsTitle',
   references: 'referencesTitle',
+  agent_rules: 'agentRulesTitle',
   partners: 'partnersTitle',
   tickets: 'ticketsTitle',
 }
@@ -318,6 +320,7 @@ export function AdminPage() {
         {tab === 'ig_bot' ? <AdminIgBotTab onError={setError} /> : null}
         {tab === 'creator_donations' ? <AdminCreatorDonationsTab /> : null}
         {tab === 'references' ? <AdminReferencesTab /> : null}
+        {tab === 'agent_rules' ? <AdminAgentRulesTab onError={setError} /> : null}
         {tab === 'partners' ? <AdminPartnerPayoutsTab /> : null}
         {tab === 'tickets' ? (
           <AdminTicketsTab

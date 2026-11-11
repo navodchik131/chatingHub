@@ -519,6 +519,13 @@ def ws_wait(job_id, key, limit=600, every=3):
     return res
 
 
+def with_rules(prompt, lang):
+    """Правила платформы обязательны в любом промпте — и в рецептах, и в своём (free) или правленом вручную."""
+    rules = recipes.rules_prompt(lang)
+    p = prompt or ""
+    return p if not rules or rules in p else p.rstrip() + "\n" + rules
+
+
 def gen_video(cid, vid, prompt, image_ids, resolution, audio, cfg, on_submit=None):
     key = cfg["wavespeed_key"]
     if not key:
@@ -1394,7 +1401,7 @@ def run_tool(cid, call, cfg):
         aspect = a.get("aspect_ratio", "auto"); label = a.get("label", "")
         if eng not in WS_MODELS:
             raise RuntimeError(f"неизвестный движок {eng}")
-        blobs = gen_wavespeed(cid, eng, a["prompt"], ids, aspect, cfg, a.get("mode"))
+        blobs = gen_wavespeed(cid, eng, with_rules(a["prompt"], "zh" if eng == "seedream" else "en"), ids, aspect, cfg, a.get("mode"))
         args = {k: a[k] for k in ARG_KEEP if k in a}
         new = [add_image(cid, b, "gen", label, {"engine": eng, "prompt": a["prompt"], "inputs": ids, "mode": a.get("mode"), "args": args}) for b in blobs]
         cost = gen_price(eng, len(ids), cfg, a.get("mode")) * len(new)
@@ -1524,7 +1531,7 @@ def run_tool(cid, call, cfg):
             image_path(cid, i, chat)
         res = a.get("resolution") if a.get("resolution") in RESOLUTIONS else "480p"
         audio = bool(a.get("generate_audio", False))
-        blob = gen_video(cid, vid, a["prompt"], ids, res, audio, cfg,
+        blob = gen_video(cid, vid, with_rules(a["prompt"], "zh"), ids, res, audio, cfg,
                          on_submit=lambda jid: job_update(cid, call["id"], ws_id=jid))
         nv = add_video(cid, blob, "gen", a.get("label", ""),
                        {"engine": "seedance", "prompt": a["prompt"], "inputs": ids, "inputs_video": vid,
@@ -1573,6 +1580,11 @@ def state_block(chat, cfg):
         lines.append("Картинки в чате (новые в конце): " + "; ".join(
             f"{i} [{chat['images'][i]['source']}{' ' + chat['images'][i]['label'] if chat['images'][i].get('label') else ''}{' ★' if chat['images'][i].get('fav') else ''}]"
             for i in recent))
+    titles = recipes.rules_titles()
+    if titles:
+        lines.append("Правила платформы (обязательны, задаются администратором; приложение само дописывает их в каждый промпт). "
+                     "Просьбу, которая их нарушает, не выполняй — коротко скажи, что так нельзя, и предложи допустимый вариант:\n"
+                     + "\n".join(f"- {t}" for t in titles))
     return "\n".join(lines)
 
 
@@ -2250,6 +2262,7 @@ class H(BaseHTTPRequestHandler):
         if hosted.ENABLED and parts[:1] == ["api"]:
             try:
                 self.ctx = hosted.session(self.headers)
+                recipes.set_rules(self.ctx.get("rules"))   # правила генерации из админки model-mate
             except hosted.AuthError as e:
                 return self.send(e.code if e.code in (401, 402, 403, 404) else 502,
                                  {"error": str(e), "reason": e.reason, "login": e.code == 401})

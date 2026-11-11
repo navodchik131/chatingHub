@@ -13,6 +13,7 @@ export type AdminTabId =
   | 'ig_bot'
   | 'creator_donations'
   | 'references'
+  | 'agent_rules'
   | 'partners'
   | 'tickets'
 
@@ -105,6 +106,14 @@ const NAV_ICONS: Record<AdminTabId, ReactNode> = {
       </svg>
     </NavIcon>
   ),
+  agent_rules: (
+    <NavIcon>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+    </NavIcon>
+  ),
   references: (
     <NavIcon>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -173,6 +182,7 @@ export function AdminShell({
     { id: 'ig_bot', label: t('tabs.igBot'), icon: NAV_ICONS.ig_bot },
     { id: 'creator_donations', label: t('tabs.creatorDonations'), icon: NAV_ICONS.creator_donations },
     { id: 'references', label: t('tabs.references'), icon: NAV_ICONS.references },
+    { id: 'agent_rules', label: t('tabs.agentRules'), icon: NAV_ICONS.agent_rules },
     {
       id: 'partners',
       label: t('tabs.partners'),

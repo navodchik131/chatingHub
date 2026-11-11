@@ -32,6 +32,7 @@ from app.config import settings
 from app.db.models import CreditAccount, UsageEvent, User
 from app.db.session import get_session
 from app.services.admin_access import user_is_platform_admin
+from app.services.agent_rules import list_rules
 from app.services.billing_plan import is_pro_plan
 from app.services.credit_units import CREDITS_PER_USD
 from app.services.credits import _lock_credit_account
@@ -181,6 +182,9 @@ async def agent_session(
         "is_admin": info["is_admin"],
         "xai_key": (settings.grok_api_key or "").strip(),
         "wavespeed_key": ws_key,
+        # правила генерации из админки: Grok получает их как запреты, текст для моделей дописывается в каждый промпт
+        "rules": [{"title": r.title, "prompt_zh": r.prompt_zh or "", "prompt_en": r.prompt_en or "", "locked": bool(r.locked)}
+                  for r in await list_rules(session, only_enabled=True)],
     }
 
 

@@ -27,7 +27,8 @@
     "creatorDonationsTitle": "Creator donations",
     "referencesTitle": "References",
     "partnersTitle": "Partners · payouts",
-    "ticketsTitle": "Support tickets"
+    "ticketsTitle": "Support tickets",
+    "agentRulesTitle": "Generation rules"
   },
   "tabs": {
     "overview": "Overview",
@@ -40,7 +41,8 @@
     "creatorDonations": "Creator donations",
     "references": "References",
     "partners": "Partners",
-    "tickets": "Support"
+    "tickets": "Support",
+    "agentRules": "Generation rules"
   },
   "purchases": {
     "from": "From",
@@ -556,5 +558,28 @@
     "errors": {
       "actionFailed": "Action failed."
     }
+  },
+  "agentRules": {
+    "title": "Agent generation rules",
+    "hint": "What is forbidden in Persona Studio. Grok gets the rule text as a mandatory ban; the Seedream and GPT lines are appended to every prompt. Base rules (minors, real people) cannot be disabled or edited.",
+    "add": "Add rule",
+    "fieldTitle": "Rule (seen by Grok)",
+    "fieldZh": "Line for Seedream prompt (Chinese)",
+    "fieldEn": "Line for GPT prompt (English)",
+    "enabled": "Enabled",
+    "sort": "Order",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "disable": "Disable",
+    "enable": "Enable",
+    "delete": "Delete",
+    "reset": "Reset to default",
+    "locked": "base",
+    "on": "on",
+    "off": "off",
+    "lockedHint": "Base rule — always applies.",
+    "confirmDelete": "Delete this rule?",
+    "confirmReset": "Reset rule text to default?"
   }
 }
