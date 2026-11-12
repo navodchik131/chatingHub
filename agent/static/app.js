@@ -269,6 +269,8 @@ function renderChat(){
             <button class="ib" data-act="attach" aria-label="Прикрепить фото" title="Прикрепить фото">${ic('clip')}</button>
             <div class="seg" title="Движок для следующего запроса">
               ${['auto', 'gpt', 'seedream'].map(e => `<button class="${S.engine === e ? 'on' : ''}" data-act="engine" data-v="${e}">${{auto: 'Авто', gpt: 'GPT', seedream: 'Seedream'}[e]}</button>`).join('')}</div>
+            <div class="seg" title="Замена девушки: исходник силуэтом из линий (лицо и фигура меняются надёжно, мелкие детали теряются) или фото как есть (детали сохраняются, лицо исходницы может остаться)">
+              ${[['lineart', 'Силуэт'], ['photo', 'Фото']].map(([k, t]) => `<button class="${(c.replace_src || 'lineart') === k ? 'on' : ''}" data-act="rsrc" data-v="${k}" aria-pressed="${(c.replace_src || 'lineart') === k}">${t}</button>`).join('')}</div>
             <span style="flex:1"></span>
             <span class="meta hide-m">${S.engine === 'auto' ? 'Grok выберет сам' : (ENG[S.engine] + ' · ≈ ' + wsMoney(S.cfg?.prices?.[S.engine]) + (HOSTED() ? ' + Grok' : ''))}</span>
             <button class="send" id="sendBtn" data-act="send" aria-label="Отправить">${ic('send')}</button>
@@ -504,7 +506,7 @@ function renderConfirm(){
   return `<section class="confirm" aria-label="Подтверждение генерации">
     <div class="confirm-h"><span class="pill s-wait">Ждёт подтверждения</span>${p.edited ? '<span class="pill s-wait" style="opacity:.8">изменено</span>' : ''}<span style="flex:1"></span>
       ${vj ? `<span class="meta">Seedance 2.5 Video Edit</span><div class="seg" role="group" aria-label="Качество видео">${['480p', '720p', '1080p'].map(k => `<button class="${j.resolution === k ? 'on' : ''}" data-act="pres" data-v="${k}" aria-pressed="${j.resolution === k}">${k}${j.costs?.[k] != null ? ` · ${wsMoney(j.costs[k])}` : ''}</button>`).join('')}</div>`
-        : `<div class="seg">${Object.entries(ENG).map(([k, v]) => `<button class="${j.engine === k ? 'on' : ''}" data-act="penv" data-v="${k}">${v}</button>`).join('')}</div>`}</div>
+        : `${j.mode === 'replace' ? `<div class="seg" title="Как отправить исходник: силуэтом из линий или фото как есть">${[['lineart', 'Силуэт'], ['photo', 'Фото']].map(([k, t]) => `<button class="${(j.source_as || 'lineart') === k ? 'on' : ''}" data-act="psrc" data-v="${k}" aria-pressed="${(j.source_as || 'lineart') === k}">${t}</button>`).join('')}</div>` : ''}<div class="seg">${Object.entries(ENG).map(([k, v]) => `<button class="${j.engine === k ? 'on' : ''}" data-act="penv" data-v="${k}">${v}</button>`).join('')}</div>`}</div>
     <div class="confirm-b">
       ${jobs.length > 1 ? `<div class="chips">${jobs.map((x, k) => `<button class="chip ${k === sel ? 'on' : ''}" data-act="pjob" data-v="${k}">${k + 1} · ${esc(x.label || (ENG[x.engine] || x.engine))}</button>`).join('')}</div>` : (j.label ? `<b style="font-weight:600">${esc(j.label)}</b>` : '')}
       ${vj ? `<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">${vplayer(j.video, {small: true})}
@@ -1021,6 +1023,11 @@ async function act(a, el, ev){
     case 'attach': return $('#file').click();
     case 'unattach': S.attach.splice(+v, 1); renderAtts(); if (c?.pending) render(); return;
     case 'engine': S.engine = v; return renderChat();
+    case 'rsrc':
+      try { S.chat = await post(`/api/chats/${S.cur}/meta`, {replace_src: v}, 'PATCH'); toast(v === 'photo' ? 'Замена: исходник как есть — детали сохранятся' : 'Замена: исходник силуэтом — лицо и фигура меняются надёжнее'); }
+      catch(e){ toast(e.message); }
+      return renderChat();
+    case 'psrc': if (v !== (curJob().source_as || 'lineart')) toast(v === 'photo' ? 'Исходник как есть — пересобираю…' : 'Делаю силуэт и пересобираю…'); return patchJob({source_as: v});
     case 'send': return send();
     case 'chip': return setInput(v);
     case 'stop': await post(`/api/chats/${S.cur}/stop`); return toast('Останавливаю после текущего шага…');

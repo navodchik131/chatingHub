@@ -378,6 +378,8 @@ details.step[open]>summary .chev{transform:rotate(90deg)}
   .mob{display:inline-grid}
   .hdr{padding:0 8px;gap:6px;height:56px}
   .hide-m{display:none!important}
+  .box-f{flex-wrap:wrap;row-gap:6px}
+  .box-f .seg button{padding-left:8px;padding-right:8px}
   .msgs-in{padding:18px 14px}
   .comp{padding:0 10px 10px}
   .jobs{padding:0 10px}

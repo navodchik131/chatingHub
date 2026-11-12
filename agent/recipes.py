@@ -195,9 +195,13 @@ def pick_inputs(chat, a, engine):
         if mode == "replace":
             # замена: исходник уходит СИЛУЭТОМ (линии поверх настоящего фона) — с настоящего фото Seedream копирует
             # лицо, фигуру и тату исходной девушки. Лица — два портрета (ракурс кадра + анфас), силуэт последним.
-            la = find_lineart(chat, src)
             faces = portraits[:2] or [i for i in p["faces"]][:2]
-            order = faces + body + cats[:2] + [la or src]
+            if a.get("source_as") == "photo":
+                # фото как есть: исходник первым (все детали), 2 портрета и фигура — чтобы лицо и тело стали её
+                order = [src] + faces + body + cats[:2]
+            else:
+                la = find_lineart(chat, src)
+                order = faces + body + cats[:2] + [la or src]
         else:
             order = ([src] if mode == "carousel" and src else []) + faces + body + cats[:2]
         ids = []

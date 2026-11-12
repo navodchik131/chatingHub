@@ -614,6 +614,7 @@ TOOLS = [
             "framing": {"type": "string", "enum": ["face", "half", "full"], "description": "крупность кадра: face — лицо/плечи (эталоны тела и категории тела НЕ берутся), half — по пояс, full — в рост"},
             "categories": {"type": "array", "items": {"type": "string"}, "description": "доп. категории эталонов — ТОЛЬКО то, что реально видно в этом кадре (ноги — если ноги в кадре), максимум 2; лишний эталон сбивает композицию и дорожает"},
             "with_faces": {"type": "boolean", "description": "edit: добавить портреты (если правка касается лица)"},
+            "source_as": {"type": "string", "enum": ["lineart", "photo"], "description": "replace: lineart — исходник уходит силуэтом из линий (лицо, фигура и тату исходницы не переносятся, но мелкие детали одежды и предметов теряются); photo — исходник как есть (детали сохраняются, но лицо исходницы может остаться). По умолчанию — настройка чата"},
             "with_model": {"type": "boolean", "description": "outfit: на фото модель (добавить её лицо и фигуру). По умолчанию — да для готовых кадров, нет для присланных фото"},
             "no_texture": {"type": "boolean", "description": "только GPT/правка: не класть ★ кадр GPT как референс фактуры"},
             "view": {"type": "string", "enum": list(recipes.BODYREF_VIEWS), "description": "только mode=bodyref (лучше инструмент body_refs)"},
@@ -1107,7 +1108,7 @@ CAROUSEL_RE = re.compile(r"^\s*карусел\w*\s*(\d+)?\s*$", re.I)
 
 
 ARG_KEEP = ("engine", "mode", "source_id", "brief_en", "brief_zh", "face_angle", "body_view", "framing", "categories",
-            "with_faces", "with_model", "aspect_ratio", "view", "figure_en", "described", "fixes", "fixes_en", "fixes_zh")
+            "with_faces", "with_model", "source_as", "aspect_ratio", "view", "figure_en", "described", "fixes", "fixes_en", "fixes_zh")
 
 
 def gen_args(chat, iid):
@@ -1223,7 +1224,10 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
                 ch = grok_translate(ch, lang, cfg)
             if ch:
                 bl["change"] = ch
-        if mode == "replace" and eng == "seedream" and rebuild_inputs and not recipes.find_lineart(chat, a["source_id"]):
+        if mode == "replace":
+            if a.get("source_as") not in ("lineart", "photo"):
+                a["source_as"] = chat.get("replace_src") if chat.get("replace_src") in ("lineart", "photo") else "lineart"
+        if mode == "replace" and eng == "seedream" and a.get("source_as") != "photo" and rebuild_inputs and not recipes.find_lineart(chat, a["source_id"]):
             # силуэт обязателен: с настоящего фото Seedream оставляет лицо, фигуру и тату исходной девушки
             set_status(cid, "running", "Делаю силуэт исходника…")
             try:
@@ -1597,6 +1601,9 @@ def state_block(chat, cfg):
         lines.append("Картинки в чате (новые в конце): " + "; ".join(
             f"{i} [{chat['images'][i]['source']}{' ' + chat['images'][i]['label'] if chat['images'][i].get('label') else ''}{' ★' if chat['images'][i].get('fav') else ''}]"
             for i in recent))
+    lines.append("Замена — исходник по умолчанию: " + ("ФОТО КАК ЕСТЬ (source_as=photo: детали сохраняются, лицо исходницы может остаться)"
+                  if chat.get("replace_src") == "photo" else "СИЛУЭТ (source_as=lineart: лицо и фигура меняются надёжно, мелкие детали теряются)")
+                  + ". Пользователь выбирает это в строке ввода; на один кадр можно поменять через source_as.")
     titles = recipes.rules_titles()
     if titles:
         lines.append("Правила платформы (обязательны, задаются администратором; приложение само дописывает их в каждый промпт). "
@@ -1757,6 +1764,8 @@ def edit_call(cid, call, e, cfg):
     eng_changed = nm == "generate_image" and e.get("engine") in WS_MODELS and e["engine"] != a.get("engine")
     if eng_changed:
         a["engine"] = e["engine"]
+    if nm == "generate_image" and e.get("source_as") in ("lineart", "photo") and e["source_as"] != a.get("source_as"):
+        a["source_as"] = e["source_as"]; eng_changed = True   # другие входы — пересобрать как при смене движка
     if nm == "edit_video":
         if e.get("resolution") in RESOLUTIONS:
             a["resolution"] = e["resolution"]
@@ -1812,7 +1821,7 @@ def pending_summary(calls, cfg, chat=None):
             jobs.append({"i": idx, "kind": "image", "engine": a.get("engine"), "label": a.get("label", ""),
                          "inputs": a.get("image_ids", []), "roles": a.get("image_roles", []),
                          "aspect": a.get("aspect_ratio", "auto"), "prompt": a.get("prompt", ""),
-                         "mode": a.get("mode", "free"), "manual": bool(a.get("prompt_manual")),
+                         "mode": a.get("mode", "free"), "manual": bool(a.get("prompt_manual")), "source_as": a.get("source_as"),
                          "cost": tool_cost(c, cfg)})
         elif nm == "edit_video":
             rec = (chat or {}).get("videos", {}).get(a.get("video_id"), {})
@@ -2448,6 +2457,8 @@ class H(BaseHTTPRequestHandler):
                     for k in ("archived", "pinned"):
                         if k in b:
                             c[k] = bool(b[k])
+                    if b.get("replace_src") in ("lineart", "photo"):
+                        c["replace_src"] = b["replace_src"]   # замена: исходник силуэтом или фото как есть
                 update_chat(cid, f)
                 return self.send(200, public_chat(load_chat(cid)))
             act = p[2] if len(p) > 2 else ""
