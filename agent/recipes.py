@@ -177,6 +177,24 @@ def pick_inputs(chat, a, engine):
         face = [i for i in ordered_faces(chat, a.get("face_angle")) if not chat["images"].get(i, {}).get("bodyref")][:1] or p["faces"][:1]
         body = [] if framing_of(a) == "face" else pick_body55(chat, a.get("body_view"))
         return [i for k, i in enumerate([src] + face + body) if i and i not in ([src] + face + body)[:k]]
+    pick = [x["id"] for x in a.get("ref_pick") or [] if isinstance(x, dict) and x.get("id") in chat["images"]]
+    if mode == "replace" and pick:
+        # эталоны выбрал Grok по тому, что реально видно на исходнике (ракурс, лицо, части тела, свои категории) — берём ровно их
+        fset = set(chat["persona"]["faces"])
+        pf = [i for i in pick if i in fset]
+        po = [i for i in pick if i not in fset]
+        if not pf and (a.get("seen") or {}).get("face") in ("front", "34", "profile"):
+            # лицо в кадре видно, а портрет не выбран — подстраховка одним портретом под ракурс
+            pf = [i for i in ordered_faces(chat, a.get("face_angle")) if not chat["images"].get(i, {}).get("bodyref")][:1]
+        if a.get("source_as") == "photo" or engine == "gpt":
+            order = [src] + pf + po
+        else:
+            order = pf + po + [find_lineart(chat, src) or src]
+        ids = []
+        for i in order:
+            if i and i not in ids:
+                ids.append(i)
+        return ids[:10]
     if is_55(engine, a) and mode in ("replace", "new", "carousel"):
         # минимум входов: один портрет под ракурс лица + одна фигура под ракурс тела (если тело в кадре).
         # Лишние эталоны в своей одежде (топ, легинсы, футболка) Seedream тащит в кадр и меняет одежду исходника.
@@ -332,7 +350,7 @@ def cats_zh(chat, roles):
     out = []
     for k, (r, d) in enumerate(roles):
         if r == "cat":
-            note = chat["persona"].get("extra", {}).get(d, {}).get("note", "")
+            v = chat["persona"].get("extra", {}).get(d, {}); note = v.get("note", ""); d = v.get("name_zh") or d
             out.append(f"图{k + 1}只取{d}（{note}），不取它的姿势、衣服和背景。" if note else f"图{k + 1}只取{d}，不取它的姿势、衣服和背景。")
     return out
 
@@ -341,7 +359,7 @@ def cats_en(chat, roles):
     out = []
     for k, (r, d) in enumerate(roles):
         if r == "cat":
-            note = chat["persona"].get("extra", {}).get(d, {}).get("note", "")
+            v = chat["persona"].get("extra", {}).get(d, {}); note = v.get("note", ""); d = v.get("name_en") or d
             out.append(f"Image {k + 1}: take only her {d}" + (f" ({note})" if note else "") + " from it, not its pose, clothes or background.")
     return out
 
@@ -361,10 +379,54 @@ def draped(a):
     return bool(_DRAPED.search(txt))
 
 
+DEF_USE = {
+    "face": ("她本人的脸部参考：只取脸型、五官、肤色和发色，不取发型、衣服、背景和光线",
+             "her face reference: take only face shape, features, skin tone and hair colour, not the hairstyle, clothes, background or light"),
+    "body": ("她本人的身材参考：只取身材比例和体型，不取衣服、姿势和背景",
+             "her figure reference: take only body proportions and shape, not the clothes, pose or background"),
+    "lineart": ("要替换的人物线稿：白色剪影和黑色线条只提供姿势、动作和构图，背景是真实照片、保持不变",
+                "line-art of the person to replace: the white silhouette and black lines give only pose, action and framing; the background is the real photo and stays"),
+    "source": ("要修改的原照片：把里面的女子换成她，其余一切保持不变",
+               "the photo to edit: replace the woman in it with her, keep everything else"),
+    "base": ("基础照片：她本人，衣服、地点和光线按这张", "base photo: this is her; clothes, place and light as in this one"),
+    "texture": ("画面质感参考：只取质感，不取脸", "texture reference only, not the face"),
+}
+
+
+def refs_block(chat, a, lang):
+    """Подпись КАЖДОЙ прикреплённой картинки: что это и что с неё брать (для какой части замены)."""
+    ids = a.get("image_ids") or []
+    if not ids:
+        return ""
+    picked = {x["id"]: x for x in a.get("ref_pick") or [] if isinstance(x, dict) and x.get("id")}
+    extra = chat["persona"].get("extra", {})
+    lines = []
+    for k, i in enumerate(ids):
+        r, d = role_of(chat, i, a, k)
+        use = (picked.get(i) or {}).get("use_zh" if lang == "zh" else "use_en", "").strip()
+        if not use:
+            if r == "cat":
+                nm = extra.get(d, {}).get("name_zh" if lang == "zh" else "name_en") or d
+                use = (f"她的「{nm}」参考：只取这部分的样子，不取姿势、衣服和背景" if lang == "zh"
+                       else f"her \"{nm}\" reference: take only how this part looks, not the pose, clothes or background")
+            else:
+                use = DEF_USE.get(r, ("参考图", "reference"))[0 if lang == "zh" else 1]
+        use = use.rstrip("。.")
+        lines.append(f"图{k + 1}：{use}。" if lang == "zh" else f"Image {k + 1}: {use}.")
+    head = "参考图说明（每张图是什么、用来替换什么）：" if lang == "zh" else "ATTACHED IMAGES (what each one is and what it is used for):"
+    return head + "\n" + "\n".join(lines)
+
+
 def render(chat, a, engine):
     """Промпт по рецепту + правила платформы последним абзацем (их нельзя потерять ни в одном режиме)."""
     out = _render_core(chat, a, engine)
     lang = "zh" if engine == "seedream" else "en"
+    if a.get("mode") not in ("free", "bodyref"):
+        blk = refs_block(chat, a, lang)
+        if blk and blk not in out:
+            ls = out.split("\n")
+            at = 1 if ls and ls[0].startswith(("这次必须改正", "MUST FIX")) else 0   # правки пользователя остаются первыми
+            out = "\n".join(ls[:at] + [blk] + ls[at:])
     if a.get("mode") not in ("free", "bodyref"):
         # анатомия — в КАЖДОМ рецепте и на любом движке: лишние/недостающие руки и ноги — самый частый брак
         an = ANATOMY_ZH if lang == "zh" else ANATOMY_EN

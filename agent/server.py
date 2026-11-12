@@ -939,11 +939,47 @@ def translate_brief(brief, lang, cfg):
         return brief
 
 
-def auto_brief(cid, src, cfg):
-    """Страховка: Grok не дал описание сцены — отдельный короткий запрос описывает исходник для рецепта замены."""
+def ref_catalog(chat, limit=24):
+    """Все эталоны модели с категорией и подписью — каталог, из которого Grok выбирает нужные под исходник."""
+    out = []
+    for key, name, ids, note in ref_groups(chat["persona"]):
+        for i in ids:
+            rec = chat["images"].get(i)
+            if not rec or rec.get("source") == "lineart":
+                continue
+            lab = rec.get("bodyref") or rec.get("label") or ""
+            out.append({"id": i, "cat": {"faces": "Лицо", "body": "Тело"}.get(key, name), "label": lab, "note": note})
+    return out[:limit]
+
+
+PICK_RULES = (
+    "ВТОРАЯ ЗАДАЧА — подобрать эталоны модели. Ниже каталог: картинки с id, категорией и подписью. "
+    "Сначала реши, что реально видно на исходнике, потом бери ТОЛЬКО эталоны того, что видно:\n"
+    "- лицо видно → 1–2 портрета из «Лицо», ближе всего к ракурсу её лица (анфас/3/4/профиль); лица не видно или оно закрыто — портреты не бери;\n"
+    "- видно тело ниже плеч → 1 фото из «Тело», ближе всего к ракурсу тела (спереди/сбоку/сзади/3/4); только лицо и плечи — фигуру не бери;\n"
+    "- свои категории пользователя (ноги, руки, ногти, ступни, тату, грудь, ягодицы, украшения, образ и т.п.) — только если эта часть или вещь реально видна и важна в кадре;\n"
+    "- не бери эталоны того, чего нет в кадре; не больше 6 эталонов; у каждой категории — лучший по ракурсу, а не все подряд.\n"
+    "Для каждого выбранного: id, use_ru (3–6 слов для карточки: «лицо 3/4», «ноги — форма и кожа»), "
+    "use_zh и use_en — одно предложение: что взять с этой картинки и чего НЕ брать (одежду, позу, фон, свет эталона брать нельзя; "
+    "например «只取她腿的形状、长度和皮肤，不取鞋子、姿势和背景»)."
+)
+
+
+def auto_brief(cid, src, cfg, catalog=None):
+    """Строгое описание исходника; с каталогом — ещё анализ «что видно» и выбор нужных эталонов модели (один запрос к Grok)."""
     if cfg.get("xai_key") in ("", None, "mock"):
         return {}
     keys = ["scene", "action", "expression", "outfit", "background", "light", "orig_hair"]
+    cat_parts = []
+    if catalog:
+        cat_parts = [{"type": "text", "text": PICK_RULES + "\nКаталог эталонов:"}]
+        for r in catalog:
+            cat_parts.append({"type": "text", "text": f"{r['id']} — категория «{r['cat']}»" + (f", подпись «{r['label']}»" if r["label"] else "")
+                              + (f", заметка «{r['note']}»" if r["note"] else "")})
+            cat_parts.append({"type": "image_url", "image_url": {"url": data_uri(image_path(cid, r["id"]), 384, 80), "detail": "low"}})
+    extra_json = (', "seen": {"view": "front|34|side|back", "face": "front|34|profile|none", "framing": "face|half|full", '
+                  '"visible": ["что видно: лицо, волосы, плечи, грудь, живот, спина, ягодицы, бёдра, ноги, ступни, руки, кисти…"]}, '
+                  '"pick": [{"id": "img_…", "use_ru": "…", "use_zh": "…", "use_en": "…"}]') if catalog else ""
     res = xai_chat(cfg, {"model": cfg["chat_model"], "temperature": 0.2, "messages": [
         {"role": "system", "content": "Ты описываешь фото для замены девушки на другую модель. Описывай ТОЛЬКО то, что реально видно, ничего не выдумывай. "
                                       "Верни JSON {\"en\": {...}, \"zh\": {...}} с одинаковыми по смыслу полями: "
@@ -954,13 +990,22 @@ def auto_brief(cid, src, cfg):
                                       "orig_hair (только цвет и причёска её волос — чтобы потом сказать «не такие»). "
                                       "scene начинай с того, как снято (чья рука с телефоном в кадре, зеркало, кто-то снимает). action — каждая рука и нога по отдельности, наклон головы, взгляд. "
                                       "Если куртка/кофта/рубашка накинута на плечи — в outfit прямо напиши «накинута на плечи», в какой рукав продета рука, а какой рукав пустой и висит. "
-                                      "Без описания лица и фигуры, без тату, родинок, пирсинга на теле и макияжа — это черты исходной девушки, у модели их нет. Пиши подробно и точно — по этому описанию фото будут переделывать, любая выдуманная или пропущенная вещь испортит результат. Только JSON."},
-        {"role": "user", "content": [{"type": "text", "text": "Опиши фото:"},
-                                     {"type": "image_url", "image_url": {"url": data_uri(image_path(cid, src), 1024, 88), "detail": "high"}}]}]}, timeout=120, cid=cid, kind="grok_brief")
+                                      "Без описания лица и фигуры, без тату, родинок, пирсинга на теле и макияжа — это черты исходной девушки, у модели их нет. Пиши подробно и точно — по этому описанию фото будут переделывать, любая выдуманная или пропущенная вещь испортит результат. "
+                                      + (f"Формат: {{\"en\": {{...}}, \"zh\": {{...}}{extra_json}}}. " if catalog else "") + "Только JSON."},
+        {"role": "user", "content": [{"type": "text", "text": "Исходник (его и описывай):"},
+                                     {"type": "image_url", "image_url": {"url": data_uri(image_path(cid, src), 1024, 88), "detail": "high"}}] + cat_parts}]},
+        timeout=150, cid=cid, kind="grok_brief")
     out = (res["choices"][0]["message"].get("content") or "").strip()
     out = out[out.find("{"):out.rfind("}") + 1]
     d = json.loads(out)
-    return {L: {k: str(v) for k, v in (d.get(L) or {}).items() if k in keys and v} for L in ("en", "zh")}
+    ret = {L: {k: str(v) for k, v in (d.get(L) or {}).items() if k in keys and v} for L in ("en", "zh")}
+    if catalog:
+        ok = {r["id"] for r in catalog}
+        ret["seen"] = d.get("seen") if isinstance(d.get("seen"), dict) else {}
+        ret["pick"] = [{"id": p["id"], "use_ru": str(p.get("use_ru") or "")[:60], "use_zh": str(p.get("use_zh") or "")[:300],
+                        "use_en": str(p.get("use_en") or "")[:300]}
+                       for p in (d.get("pick") or []) if isinstance(p, dict) and p.get("id") in ok][:6]
+    return ret
 
 
 def guess_source(chat, a):
@@ -1108,7 +1153,7 @@ CAROUSEL_RE = re.compile(r"^\s*карусел\w*\s*(\d+)?\s*$", re.I)
 
 
 ARG_KEEP = ("engine", "mode", "source_id", "brief_en", "brief_zh", "face_angle", "body_view", "framing", "categories",
-            "with_faces", "with_model", "source_as", "aspect_ratio", "view", "figure_en", "described", "fixes", "fixes_en", "fixes_zh")
+            "with_faces", "with_model", "source_as", "ref_pick", "seen", "aspect_ratio", "view", "figure_en", "described", "fixes", "fixes_en", "fixes_zh")
 
 
 def gen_args(chat, iid):
@@ -1151,6 +1196,29 @@ def apply_retry(cid, a, cfg):
     a.clear(); a.update(merged); a.update(keep); a["retry_done"] = True
     a.pop("prompt_manual", None)
     return a
+
+
+def cat_names(cid, chat, a, cfg):
+    """Свои категории пользователя («Ноги», «Ногти»…) — один раз переводим название, чтобы подписать картинку в промпте."""
+    extra = chat["persona"].get("extra", {})
+    need = {}
+    for i in a.get("image_ids") or []:
+        for name, v in extra.items():
+            if i in v.get("ids", []) and not (v.get("name_zh") and v.get("name_en")):
+                need[name] = {}
+    if not need:
+        return
+    for name in need:
+        try:
+            need[name] = {"name_zh": grok_translate(name, "zh", cfg).strip()[:40], "name_en": grok_translate(name, "en", cfg).strip()[:40]}
+        except Exception:
+            traceback.print_exc()
+
+    def f(c):
+        for name, v in need.items():
+            if v and name in c["persona"].get("extra", {}):
+                c["persona"]["extra"][name].update(v)
+    update_chat(cid, f)
 
 
 def prepare_gen(cid, a, cfg, rebuild_inputs=True):
@@ -1207,12 +1275,21 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
             # Оно важнее описания Grok — тот на ходу додумывает одежду и детали.
             set_status(cid, "running", "Описываю исходник…")
             try:
-                auto = auto_brief(cid, a["source_id"], cfg)
+                set_status(cid, "running", "Разбираю исходник и подбираю эталоны…")
+                auto = auto_brief(cid, a["source_id"], cfg, ref_catalog(chat))
                 if auto.get("en") or auto.get("zh"):
                     for L in ("en", "zh"):
                         cur = a.get(f"brief_{L}") or {}
                         a[f"brief_{L}"] = {**{k: v for k, v in cur.items() if v}, **(auto.get(L) or {})}
                     a["described"] = True
+                if auto.get("pick"):
+                    # эталоны выбраны по тому, что реально видно на исходнике; рецепт берёт ровно их
+                    a["ref_pick"] = auto["pick"]; a["seen"] = auto.get("seen") or {}
+                    seen = a["seen"]
+                    if seen.get("face") in ("front", "34", "profile"):
+                        a["face_angle"] = seen["face"]
+                    if seen.get("framing") in ("face", "half", "full"):
+                        a["framing"] = seen["framing"]
             except Exception:
                 traceback.print_exc()
         if not a.get(f"brief_{lang}") and a.get(f"brief_{other}"):
@@ -1241,6 +1318,7 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
             r = chat["images"][a["source_id"]]
             if r.get("w") and r.get("h"):
                 a["aspect_ratio"] = recipes.aspect_for(r["w"], r["h"])
+        cat_names(cid, chat, a, cfg); chat = load_chat(cid)
         if not a.get("prompt_manual"):
             a["prompt"] = recipes.render(chat, a, eng)
     else:
@@ -1248,7 +1326,8 @@ def prepare_gen(cid, a, cfg, rebuild_inputs=True):
         if a.get("prompt") and recipes.is_zh(a["prompt"]) != want_zh:
             a["prompt"] = grok_translate(a["prompt"], "zh" if want_zh else "en", cfg)
     old = dict(zip(a.get("image_ids") or [], a.get("image_roles") or []))
-    a["image_roles"] = [(old.get(i) if mode == "free" and old.get(i) else recipes.role_label(chat, i, a, k))
+    picked = {p["id"]: p.get("use_ru") for p in a.get("ref_pick") or [] if p.get("use_ru")}
+    a["image_roles"] = [(old.get(i) if mode == "free" and old.get(i) else picked.get(i) or recipes.role_label(chat, i, a, k))
                         for k, i in enumerate(a.get("image_ids") or [])]
     return a
 
@@ -1434,6 +1513,11 @@ def run_tool(cid, call, cfg):
             be = a.get("brief_en") or {}
             extra += " Описание исходника, по которому сохранялись поза, одежда и фон: " + "; ".join(
                 f"{k}: {be[k]}" for k in ("scene", "action", "outfit", "background") if be.get(k))[:900] + "."
+        if a.get("ref_pick"):
+            sn = a.get("seen") or {}
+            extra += (" Видно на исходнике: " + ", ".join(str(x) for x in (sn.get("visible") or [])[:12])
+                      + (f"; ракурс тела {sn.get('view')}, лицо {sn.get('face')}" if sn.get("view") else "")
+                      + ". Эталоны взяты только под это: " + "; ".join(f"{p['id']} — {p.get('use_ru') or ''}" for p in a["ref_pick"]) + ".")
         if a.get("fixes"):
             extra += " Учтены правки: " + " | ".join(a["fixes"]) + "."
         extra += f" Если пользователь пишет, что не так, — generate_image retry_of={new[-1]} fix=«…»."
