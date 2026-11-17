@@ -603,12 +603,13 @@ ANATOMY_ZH = ("人体结构（必须正确）：画面里只有她一个人。�
               "手指长短自然、关节正确，不粘连、不交叉、不多指、不缺指。拿手机的那只手和那只手臂只有一个，另一只手按场景描述放好。"
               "手臂和腿都连在身体正确的位置上，比例自然，没有扭曲、拉长或折断的四肢，没有多余的手、手臂、腿或脚，"
               "画面边缘也不能出现别人的手或身体部位。镜子里的倒影和她本人完全对应，不多出一个人。"
-              "每只手都能顺着手臂一直连到她自己的肩膀；每条袖子里最多只有一只手臂，没有手臂的袖子是空的、软软垂下。")
+              "每只手都能顺着手臂一直连到她自己的肩膀；画面左侧的肩膀只连着一只手臂，画面右侧的肩膀只连着一只手臂，两只手臂不能从同一个肩膀长出来；左右两侧的胯部各自只连着一条腿；"
+              "每条袖子里最多只有一只手臂，没有手臂的袖子是空的、软软垂下。")
 ANATOMY_EN = ("ANATOMY (must be correct): she is the only person in the image. She has exactly two arms, two hands, two legs and two feet — "
               "no more, no less; each hand has exactly five fingers with natural length and joints, not fused, not crossed, no extra or missing fingers. "
               "Only one hand and one arm hold the phone; the other hand is placed as the scene says. Limbs attach at the right places with natural "
               "proportions, nothing twisted, stretched or broken, no extra hands, arms, legs or feet, and no other person's hand at the frame edges. "
-              "Every hand traces along its arm back to her own shoulder; each sleeve holds at most one arm, and a sleeve without an arm is empty and hangs limp. "
+              "Every hand traces along its arm back to her own shoulder; the shoulder on the left of the frame has exactly one arm and the shoulder on the right has exactly one arm — never two arms from the same shoulder; each sleeve holds at most one arm, and a sleeve without an arm is empty and hangs limp. "
               "A mirror reflection matches her exactly, with no extra person.")
 STYLE55_ZH = ("用iPhone 16主摄随手拍的手机照片：24mm等效广角，手机自带的干净成像，没有可见噪点。大景深：背景和人物一样清晰对焦，"
               "没有背景虚化，没有焦外光斑，前景也不虚化。画面柔和、低对比度，明亮、温暖的自然光，阴影里保留细节、不死黑，高光不过曝。"

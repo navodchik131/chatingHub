@@ -988,7 +988,7 @@ def auto_brief(cid, src, cfg, catalog=None):
                                       "какая кожа открыта; обувь; украшения, очки, сумка, телефон. Если чего-то нет (куртки, обуви, украшений) — так и напиши «без куртки», «босиком»), "
                                       "background (что на фоне: место и все предметы), light (свет и время суток), "
                                       "orig_hair (только цвет и причёска её волос — чтобы потом сказать «не такие»). "
-                                      "scene начинай с того, как снято (чья рука с телефоном в кадре, зеркало, кто-то снимает). action — каждая рука и нога по отдельности, наклон головы, взгляд. "
+                                      "scene начинай с того, как снято (чья рука с телефоном в кадре, зеркало, кто-то снимает). action — каждая рука и нога по отдельности ПО СТОРОНЕ КАДРА («рука слева в кадре идёт от левого в кадре плеча и …»), что делает и где кисть, какая рука за кадром; так же каждая нога и ступня (от какого бедра, согнута ли, на чём стоит/лежит); корпус (поворот, наклон, прогиб); наклон головы, взгляд. "
                                       "Если куртка/кофта/рубашка накинута на плечи — в outfit прямо напиши «накинута на плечи», в какой рукав продета рука, а какой рукав пустой и висит. "
                                       "Без описания лица и фигуры, без тату, родинок, пирсинга на теле и макияжа — это черты исходной девушки, у модели их нет. Пиши подробно и точно — по этому описанию фото будут переделывать, любая выдуманная или пропущенная вещь испортит результат. "
                                       + (f"Формат: {{\"en\": {{...}}, \"zh\": {{...}}{extra_json}}}. " if catalog else "") + "Только JSON."},
@@ -1410,12 +1410,19 @@ def prepare_video(cid, a, cfg):
     old = list(a.get("image_ids") or []); keep = []
     for i in old:
         r = chat["images"].get(i) or {}
-        if i in refs or r.get("source") in ("gen", "post", "crop", "ref"):
-            keep.append(i)
+        if i in refs or r.get("source") in ("gen", "post", "crop", "ref") or r.get("first_frame"):
+            keep.append(i)   # first_frame — картинка, которую пользователь приложил к видео как готовый первый кадр
     dropped = [i for i in old if i not in keep]
     if dropped:
         notes.append("убраны кадры с исходной девушкой (кадры видео/загрузки/силуэты): " + ", ".join(dropped))
     keys = [i for i in keep if i not in refs]
+    # первый кадр от пользователя — всегда @image1, даже если Grok его не передал или поставил не первым
+    last_user = next((m for m in reversed(chat["messages"]) if m["role"] == "user" and m.get("videos")), {})
+    ff = last_user.get("first_frame")
+    if ff and ff in chat["images"]:
+        if ff not in keep:
+            keep.insert(0, ff); notes.append(f"добавлен первый кадр пользователя {ff}")
+        keys = [ff] + [i for i in keys if i != ff]
     portraits = [i for i in keep if i in p.get("faces", [])]
     if not portraits and p.get("faces"):
         keep.append(p["faces"][0]); portraits = [p["faces"][0]]
@@ -1782,6 +1789,18 @@ def build_messages(chat, cfg, turn_start):
                         f"промпт по режиму 6 (одежду словами — с оригинала)."
                         + (f" Длительность различается на {pr['dur_diff']} с — предупреди пользователя." if pr.get("dur_diff", 0) > 0.5 else "")
                         + "]" + ("\n" + text if text and not text.startswith("[Видео без текста") else ""))
+            if m["role"] == "user" and m.get("videos") and m.get("first_frame"):
+                pr0 = m.get("pair") or {}
+                ff = m["first_frame"]
+                sil = pr0.get("sil")
+                text = (f"[ВИДЕО + ГОТОВЫЙ ПЕРВЫЙ КАДР {ff} (пользователь приложил сам: на нём уже модель в нужной одежде и месте). "
+                        "Ключевой кадр НЕ генерируй: не делай generate_image и video_frames для замены, не ищи другой момент. "
+                        + (f"Готовый силуэт есть: {sil} — lineart_video НЕ делай. Сразу edit_video: video_id={sil}, "
+                           if sil else
+                           f"Силуэта нет — сначала lineart_video оригинала {m['videos'][0]}, потом edit_video: video_id=этот силуэт, ")
+                        + f"image_ids=[{ff} (первым!), портрет анфас из «Лицо»]. В промпте: @image1 — первый кадр ролика, лицо, волосы и одежда строго как на нём. "
+                        "Одежду всё равно опиши словами по этой картинке. Цену назови до запуска.]"
+                        + ("\n" + (m.get("text") or "") if (m.get("text") or "").strip() else ""))
             elif m["role"] == "user" and len(m.get("videos") or []) == 2 and "pair" in m:
                 text = ("[Два видео, но готовый силуэт среди них не распознан — уточни у пользователя, что это за ролики.]"
                         + ("\n" + text if text and not text.startswith("[Видео без текста") else ""))
@@ -2037,10 +2056,23 @@ def agent_loop(cid, cfg=None):
                                 "Не пиши «ракурс изменился», если он не изменился. Потом вызови review:")
                     append_msg(cid, {"role": "review", "text": text, "images": bases + [i for i in new_imgs if i not in bases], "hidden": True})
                 continue
+            if (last and last["role"] == "user" and last.get("videos") and "first_frame" not in last):
+                # видео + картинка от пользователя = картинка и есть готовый ПЕРВЫЙ (ключевой) кадр — его не генерируем заново
+                ff = next((i for i in last.get("images") or [] if chat["images"].get(i, {}).get("source") == "user"), None)
+
+                def mark_ff(c, ff=ff):
+                    c["messages"][-1]["first_frame"] = ff
+                    if ff and ff in c["images"]:
+                        c["images"][ff]["first_frame"] = True
+                        c["images"][ff]["label"] = c["images"][ff].get("label") or "первый кадр"
+                update_chat(cid, mark_ff)
+                chat = load_chat(cid); last = chat["messages"][-1]
             if last and last["role"] == "user" and len(last.get("videos") or []) == 2 and "pair" not in last:
                 set_status(cid, "running", "Смотрю, где оригинал, а где силуэт…")
                 pair = detect_pair(cid, last["videos"])
-                if pair:
+                if pair and last.get("first_frame"):
+                    pair["key"] = last["first_frame"]; pair["key_user"] = True   # первый кадр дал пользователь — не ищем свой
+                elif pair:
                     set_status(cid, "running", "Ищу кадр, где лицо видно лучше всего…")
                     try:
                         ft = face_times(cid, pair["orig"])
